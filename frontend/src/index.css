@@ -1,0 +1,42 @@
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;700;800&family=Inter:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+.material-symbols-outlined {
+  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+}
+
+body {
+  min-height: 100dvh;
+  background-color: #F9F9F9;
+  font-family: 'Inter', sans-serif;
+  -webkit-text-size-adjust: 100%;
+}
+
+input:focus {
+  box-shadow: 0 0 0 4px rgba(139, 53, 217, 0.12);
+}
+
+.apple-blur {
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+.brand-gradient {
+  background: linear-gradient(135deg, #8B35D9, #29AAEB);
+}
+
+.brand-gradient-text {
+  background: linear-gradient(135deg, #8B35D9, #29AAEB);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.brand-shadow {
+  box-shadow: 0 8px 24px rgba(139, 53, 217, 0.3);
+}
+
