@@ -6,7 +6,7 @@ export default defineConfig({
   server: {
     allowedHosts: true,
     proxy: {
-      '/api': 'http://192.168.1.180:3001'
+      '/api': 'http://localhost:3001'
     }
   }
 });

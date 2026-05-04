@@ -3,15 +3,20 @@ import { useNavigate, useParams } from 'react-router-dom';
 import api from '../api.js';
 
 function calcDaily(f) {
+  const totalTests = f.insurance_tests + f.screening_tests + f.mixed_screening_tests + f.partial_tests;
   const insurance = f.insurance_tests * 80;
   const screening = f.screening_tests * 105;
   const mixed = f.mixed_screening_tests * 120;
   const partial = f.partial_tests * 50;
+  const rawTestsPay = insurance + screening + mixed + partial;
+  const MIN_TESTS_PAY = 240;
+  const testsPay = totalTests > 0 && totalTests < 3 ? Math.max(rawTestsPay, MIN_TESTS_PAY) : rawTestsPay;
+  const minBonus = testsPay - rawTestsPay;
   const km = f.kilometers * 2 + (f.kilometers >= 100 ? 100 : 0);
   const learning = f.learning_hours * 60;
   const expenses = f.food_expense + f.parking_expense;
-  return { insurance, screening, mixed, partial, km, learning, expenses,
-           total: insurance + screening + mixed + partial + km + learning + expenses };
+  return { insurance, screening, mixed, partial: partial + minBonus, km, learning, expenses,
+           total: testsPay + km + learning + expenses };
 }
 
 function today() {
@@ -77,8 +82,8 @@ export default function EntryPage() {
   const calc = calcDaily(form);
 
   return (
-    <div className="bg-[#F2F2F7] min-h-screen pb-56 lg:pb-20">
-      <main className="max-w-2xl mx-auto px-4 sm:px-6 pt-24">
+    <div className="bg-[#F2F2F7] min-h-screen pb-56 lg:pb-24">
+      <main className="max-w-2xl mx-auto px-4 sm:px-6 pt-20">
 
         {/* Editorial Header */}
         <section className="mb-8">
@@ -91,16 +96,7 @@ export default function EntryPage() {
         <form className="space-y-6" onSubmit={handleSubmit}>
 
           {/* Date */}
-          <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100">
-            <label className="block text-xs font-bold text-slate-400 mb-2 uppercase tracking-wider">Date</label>
-            <input
-              type="date"
-              value={form.date}
-              onChange={e => setForm(f => ({ ...f, date: e.target.value }))}
-              className="w-full bg-[#F2F2F7] border-none rounded-xl p-3 text-base font-bold focus:ring-2 focus:ring-brand-purple transition-all text-slate-900"
-              required
-            />
-          </div>
+          <CalendarPicker value={form.date} onChange={d => setForm(f => ({ ...f, date: d }))} />
 
           {/* Tests */}
           <div className="space-y-3">
@@ -192,6 +188,29 @@ export default function EntryPage() {
             </div>
           </div>
 
+          {/* Live Total */}
+          <div className="brand-gradient p-5 rounded-2xl brand-shadow flex justify-between items-center">
+            <div>
+              <span className="text-white/70 text-[10px] font-bold uppercase tracking-widest block mb-1">Live Total</span>
+              <h2 className="text-4xl font-extrabold text-white font-headline leading-none">{calc.total.toFixed(0)} <span className="text-xl font-medium opacity-80">₪</span></h2>
+            </div>
+            <div className="flex flex-col items-end gap-2">
+              {calc.total > 0 && (
+                <span className="inline-flex items-center gap-1 bg-white/20 text-white px-2.5 py-1 rounded-lg text-[10px] font-bold">
+                  <span className="material-symbols-outlined" style={{ fontSize: 12 }}>trending_up</span>
+                  ESTIMATED
+                </span>
+              )}
+              <p className="text-white/60 text-[10px] font-medium text-right">
+                {[
+                  calc.insurance > 0 && `Ins: ${calc.insurance}₪`,
+                  calc.screening > 0 && `Scr: ${calc.screening}₪`,
+                  calc.km > 0 && `KM: ${calc.km}₪`,
+                ].filter(Boolean).join(' · ') || 'Fill in your data'}
+              </p>
+            </div>
+          </div>
+
           {error && <p className="text-red-500 text-sm font-medium">{error}</p>}
 
           {/* Save Button */}
@@ -205,48 +224,162 @@ export default function EntryPage() {
           </button>
         </form>
       </main>
+    </div>
+  );
+}
 
-      {/* Live Total Preview — fixed above bottom nav */}
-      <div className="fixed bottom-32 lg:bottom-6 left-1/2 -translate-x-1/2 w-[calc(100%-3rem)] max-w-sm z-40">
-        <div className="bg-white/80 apple-blur p-5 rounded-2xl shadow-xl border border-white/40 flex justify-between items-center">
-          <div>
-            <span className="text-slate-400 text-[10px] font-bold uppercase tracking-widest block mb-0.5">Live Total</span>
-            <h2 className="text-3xl font-extrabold text-slate-900 font-headline">{calc.total.toFixed(0)} ₪</h2>
-          </div>
-          <div className="flex flex-col items-end gap-1">
-            {calc.total > 0 && (
-              <span className="inline-flex items-center gap-1 bg-green-500/10 text-green-600 px-2 py-1 rounded-md text-[10px] font-bold">
-                <span className="material-symbols-outlined" style={{ fontSize: 12 }}>trending_up</span>
-                ESTIMATED
-              </span>
-            )}
-            <p className="text-slate-400 text-[10px] font-medium text-right">
-              {[
-                calc.insurance > 0 && `Ins: ${calc.insurance}₪`,
-                calc.screening > 0 && `Scr: ${calc.screening}₪`,
-                calc.km > 0 && `KM: ${calc.km}₪`,
-              ].filter(Boolean).join(' · ') || 'Fill in your data'}
-            </p>
-          </div>
+function CalendarPicker({ value, onChange }) {
+  const today = new Date().toISOString().slice(0, 10);
+  const selected = value ? new Date(value + 'T00:00:00') : null;
+  const [open, setOpen] = useState(false);
+
+  const [cursor, setCursor] = useState(() => {
+    const d = value ? new Date(value + 'T00:00:00') : new Date();
+    return { year: d.getFullYear(), month: d.getMonth() };
+  });
+
+  const DAYS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+  const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+  const firstDay = new Date(cursor.year, cursor.month, 1).getDay();
+  const daysInMonth = new Date(cursor.year, cursor.month + 1, 0).getDate();
+  const daysInPrev = new Date(cursor.year, cursor.month, 0).getDate();
+
+  const cells = [];
+  for (let i = 0; i < firstDay; i++) cells.push({ day: daysInPrev - firstDay + 1 + i, cur: false });
+  for (let i = 1; i <= daysInMonth; i++) cells.push({ day: i, cur: true });
+  const remaining = 42 - cells.length;
+  for (let i = 1; i <= remaining; i++) cells.push({ day: i, cur: false });
+
+  function prevMonth() {
+    setCursor(c => c.month === 0 ? { year: c.year - 1, month: 11 } : { year: c.year, month: c.month - 1 });
+  }
+  function nextMonth() {
+    setCursor(c => c.month === 11 ? { year: c.year + 1, month: 0 } : { year: c.year, month: c.month + 1 });
+  }
+  function selectDay(day) {
+    const d = `${cursor.year}-${String(cursor.month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    onChange(d);
+    setOpen(false);
+  }
+
+  function isSelected(day) {
+    if (!selected) return false;
+    return selected.getFullYear() === cursor.year && selected.getMonth() === cursor.month && selected.getDate() === day;
+  }
+  function isToday(day) {
+    const [ty, tm, td] = today.split('-').map(Number);
+    return ty === cursor.year && tm - 1 === cursor.month && td === day;
+  }
+
+  const selectedLabel = selected
+    ? selected.toLocaleString('en-US', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+    : 'No date selected';
+
+  return (
+    <div className="bg-white rounded-2xl shadow-[0px_20px_40px_rgba(26,28,29,0.04)] overflow-hidden">
+      {/* Selected date display — always visible, tap to open */}
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        className="w-full px-5 pt-5 pb-4 bg-[#F9F9FB] flex items-center justify-between text-left active:bg-[#F2F2F7] transition-colors"
+      >
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">Date</p>
+          <p className="text-lg font-extrabold text-slate-900 font-headline leading-tight">{selectedLabel}</p>
         </div>
+        <span className={`material-symbols-outlined text-slate-400 transition-transform duration-200 ${open ? 'rotate-180' : ''}`}>
+          expand_more
+        </span>
+      </button>
+
+      {/* Expandable calendar */}
+      {open && <>
+      {/* Month nav */}
+      <div className="flex items-center justify-between px-5 py-3">
+        <button type="button" onClick={prevMonth}
+          className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-[#F2F2F7] transition-colors text-slate-500 active:scale-90">
+          <span className="material-symbols-outlined text-lg">chevron_left</span>
+        </button>
+        <span className="font-headline font-extrabold text-slate-900 text-sm tracking-tight">
+          {MONTHS[cursor.month]} {cursor.year}
+        </span>
+        <button type="button" onClick={nextMonth}
+          className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-[#F2F2F7] transition-colors text-slate-500 active:scale-90">
+          <span className="material-symbols-outlined text-lg">chevron_right</span>
+        </button>
       </div>
+
+      {/* Day headers */}
+      <div className="grid grid-cols-7 px-3 pb-1">
+        {DAYS.map(d => (
+          <div key={d} className="flex items-center justify-center">
+            <span className="text-[10px] font-bold uppercase tracking-widest text-slate-300">{d}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* Day cells */}
+      <div className="grid grid-cols-7 gap-y-1 px-3 pb-4">
+        {cells.map((cell, i) => {
+          const sel = cell.cur && isSelected(cell.day);
+          const tod = cell.cur && isToday(cell.day);
+          return (
+            <div key={i} className="flex items-center justify-center">
+              <button
+                type="button"
+                disabled={!cell.cur}
+                onClick={() => cell.cur && selectDay(cell.day)}
+                className={`w-9 h-9 flex items-center justify-center rounded-full text-sm font-semibold transition-all active:scale-90 relative
+                  ${!cell.cur ? 'text-slate-200 cursor-default' : ''}
+                  ${cell.cur && !sel ? 'text-slate-800 hover:bg-[#F2F2F7]' : ''}
+                  ${sel ? 'brand-gradient text-white brand-shadow' : ''}
+                `}
+              >
+                {cell.day}
+                {tod && !sel && (
+                  <span className="absolute bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-brand-purple" />
+                )}
+              </button>
+            </div>
+          );
+        })}
+      </div>
+      </>}
     </div>
   );
 }
 
 function TestField({ label, sub, value, onChange, calc }) {
+  const num = Number(value) || 0;
   return (
-    <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100">
-      <label className="block text-xs font-bold text-slate-400 mb-2 uppercase tracking-wider">{label}</label>
-      <p className="text-[10px] text-slate-300 mb-2">{sub}</p>
-      <input
-        type="number" inputMode="numeric" min="0" step="1"
-        value={value === 0 ? '' : value}
-        onChange={e => onChange(e.target.value)}
-        className="w-full bg-[#F2F2F7] border-none rounded-xl p-3 text-2xl font-bold focus:ring-2 focus:ring-brand-purple transition-all text-slate-900"
-        placeholder="0"
-      />
-      {calc > 0 && <p className="text-[11px] text-brand-purple font-bold mt-1">{calc.toFixed(0)} ₪</p>}
+    <div className="bg-white rounded-2xl shadow-card border border-slate-100 flex flex-col overflow-hidden">
+      <div className="px-3 pt-3 pb-2 text-center">
+        <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">{label}</p>
+        <p className="text-[10px] text-slate-300 mt-0.5">{sub}</p>
+      </div>
+      <div className="text-center py-2">
+        <span className="text-3xl font-extrabold text-slate-900 font-headline tabular-nums">{num}</span>
+        {calc > 0 && <p className="text-[11px] text-brand-purple font-bold mt-0.5">{calc.toFixed(0)} ₪</p>}
+        {calc === 0 && <p className="text-[11px] text-transparent font-bold mt-0.5">—</p>}
+      </div>
+      <div className="grid grid-cols-2 border-t border-slate-100 mt-1">
+        <button
+          type="button"
+          onClick={() => onChange(Math.max(0, num - 1))}
+          disabled={num === 0}
+          className="py-3 flex items-center justify-center text-slate-400 hover:bg-slate-50 active:bg-slate-100 disabled:opacity-30 transition-all font-bold text-xl border-r border-slate-100"
+        >
+          −
+        </button>
+        <button
+          type="button"
+          onClick={() => onChange(num + 1)}
+          className="py-3 flex items-center justify-center text-brand-purple hover:bg-purple-50 active:bg-purple-100 transition-all"
+        >
+          <span className="material-symbols-outlined text-lg">add</span>
+        </button>
+      </div>
     </div>
   );
 }

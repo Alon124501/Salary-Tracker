@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: salary-tracker
+    runtime: node
+    plan: free
+    region: oregon
+    buildCommand: cd frontend && npm ci && npm run build && cd ../backend && npm ci
+    startCommand: node backend/src/index.js
+    envVars:
+      - key: NODE_VERSION
+        value: 24.14.1
+      - key: PORT
+        value: 10000
+      - key: JWT_SECRET
+        generateValue: true

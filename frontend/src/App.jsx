@@ -3,6 +3,7 @@ import Login from './pages/Login.jsx';
 import Dashboard from './pages/Dashboard.jsx';
 import EntryPage from './pages/EntryPage.jsx';
 import StatsPage from './pages/StatsPage.jsx';
+import SettingsPage from './pages/SettingsPage.jsx';
 import Navbar from './components/Navbar.jsx';
 import BottomNav from './components/BottomNav.jsx';
 
@@ -28,6 +29,7 @@ export default function App() {
         <Route path="/" element={<PrivateRoute><AppLayout><Dashboard /></AppLayout></PrivateRoute>} />
         <Route path="/entry/:date?" element={<PrivateRoute><AppLayout><EntryPage /></AppLayout></PrivateRoute>} />
         <Route path="/stats" element={<PrivateRoute><AppLayout><StatsPage /></AppLayout></PrivateRoute>} />
+        <Route path="/settings" element={<PrivateRoute><AppLayout><SettingsPage /></AppLayout></PrivateRoute>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>

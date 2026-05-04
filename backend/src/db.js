@@ -1,13 +1,16 @@
 const { DatabaseSync } = require('node:sqlite');
 const path = require('path');
 
-const db = new DatabaseSync(path.join(__dirname, '..', 'salary.db'));
+const DB_PATH = process.env.DB_PATH || path.join(__dirname, '..', 'salary.db');
+const db = new DatabaseSync(DB_PATH);
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     username TEXT UNIQUE NOT NULL,
     password_hash TEXT NOT NULL,
+    gmail_user TEXT,
+    gmail_app_password TEXT,
     created_at TEXT DEFAULT (datetime('now'))
   );
 
@@ -27,5 +30,11 @@ db.exec(`
     UNIQUE(user_id, date)
   );
 `);
+
+// Add columns to existing DBs that were created before these fields existed
+for (const col of ['gmail_user', 'gmail_app_password', 'payment_type']) {
+  try { db.exec(`ALTER TABLE users ADD COLUMN ${col} TEXT`); } catch {}
+}
+try { db.exec(`ALTER TABLE users ADD COLUMN global_salary REAL`); } catch {}
 
 module.exports = db;

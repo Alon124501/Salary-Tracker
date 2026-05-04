@@ -6,15 +6,23 @@ const router = express.Router();
 router.use(auth);
 
 function calcDaily(e) {
+  const totalTests = (e.insurance_tests || 0) + (e.screening_tests || 0) +
+                     (e.mixed_screening_tests || 0) + (e.partial_tests || 0);
+
   const insurance = (e.insurance_tests || 0) * 80;
   const screening = (e.screening_tests || 0) * 105;
   const mixed = (e.mixed_screening_tests || 0) * 120;
   const partial = (e.partial_tests || 0) * 50;
+  const rawTestsPay = insurance + screening + mixed + partial;
+  const MIN_TESTS_PAY = 240; // minimum = 3 insurance tests
+  const testsPay = totalTests > 0 && totalTests < 3 ? Math.max(rawTestsPay, MIN_TESTS_PAY) : rawTestsPay;
+  const minBonus = testsPay - rawTestsPay;
+
   const km = (e.kilometers || 0) * 2 + ((e.kilometers || 0) >= 100 ? 100 : 0);
   const learning = (e.learning_hours || 0) * 60;
   const expenses = (e.food_expense || 0) + (e.parking_expense || 0);
-  return { insurance, screening, mixed, partial, km, learning, expenses,
-           total: insurance + screening + mixed + partial + km + learning + expenses };
+  return { insurance, screening, mixed, partial: partial + minBonus, km, learning, expenses,
+           total: testsPay + km + learning + expenses };
 }
 
 // GET /api/entries?month=YYYY-MM

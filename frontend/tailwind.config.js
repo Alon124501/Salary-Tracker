@@ -31,6 +31,27 @@ export default {
         cupertino: '12px',
         xl: '20px',
       },
+      boxShadow: {
+        'card': '0 1px 2px rgba(0,0,0,0.04), 0 4px 12px rgba(0,0,0,0.04)',
+        'card-hover': '0 4px 20px rgba(0,0,0,0.08)',
+        'float': '0 20px 40px rgba(26,28,29,0.08)',
+        'brand': '0 8px 24px rgba(139,53,217,0.28)',
+        'modal': '0 24px 64px rgba(0,0,0,0.12)',
+      },
+      keyframes: {
+        'fade-in-up': {
+          '0%': { opacity: '0', transform: 'translate(-50%, 12px)' },
+          '100%': { opacity: '1', transform: 'translate(-50%, 0)' },
+        },
+        'slide-up': {
+          '0%': { opacity: '0', transform: 'translateY(8px)' },
+          '100%': { opacity: '1', transform: 'translateY(0)' },
+        },
+      },
+      animation: {
+        'fade-in-up': 'fade-in-up 0.25s ease-out',
+        'slide-up': 'slide-up 0.2s ease-out',
+      },
     },
   },
   plugins: [require('@tailwindcss/forms')],

@@ -54,7 +54,7 @@ export default function StatsPage() {
   const s = stats || {};
 
   return (
-    <main className="max-w-4xl mx-auto px-4 sm:px-6 pt-24 pb-32 lg:pb-16 space-y-8 bg-[#F2F2F7] min-h-screen">
+    <main className="max-w-4xl mx-auto px-4 sm:px-6 pt-20 pb-32 lg:pb-24 space-y-8 bg-[#F2F2F7] min-h-screen">
 
       {/* Page Header */}
       <section className="flex justify-between items-start">
