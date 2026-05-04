@@ -136,4 +136,39 @@ router.delete('/:id', (req, res) => {
   res.json({ success: true });
 });
 
+// GET /api/entries/backup
+router.get('/backup', (req, res) => {
+  const rows = db.prepare('SELECT * FROM entries WHERE user_id = ? ORDER BY date ASC').all(req.userId);
+  const entries = rows.map(({ user_id, id, ...e }) => e);
+  res.json({ exported_at: new Date().toISOString(), entries });
+});
+
+// POST /api/entries/restore
+router.post('/restore', (req, res) => {
+  const { entries } = req.body;
+  if (!Array.isArray(entries)) return res.status(400).json({ error: 'entries array required' });
+  const stmt = db.prepare(`
+    INSERT INTO entries (user_id, date, insurance_tests, screening_tests, mixed_screening_tests,
+      partial_tests, kilometers, learning_hours, food_expense, parking_expense)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(user_id, date) DO UPDATE SET
+      insurance_tests = excluded.insurance_tests,
+      screening_tests = excluded.screening_tests,
+      mixed_screening_tests = excluded.mixed_screening_tests,
+      partial_tests = excluded.partial_tests,
+      kilometers = excluded.kilometers,
+      learning_hours = excluded.learning_hours,
+      food_expense = excluded.food_expense,
+      parking_expense = excluded.parking_expense
+  `);
+  for (const e of entries) {
+    if (!e.date) continue;
+    stmt.run(req.userId, e.date,
+      e.insurance_tests || 0, e.screening_tests || 0, e.mixed_screening_tests || 0,
+      e.partial_tests || 0, e.kilometers || 0, e.learning_hours || 0,
+      e.food_expense || 0, e.parking_expense || 0);
+  }
+  res.json({ success: true, imported: entries.length });
+});
+
 module.exports = router;
