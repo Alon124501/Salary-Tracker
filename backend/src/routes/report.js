@@ -2,7 +2,7 @@ const express = require('express');
 const ExcelJS = require('exceljs');
 const nodemailer = require('nodemailer');
 const multer = require('multer');
-const db = require('../db');
+const supabase = require('../supabase');
 const auth = require('../middleware/auth');
 
 const router = express.Router();
@@ -35,15 +35,26 @@ function calcDaily(e) {
            total: testsPay + km + learning + expenses };
 }
 
+function monthRange(month) {
+  const [year, mon] = month.split('-').map(Number);
+  const start = `${month}-01`;
+  const end = new Date(year, mon, 0).toISOString().slice(0, 10);
+  return { start, end };
+}
+
 // GET /api/report/excel?month=YYYY-MM
 router.get('/excel', async (req, res) => {
   const { month } = req.query;
   if (!month) return res.status(400).json({ error: 'month param required (YYYY-MM)' });
 
-  const user = db.prepare('SELECT username FROM users WHERE id = ?').get(req.userId);
-  const entries = db.prepare(
-    "SELECT * FROM entries WHERE user_id = ? AND date LIKE ? ORDER BY date ASC"
-  ).all(req.userId, `${month}%`);
+  const { data: user, error: userErr } = await supabase.from('profiles')
+    .select('username').eq('id', req.userId).single();
+  if (userErr) return res.status(500).json({ error: userErr.message });
+
+  const { start, end } = monthRange(month);
+  const { data: entries, error: entriesErr } = await supabase.from('entries').select('*')
+    .eq('user_id', req.userId).gte('date', start).lte('date', end).order('date', { ascending: true });
+  if (entriesErr) return res.status(500).json({ error: entriesErr.message });
 
   const workbook = new ExcelJS.Workbook();
   const sheet = workbook.addWorksheet('Salary Report');
@@ -122,16 +133,19 @@ router.post('/', upload.fields([{ name: 'receipts' }, { name: 'parking' }]), asy
   const { month } = req.query;
   if (!month) return res.status(400).json({ error: 'month param required (YYYY-MM)' });
 
-  const user = db.prepare('SELECT username, gmail_user, gmail_app_password FROM users WHERE id = ?').get(req.userId);
-  const entries = db.prepare(
-    "SELECT * FROM entries WHERE user_id = ? AND date LIKE ? ORDER BY date ASC"
-  ).all(req.userId, `${month}%`);
+  const { data: user, error: userErr } = await supabase.from('profiles')
+    .select('username, gmail_user, gmail_app_password').eq('id', req.userId).single();
+  if (userErr) return res.status(500).json({ error: userErr.message });
+
+  const { start, end } = monthRange(month);
+  const { data: entries, error: entriesErr } = await supabase.from('entries').select('*')
+    .eq('user_id', req.userId).gte('date', start).lte('date', end).order('date', { ascending: true });
+  if (entriesErr) return res.status(500).json({ error: entriesErr.message });
 
   // Build Excel
   const workbook = new ExcelJS.Workbook();
   const sheet = workbook.addWorksheet('Salary Report');
 
-  // Header style
   const headerFill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4F46E5' } };
   const headerFont = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
   const centerAlign = { horizontal: 'center', vertical: 'middle' };
@@ -153,7 +167,6 @@ router.post('/', upload.fields([{ name: 'receipts' }, { name: 'parking' }]), asy
     { header: 'Daily Total (₪)',       key: 'total',          width: 14 },
   ];
 
-  // Style header row
   sheet.getRow(1).eachCell(cell => {
     cell.fill = headerFill;
     cell.font = headerFont;
@@ -161,7 +174,6 @@ router.post('/', upload.fields([{ name: 'receipts' }, { name: 'parking' }]), asy
   });
   sheet.getRow(1).height = 22;
 
-  // Totals accumulators
   const sums = { ins: 0, scr: 0, mix: 0, par: 0, km: 0, hrs: 0, food: 0, parking: 0,
                  tests_pay: 0, km_pay: 0, learning_pay: 0, expenses: 0, total: 0 };
 
@@ -188,18 +200,13 @@ router.post('/', upload.fields([{ name: 'receipts' }, { name: 'parking' }]), asy
     for (const k of Object.keys(sums)) sums[k] += row[k] || 0;
   }
 
-  // Totals row
   sheet.addRow({});
-  const totalsRow = sheet.addRow({
-    date: 'TOTAL',
-    ...sums,
-  });
+  const totalsRow = sheet.addRow({ date: 'TOTAL', ...sums });
   totalsRow.eachCell(cell => {
     cell.font = { bold: true };
     cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF0F2F5' } };
   });
 
-  // Alternate row shading
   for (let i = 2; i <= entries.length + 1; i++) {
     if (i % 2 === 0) {
       sheet.getRow(i).eachCell(cell => {
@@ -210,7 +217,6 @@ router.post('/', upload.fields([{ name: 'receipts' }, { name: 'parking' }]), asy
 
   const buffer = await workbook.xlsx.writeBuffer();
 
-  // Format subject: "March 2026 - alon1"
   const [year, monthNum] = month.split('-');
   const monthName = new Date(year, monthNum - 1).toLocaleString('en-US', { month: 'long' });
   const subject = `${monthName} ${year} - ${user.username}`;

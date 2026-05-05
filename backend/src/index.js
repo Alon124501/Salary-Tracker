@@ -1,18 +1,9 @@
-require('dotenv').config();
+require('dotenv').config({ path: require('path').join(__dirname, '../.env') });
 const express = require('express');
-const cors = require('cors');
 const path = require('path');
+const app = require('./app');
 
-const app = express();
-app.use(cors());
-app.use(express.json());
-
-app.use('/api/auth', require('./routes/auth'));
-app.use('/api/entries', require('./routes/entries'));
-app.use('/api/report', require('./routes/report'));
-
-app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
-
+// Serve the built frontend in local dev / self-hosted mode
 const DIST = path.join(__dirname, '../../frontend/dist');
 app.use(express.static(DIST));
 app.get('*', (req, res) => res.sendFile(path.join(DIST, 'index.html')));
