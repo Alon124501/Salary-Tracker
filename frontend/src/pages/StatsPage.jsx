@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import api from '../api.js';
+import { getEntries } from '../api.js';
 
 function currentMonth() {
   const d = new Date();
@@ -22,7 +22,7 @@ export default function StatsPage() {
 
   async function loadStats() {
     try {
-      const { data } = await api.get(`/entries?month=${month}`);
+      const data = await getEntries(month);
       setEntries(data);
 
       const s = {
@@ -43,7 +43,6 @@ export default function StatsPage() {
     } catch {}
   }
 
-  // Build weekly bar chart from current week's entries
   const weekBars = buildWeekBars(entries);
   const maxBar = Math.max(...weekBars.map(b => b.total), 1);
 
@@ -192,7 +191,7 @@ function StatRow({ label, value, color, max }) {
 
 function buildWeekBars(entries) {
   const today = new Date();
-  const dayOfWeek = today.getDay(); // 0=Sun
+  const dayOfWeek = today.getDay();
   const bars = [];
   for (let i = 0; i < 7; i++) {
     const d = new Date(today);

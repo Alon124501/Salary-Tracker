@@ -1,23 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import api from '../api.js';
-
-function calcDaily(f) {
-  const totalTests = f.insurance_tests + f.screening_tests + f.mixed_screening_tests + f.partial_tests;
-  const insurance = f.insurance_tests * 80;
-  const screening = f.screening_tests * 105;
-  const mixed = f.mixed_screening_tests * 120;
-  const partial = f.partial_tests * 50;
-  const rawTestsPay = insurance + screening + mixed + partial;
-  const MIN_TESTS_PAY = 240;
-  const testsPay = totalTests > 0 && totalTests < 3 ? Math.max(rawTestsPay, MIN_TESTS_PAY) : rawTestsPay;
-  const minBonus = testsPay - rawTestsPay;
-  const km = f.kilometers * 2 + (f.kilometers >= 100 ? 100 : 0);
-  const learning = f.learning_hours * 60;
-  const expenses = f.food_expense + f.parking_expense;
-  return { insurance, screening, mixed, partial: partial + minBonus, km, learning, expenses,
-           total: testsPay + km + learning + expenses };
-}
+import { getEntries, upsertEntry } from '../api.js';
+import { calcDaily } from '../lib/calc.js';
 
 function today() {
   return new Date().toISOString().slice(0, 10);
@@ -33,7 +17,6 @@ export default function EntryPage() {
   const navigate = useNavigate();
   const { date } = useParams();
   const [form, setForm] = useState({ ...defaultForm, date: date || today() });
-  const [entryId, setEntryId] = useState(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -41,7 +24,7 @@ export default function EntryPage() {
 
   async function loadExisting(d) {
     try {
-      const { data } = await api.get(`/entries?month=${d.slice(0, 7)}`);
+      const data = await getEntries(d.slice(0, 7));
       const existing = data.find(e => e.date === d);
       if (existing) {
         setForm({
@@ -55,7 +38,6 @@ export default function EntryPage() {
           food_expense: existing.food_expense,
           parking_expense: existing.parking_expense,
         });
-        setEntryId(existing.id);
       }
     } catch {}
   }
@@ -70,10 +52,10 @@ export default function EntryPage() {
     setError('');
     setLoading(true);
     try {
-      await api.post('/entries', form);
+      await upsertEntry(form);
       navigate('/');
     } catch (err) {
-      setError(err.response?.data?.error || 'Failed to save entry');
+      setError(err.message || 'Failed to save entry');
     } finally {
       setLoading(false);
     }
@@ -88,7 +70,7 @@ export default function EntryPage() {
         {/* Editorial Header */}
         <section className="mb-8">
           <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight mb-1 font-headline">
-            {entryId ? 'Edit Entry' : 'Record Daily Stats'}
+            {date ? 'Edit Entry' : 'Record Daily Stats'}
           </h1>
           <p className="text-slate-500 font-medium text-sm">Capture your productivity and expenses.</p>
         </section>
@@ -229,7 +211,7 @@ export default function EntryPage() {
 }
 
 function CalendarPicker({ value, onChange }) {
-  const today = new Date().toISOString().slice(0, 10);
+  const todayStr = new Date().toISOString().slice(0, 10);
   const selected = value ? new Date(value + 'T00:00:00') : null;
   const [open, setOpen] = useState(false);
 
@@ -268,7 +250,7 @@ function CalendarPicker({ value, onChange }) {
     return selected.getFullYear() === cursor.year && selected.getMonth() === cursor.month && selected.getDate() === day;
   }
   function isToday(day) {
-    const [ty, tm, td] = today.split('-').map(Number);
+    const [ty, tm, td] = todayStr.split('-').map(Number);
     return ty === cursor.year && tm - 1 === cursor.month && td === day;
   }
 
@@ -278,7 +260,6 @@ function CalendarPicker({ value, onChange }) {
 
   return (
     <div className="bg-white rounded-2xl shadow-[0px_20px_40px_rgba(26,28,29,0.04)] overflow-hidden">
-      {/* Selected date display — always visible, tap to open */}
       <button
         type="button"
         onClick={() => setOpen(o => !o)}
@@ -293,9 +274,7 @@ function CalendarPicker({ value, onChange }) {
         </span>
       </button>
 
-      {/* Expandable calendar */}
       {open && <>
-      {/* Month nav */}
       <div className="flex items-center justify-between px-5 py-3">
         <button type="button" onClick={prevMonth}
           className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-[#F2F2F7] transition-colors text-slate-500 active:scale-90">
@@ -310,7 +289,6 @@ function CalendarPicker({ value, onChange }) {
         </button>
       </div>
 
-      {/* Day headers */}
       <div className="grid grid-cols-7 px-3 pb-1">
         {DAYS.map(d => (
           <div key={d} className="flex items-center justify-center">
@@ -319,7 +297,6 @@ function CalendarPicker({ value, onChange }) {
         ))}
       </div>
 
-      {/* Day cells */}
       <div className="grid grid-cols-7 gap-y-1 px-3 pb-4">
         {cells.map((cell, i) => {
           const sel = cell.cur && isSelected(cell.day);

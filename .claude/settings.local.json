@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__plugin_vercel_vercel__list_teams",
+      "mcp__plugin_vercel_vercel__list_projects",
+      "mcp__plugin_vercel_vercel__get_project",
+      "mcp__Claude_in_Chrome__tabs_context_mcp",
+      "mcp__Claude_in_Chrome__tabs_create_mcp",
+      "mcp__plugin_vercel_vercel__web_fetch_vercel_url",
+      "WebFetch(domain:salary-tracker-alon124501.vercel.app)",
+      "Bash(gh api *)",
+      "WebFetch(domain:salary-tracker-git-master-alon124501.vercel.app)",
+      "WebFetch(domain:api.github.com)",
+      "Bash(git add *)"
+    ]
+  }
+}

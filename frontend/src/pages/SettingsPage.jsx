@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import api from '../api.js';
+import { getMe, saveSettings, getBackup, restoreEntries } from '../api.js';
 
 export default function SettingsPage() {
   const [gmailUser, setGmailUser] = useState('');
@@ -16,11 +16,11 @@ export default function SettingsPage() {
   const [restoring, setRestoring] = useState(false);
 
   useEffect(() => {
-    api.get('/auth/me').then(res => {
-      setGmailUser(res.data.gmail_user || '');
-      setPaymentType(res.data.payment_type || '');
-      setGlobalSalary(res.data.global_salary != null ? String(res.data.global_salary) : '');
-    });
+    getMe().then(data => {
+      setGmailUser(data.gmail_user || '');
+      setPaymentType(data.payment_type || '');
+      setGlobalSalary(data.global_salary != null ? String(data.global_salary) : '');
+    }).catch(() => {});
   }, []);
 
   function handlePaymentTypeClick(value) {
@@ -29,21 +29,18 @@ export default function SettingsPage() {
       setShowGlobalModal(true);
     } else {
       setPaymentType(value);
-      savePaymentType(value, null);
+      doSaveSettings({ payment_type: value });
     }
   }
 
-  async function savePaymentType(type, salary) {
+  async function doSaveSettings(updates) {
     setSaving(true);
     setMsg('');
     try {
-      await api.patch('/auth/settings', {
-        payment_type: type,
-        ...(type === 'global' && salary != null ? { global_salary: Number(salary) } : {}),
-      });
-      setMsg('Payment type saved.');
+      await saveSettings(updates);
+      setMsg('Saved successfully.');
     } catch (err) {
-      setMsg('Error: ' + (err.response?.data?.error || err.message));
+      setMsg('Error: ' + err.message);
     } finally {
       setSaving(false);
     }
@@ -55,25 +52,16 @@ export default function SettingsPage() {
     setPaymentType('global');
     setGlobalSalary(String(num));
     setShowGlobalModal(false);
-    await savePaymentType('global', num);
+    await doSaveSettings({ payment_type: 'global', global_salary: num });
   }
 
   async function save(e) {
     e.preventDefault();
-    setSaving(true);
-    setMsg('');
-    try {
-      await api.patch('/auth/settings', {
-        gmail_user: gmailUser,
-        gmail_app_password: gmailPass || undefined,
-      });
-      setMsg('Saved successfully.');
-      setGmailPass('');
-    } catch (err) {
-      setMsg('Error: ' + (err.response?.data?.error || err.message));
-    } finally {
-      setSaving(false);
-    }
+    await doSaveSettings({
+      gmail_user: gmailUser,
+      ...(gmailPass ? { gmail_app_password: gmailPass } : {}),
+    });
+    setGmailPass('');
   }
 
   return (
@@ -114,7 +102,6 @@ export default function SettingsPage() {
           ))}
         </div>
 
-        {/* Description of selected type */}
         {paymentType === 'per_test' && (
           <div className="bg-purple-50 rounded-xl px-4 py-3 text-xs text-brand-purple font-medium flex flex-col gap-1">
             <p className="font-bold mb-0.5">Price per test type:</p>
@@ -177,7 +164,6 @@ export default function SettingsPage() {
                 step="1"
                 value={globalInput === '' ? '' : globalInput}
                 onChange={e => setGlobalInput(e.target.value)}
-                placeholder=""
                 className="flex-1 border-none outline-none focus:outline-none ring-0 focus:ring-0 text-3xl font-bold text-slate-900 bg-transparent"
                 autoFocus
                 onKeyDown={e => e.key === 'Enter' && confirmGlobal()}
@@ -311,7 +297,7 @@ export default function SettingsPage() {
             onClick={async () => {
               setBackupMsg('');
               try {
-                const { data } = await api.get('/entries/backup');
+                const data = await getBackup();
                 const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
@@ -321,7 +307,7 @@ export default function SettingsPage() {
                 URL.revokeObjectURL(url);
                 setBackupMsg(`Exported ${data.entries.length} entries.`);
               } catch (err) {
-                setBackupMsg('Export failed: ' + (err.response?.data?.error || err.message));
+                setBackupMsg('Export failed: ' + err.message);
               }
             }}
             className="flex items-center gap-3 p-4 rounded-xl border border-slate-100 hover:border-emerald-200 hover:bg-emerald-50 transition-all group"
@@ -360,10 +346,10 @@ export default function SettingsPage() {
                   const text = await file.text();
                   const json = JSON.parse(text);
                   const entries = json.entries ?? json;
-                  const { data } = await api.post('/entries/restore', { entries });
-                  setBackupMsg(`Successfully imported ${data.imported} entries.`);
+                  const { imported } = await restoreEntries(entries);
+                  setBackupMsg(`Successfully imported ${imported} entries.`);
                 } catch (err) {
-                  setBackupMsg('Import failed: ' + (err.response?.data?.error || err.message));
+                  setBackupMsg('Import failed: ' + err.message);
                 } finally {
                   setRestoring(false);
                   e.target.value = '';

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import api from '../api.js';
+import { login, register } from '../api.js';
 
 export default function Login() {
   const navigate = useNavigate();
@@ -15,12 +15,14 @@ export default function Login() {
     setError('');
     setLoading(true);
     try {
-      const { data } = await api.post(`/auth/${mode}`, { username, password });
-      localStorage.setItem('token', data.token);
-      localStorage.setItem('username', data.username);
+      if (mode === 'login') {
+        await login(username, password);
+      } else {
+        await register(username, password);
+      }
       navigate('/');
     } catch (err) {
-      setError(err.response?.data?.error || 'Something went wrong');
+      setError(err.message || 'Something went wrong');
     } finally {
       setLoading(false);
     }

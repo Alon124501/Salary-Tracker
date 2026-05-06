@@ -1,6 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import api from '../api.js';
+import ExcelJS from 'exceljs';
+import { getEntries, getSummary, deleteEntry, sendReport, logout } from '../api.js';
+import { calcDaily } from '../lib/calc.js';
+import { monthRange } from '../lib/calc.js';
 
 function currentMonth() {
   const d = new Date();
@@ -14,12 +17,6 @@ function monthLabel(month) {
 
 function totalTests(e) {
   return (e.insurance_tests || 0) + (e.screening_tests || 0) + (e.mixed_screening_tests || 0) + (e.partial_tests || 0);
-}
-
-function logout() {
-  localStorage.removeItem('token');
-  localStorage.removeItem('username');
-  window.location.href = '/login';
 }
 
 export default function Dashboard() {
@@ -38,22 +35,83 @@ export default function Dashboard() {
 
   async function loadData() {
     try {
-      const [entriesRes, summaryRes] = await Promise.all([
-        api.get(`/entries?month=${month}`),
-        api.get(`/entries/summary?month=${month}`)
+      const [entriesData, summaryData] = await Promise.all([
+        getEntries(month),
+        getSummary(month),
       ]);
-      setEntries(entriesRes.data);
-      setSummary(summaryRes.data);
+      setEntries(entriesData);
+      setSummary(summaryData);
     } catch {}
   }
 
   async function downloadExcel() {
-    const token = localStorage.getItem('token');
-    const res = await fetch(`/api/report/excel?month=${month}`, {
-      headers: { Authorization: `Bearer ${token}` },
+    const { start, end } = monthRange(month);
+    const entriesForExcel = await getEntries(month);
+
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet('Salary Report');
+
+    const headerFill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4F46E5' } };
+    const headerFont = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
+    const centerAlign = { horizontal: 'center', vertical: 'middle' };
+
+    sheet.columns = [
+      { header: 'Date',             key: 'date',         width: 14 },
+      { header: 'Insurance Tests',  key: 'ins',          width: 16 },
+      { header: 'Screening Tests',  key: 'scr',          width: 16 },
+      { header: 'Mixed Screening',  key: 'mix',          width: 16 },
+      { header: 'Partial Tests',    key: 'par',          width: 14 },
+      { header: 'Kilometers',       key: 'km',           width: 12 },
+      { header: 'Learning Hours',   key: 'hrs',          width: 14 },
+      { header: 'Food (₪)',         key: 'food',         width: 12 },
+      { header: 'Parking (₪)',      key: 'parking',      width: 12 },
+      { header: 'Tests Pay (₪)',    key: 'tests_pay',    width: 14 },
+      { header: 'KM Pay (₪)',       key: 'km_pay',       width: 12 },
+      { header: 'Learning Pay (₪)', key: 'learning_pay', width: 15 },
+      { header: 'Expenses (₪)',     key: 'expenses',     width: 12 },
+      { header: 'Daily Total (₪)',  key: 'total',        width: 14 },
+    ];
+
+    sheet.getRow(1).eachCell(cell => {
+      cell.fill = headerFill;
+      cell.font = headerFont;
+      cell.alignment = centerAlign;
     });
-    if (!res.ok) return;
-    const blob = await res.blob();
+    sheet.getRow(1).height = 22;
+
+    const sums = { ins: 0, scr: 0, mix: 0, par: 0, km: 0, hrs: 0, food: 0, parking: 0,
+                   tests_pay: 0, km_pay: 0, learning_pay: 0, expenses: 0, total: 0 };
+
+    for (const e of [...entriesForExcel].reverse()) {
+      const c = calcDaily(e);
+      const tests_pay = c.insurance + c.screening + c.mixed + c.partial;
+      const row = {
+        date: e.date, ins: e.insurance_tests, scr: e.screening_tests,
+        mix: e.mixed_screening_tests, par: e.partial_tests, km: e.kilometers,
+        hrs: e.learning_hours, food: e.food_expense, parking: e.parking_expense,
+        tests_pay, km_pay: c.km, learning_pay: c.learning, expenses: c.expenses, total: c.total,
+      };
+      sheet.addRow(row);
+      for (const k of Object.keys(sums)) sums[k] += row[k] || 0;
+    }
+
+    sheet.addRow({});
+    const totalsRow = sheet.addRow({ date: 'TOTAL', ...sums });
+    totalsRow.eachCell(cell => {
+      cell.font = { bold: true };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF0F2F5' } };
+    });
+
+    for (let i = 2; i <= entriesForExcel.length + 1; i++) {
+      if (i % 2 === 0) {
+        sheet.getRow(i).eachCell(cell => {
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF9FAFB' } };
+        });
+      }
+    }
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -69,30 +127,29 @@ export default function Dashboard() {
     setShowModal(true);
   }
 
-  async function sendReport() {
+  async function handleSendReport() {
     setSending(true);
     setSendMsg('');
     try {
-      const formData = new FormData();
-      receiptFiles.forEach(f => formData.append('receipts', f));
-      parkingFiles.forEach(f => formData.append('parking', f));
-      const { data } = await api.post(`/report?month=${month}`, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
+      const { subject } = await sendReport(month, receiptFiles, parkingFiles);
       setShowModal(false);
-      setToast(`Report sent: "${data.subject}"`);
+      setToast(`Report sent: "${subject}"`);
       setTimeout(() => setToast(''), 4000);
     } catch (err) {
-      setSendMsg('Failed: ' + (err.response?.data?.error || err.message));
+      setSendMsg('Failed: ' + err.message);
     } finally {
       setSending(false);
     }
   }
 
-  async function deleteEntry(id) {
+  async function handleDelete(id) {
     if (!confirm('Delete this entry?')) return;
-    await api.delete(`/entries/${id}`);
+    await deleteEntry(id);
     loadData();
+  }
+
+  async function handleLogout() {
+    await logout();
   }
 
   const s = summary || {};
@@ -285,7 +342,7 @@ export default function Dashboard() {
                   <button
                     title="Delete"
                     className="w-9 h-9 flex items-center justify-center text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"
-                    onClick={() => deleteEntry(e.id)}
+                    onClick={() => handleDelete(e.id)}
                   >
                     <span className="material-symbols-outlined text-base">delete</span>
                   </button>
@@ -381,7 +438,7 @@ export default function Dashboard() {
                 Cancel
               </button>
               <button
-                onClick={sendReport}
+                onClick={handleSendReport}
                 disabled={sending}
                 className="flex-1 flex items-center justify-center gap-1.5 text-sm font-semibold text-white brand-gradient px-4 py-2.5 rounded-full brand-shadow disabled:opacity-50"
               >
