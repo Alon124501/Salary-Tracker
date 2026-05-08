@@ -1,76 +1,87 @@
+import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import api from '../api.js';
+
+const navItems = [
+  { path: '/', icon: 'home', label: 'Home' },
+  { path: '/stats', icon: 'insights', label: 'Stats' },
+  { path: '/entry', icon: 'add_circle', label: 'Entry' },
+  { path: '/settings', icon: 'manage_accounts', label: 'Settings' },
+];
 
 export default function Navbar() {
   const navigate = useNavigate();
   const location = useLocation();
-  const username = localStorage.getItem('username') || '?';
+  const [displayName, setDisplayName] = useState('');
 
-  const navItems = [
-    { path: '/', label: 'Dashboard', icon: 'dashboard' },
-    { path: '/entry', label: 'New Entry', icon: 'edit_note' },
-    { path: '/stats', label: 'Stats', icon: 'insights' },
-    { path: '/settings', label: 'Settings', icon: 'manage_accounts' },
-  ];
+  useEffect(() => {
+    api.get('/auth/me').then(({ data }) => {
+      const first = data.first_name || '';
+      const last = data.last_name || '';
+      setDisplayName(first || last ? `${first} ${last}`.trim() : data.username || '');
+    }).catch(() => {
+      setDisplayName(localStorage.getItem('username') || '');
+    });
+  }, []);
 
-  const isActive = (path) => location.pathname === path || (path !== '/' && location.pathname.startsWith(path));
-
-  const navLink = (path, label, icon) => {
-    const active = isActive(path);
-    return (
-      <button
-        onClick={() => navigate(path)}
-        className={`flex items-center gap-1.5 text-sm font-semibold px-3.5 py-2 rounded-xl transition-all duration-200 ${
-          active
-            ? 'brand-gradient text-white brand-shadow scale-[1.02]'
-            : 'text-slate-500 hover:text-slate-800 hover:bg-slate-100'
-        }`}
-      >
-        <span
-          className="material-symbols-outlined text-base"
-          style={active ? { fontVariationSettings: "'FILL' 1" } : {}}
-        >{icon}</span>
-        {label}
-      </button>
-    );
-  };
+  function logout() {
+    localStorage.removeItem('token');
+    localStorage.removeItem('username');
+    window.location.href = '/login';
+  }
 
   return (
-    <header className="fixed top-0 w-full z-50 bg-white/80 backdrop-blur-xl shadow-[0px_4px_20px_rgba(26,28,29,0.06)]">
-      <div className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 w-full max-w-6xl mx-auto">
+    <header className="fixed top-0 w-full z-50 bg-white/95 backdrop-blur-2xl border-b border-slate-100/80"
+      style={{ boxShadow: '0 2px 12px rgba(0,0,0,0.06)' }}>
+      <div className="flex items-center px-4 sm:px-6 py-2">
 
-        {/* Logo */}
-        <div className="flex items-center gap-3 cursor-pointer" onClick={() => navigate('/')}>
-          <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl brand-gradient flex items-center justify-center brand-shadow flex-shrink-0">
-            <span className="text-white font-extrabold text-xs sm:text-sm font-headline">MP</span>
-          </div>
-          <span className="text-lg sm:text-xl font-extrabold text-slate-900 tracking-tighter font-headline">
-            Medical <span className="brand-gradient-text">Pay</span>
-          </span>
+        {/* Left: Logo + MPCHECK */}
+        <div className="flex items-center gap-2.5 cursor-pointer flex-shrink-0" onClick={() => navigate('/')}>
+          <img src="/logo.png" alt="MPCHECK" className="w-9 h-9 rounded-xl object-contain" />
+          <span className="text-base font-extrabold tracking-tight font-headline brand-gradient-text">MPCHECK</span>
         </div>
 
-        {/* Desktop nav links */}
-        <nav className="hidden lg:flex items-center gap-1">
-          {navItems.map(({ path, label, icon }) => navLink(path, label, icon))}
-        </nav>
+        {/* Center: nav items — desktop only */}
+        <div className="hidden lg:flex flex-1 items-center justify-center gap-2">
+          {navItems.map(item => {
+            const active = location.pathname === item.path || (item.path !== '/' && location.pathname.startsWith(item.path));
+            return (
+              <button
+                key={item.path}
+                onClick={() => navigate(item.path)}
+                className={`flex flex-col items-center justify-center px-5 py-2 rounded-2xl transition-all duration-200 active:scale-95 ${
+                  active
+                    ? 'brand-gradient text-white scale-[1.02]'
+                    : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'
+                }`}
+                style={active ? { boxShadow: '0 4px 14px rgba(139,53,217,0.35)' } : {}}
+              >
+                <span
+                  className="material-symbols-outlined text-[26px]"
+                  style={{ fontVariationSettings: active ? "'FILL' 1" : "'FILL' 0" }}
+                >{item.icon}</span>
+                <span className="text-[10px] font-bold tracking-wide mt-0.5">{item.label}</span>
+              </button>
+            );
+          })}
+        </div>
 
-        {/* Right side */}
-        <div className="flex items-center gap-3">
-          <span className="hidden sm:block text-sm text-slate-500 font-medium">Hi, {username}</span>
+        {/* Right: greeting + logout */}
+        <div className="flex items-center gap-2 ml-auto flex-shrink-0">
+          {displayName && (
+            <span className="text-sm font-semibold text-slate-600 hidden sm:block">
+              Hi, <span className="brand-gradient-text">{displayName}</span>
+            </span>
+          )}
           <button
-            onClick={() => {
-              localStorage.removeItem('token');
-              localStorage.removeItem('username');
-              navigate('/login');
-            }}
-            className="flex items-center gap-1.5 text-sm font-semibold px-3.5 py-2 rounded-xl text-slate-500 hover:text-red-600 hover:bg-red-50 transition-all duration-200"
+            onClick={logout}
+            className="flex items-center justify-center w-9 h-9 rounded-xl text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all duration-200 active:scale-95"
             title="Log out"
           >
-            <span className="material-symbols-outlined text-base">logout</span>
-            <span className="hidden sm:inline">Log out</span>
+            <span className="material-symbols-outlined text-[20px]">logout</span>
           </button>
         </div>
       </div>
-      <div className="bg-slate-100/50 h-px w-full" />
     </header>
   );
 }

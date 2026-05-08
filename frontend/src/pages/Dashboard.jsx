@@ -113,13 +113,6 @@ export default function Dashboard() {
         </div>
         <div className="flex items-center gap-2">
           <button
-            onClick={() => navigate('/entry')}
-            className="hidden lg:flex items-center gap-1.5 text-xs font-semibold text-white brand-gradient px-4 py-2 rounded-full brand-shadow"
-          >
-            <span className="material-symbols-outlined text-sm">add_circle</span>
-            New Entry
-          </button>
-          <button
             onClick={downloadExcel}
             className="flex items-center gap-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-full hover:bg-emerald-100 transition-colors"
           >

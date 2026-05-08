@@ -1,11 +1,13 @@
 const express = require('express');
+const multer = require('multer');
 const supabase = require('../supabase');
 const auth = require('../middleware/auth');
 
 const router = express.Router();
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
-router.post('/register', async (req, res) => {
-  const { username, password } = req.body;
+router.post('/register', upload.single('profession_document'), async (req, res) => {
+  const { username, password, first_name, last_name, profession, district } = req.body;
   if (!username || !password) {
     return res.status(400).json({ error: 'Username and password are required' });
   }
@@ -25,8 +27,27 @@ router.post('/register', async (req, res) => {
     return res.status(400).json({ error: error.message });
   }
 
+  // Upload profession document if provided
+  let profession_document_url = null;
+  if (req.file) {
+    const ext = req.file.originalname.split('.').pop();
+    const filePath = `${data.user.id}/${Date.now()}.${ext}`;
+    const { error: uploadErr } = await supabase.storage
+      .from('profession-documents')
+      .upload(filePath, req.file.buffer, { contentType: req.file.mimetype });
+    if (!uploadErr) profession_document_url = filePath;
+  }
+
   // Insert profile with the new user's UUID
-  const { error: profileErr } = await supabase.from('profiles').insert({ id: data.user.id, username });
+  const { error: profileErr } = await supabase.from('profiles').insert({
+    id: data.user.id,
+    username,
+    first_name: first_name || null,
+    last_name: last_name || null,
+    profession: profession || null,
+    district: district || null,
+    profession_document_url,
+  });
   if (profileErr) {
     return res.status(500).json({ error: profileErr.message });
   }
@@ -63,7 +84,7 @@ router.post('/login', async (req, res) => {
 
 router.get('/me', auth, async (req, res) => {
   const { data: user, error } = await supabase.from('profiles')
-    .select('username, gmail_user, payment_type, global_salary')
+    .select('username, gmail_user, payment_type, global_salary, first_name, last_name')
     .eq('id', req.userId)
     .single();
   if (error || !user) return res.status(404).json({ error: 'User not found' });
