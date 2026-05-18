@@ -13,10 +13,10 @@ function calcDaily(f) {
   const testsPay = totalTests > 0 && totalTests < 3 ? Math.max(rawTestsPay, MIN_TESTS_PAY) : rawTestsPay;
   const minBonus = testsPay - rawTestsPay;
   const km = f.kilometers * 2 + (f.kilometers >= 100 ? 100 : 0);
-  const learning = f.learning_hours * 60;
+  const office = f.office_hours * 60;
   const expenses = f.food_expense + f.parking_expense;
-  return { insurance, screening, mixed, partial: partial + minBonus, km, learning, expenses,
-           total: testsPay + km + learning + expenses };
+  return { insurance, screening, mixed, partial: partial + minBonus, km, office, expenses,
+           total: testsPay + km + office + expenses };
 }
 
 function today() {
@@ -26,7 +26,7 @@ function today() {
 const defaultForm = {
   date: today(),
   insurance_tests: 0, screening_tests: 0, mixed_screening_tests: 0, partial_tests: 0,
-  kilometers: 0, learning_hours: 0, food_expense: 0, parking_expense: 0,
+  kilometers: 0, office_hours: 0, food_expense: 0, parking_expense: 0,
 };
 
 export default function EntryPage() {
@@ -34,6 +34,11 @@ export default function EntryPage() {
   const { date } = useParams();
   const [form, setForm] = useState({ ...defaultForm, date: date || today() });
   const [entryId, setEntryId] = useState(null);
+  const [foodReceipts, setFoodReceipts] = useState([]);
+  const [pendingFoodFiles, setPendingFoodFiles] = useState([]);
+  const [parkingReceipts, setParkingReceipts] = useState([]);
+  const [pendingParkingFiles, setPendingParkingFiles] = useState([]);
+  const [viewingUrl, setViewingUrl] = useState(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -51,11 +56,23 @@ export default function EntryPage() {
           mixed_screening_tests: existing.mixed_screening_tests,
           partial_tests: existing.partial_tests,
           kilometers: existing.kilometers,
-          learning_hours: existing.learning_hours,
+          office_hours: existing.office_hours,
           food_expense: existing.food_expense,
           parking_expense: existing.parking_expense,
         });
         setEntryId(existing.id);
+        if (existing.food_receipt_urls?.length > 0) {
+          try {
+            const { data: receipts } = await api.get(`/entries/${existing.id}/food-receipts`);
+            setFoodReceipts(receipts);
+          } catch {}
+        }
+        if (existing.parking_receipt_urls?.length > 0) {
+          try {
+            const { data: receipts } = await api.get(`/entries/${existing.id}/parking-receipts`);
+            setParkingReceipts(receipts);
+          } catch {}
+        }
       }
     } catch {}
   }
@@ -65,12 +82,66 @@ export default function EntryPage() {
     setForm(f => ({ ...f, [field]: isNaN(num) ? 0 : num }));
   }
 
+  async function deleteReceipt(path) {
+    const id = entryId ?? path.split('/')[2];
+    try {
+      await api.delete(`/entries/${id}/food-receipt`, { params: { path } });
+      setFoodReceipts(prev => prev.filter(r => r.path !== path));
+    } catch (err) {
+      setError(err.response?.data?.error || err.message || 'Failed to delete receipt');
+    }
+  }
+
+  async function deleteParkingReceipt(path) {
+    const id = entryId ?? path.split('/')[2];
+    try {
+      await api.delete(`/entries/${id}/parking-receipt`, { params: { path } });
+      setParkingReceipts(prev => prev.filter(r => r.path !== path));
+    } catch (err) {
+      setError(err.response?.data?.error || err.message || 'Failed to delete receipt');
+    }
+  }
+
+  async function openReceipt(path, type) {
+    try {
+      const { data } = await api.get(`/entries/${entryId}/${type}-receipts`);
+      const found = data.find(r => r.path === path);
+      if (found?.signedUrl) {
+        if (type === 'food') {
+          setFoodReceipts(prev => prev.map(r => r.path === path ? { ...r, signedUrl: found.signedUrl } : r));
+        } else {
+          setParkingReceipts(prev => prev.map(r => r.path === path ? { ...r, signedUrl: found.signedUrl } : r));
+        }
+        setViewingUrl(found.signedUrl);
+      } else {
+        setError('Could not load receipt image');
+      }
+    } catch {
+      setError('Failed to load receipt');
+    }
+  }
+
   async function handleSubmit(e) {
     e.preventDefault();
     setError('');
     setLoading(true);
     try {
-      await api.post('/entries', form);
+      const { data: saved } = await api.post('/entries', form);
+      setEntryId(saved.id);
+      for (const { file } of pendingFoodFiles) {
+        const fd = new FormData();
+        fd.append('food_receipt', file);
+        await api.post(`/entries/${saved.id}/food-receipt`, fd, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
+      }
+      for (const { file } of pendingParkingFiles) {
+        const fd = new FormData();
+        fd.append('parking_receipt', file);
+        await api.post(`/entries/${saved.id}/parking-receipt`, fd, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
+      }
       navigate('/');
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to save entry');
@@ -125,15 +196,15 @@ export default function EntryPage() {
               {calc.km > 0 && <p className="text-[11px] text-brand-purple font-bold mt-1">{calc.km.toFixed(0)} ₪</p>}
             </div>
             <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100">
-              <label className="block text-xs font-bold text-slate-400 mb-2 uppercase tracking-wider">Learning Hrs</label>
+              <label className="block text-xs font-bold text-slate-400 mb-2 uppercase tracking-wider">Office Hrs</label>
               <input
                 type="number" inputMode="decimal" min="0" step="0.5"
-                value={form.learning_hours === 0 ? '' : form.learning_hours}
-                onChange={e => set('learning_hours', e.target.value)}
+                value={form.office_hours === 0 ? '' : form.office_hours}
+                onChange={e => set('office_hours', e.target.value)}
                 className="w-full bg-[#F2F2F7] border-none rounded-xl p-3 text-2xl font-bold focus:ring-2 focus:ring-brand-purple transition-all text-slate-900"
                 placeholder="0"
               />
-              {calc.learning > 0 && <p className="text-[11px] text-brand-purple font-bold mt-1">{calc.learning.toFixed(0)} ₪</p>}
+              {calc.office > 0 && <p className="text-[11px] text-brand-purple font-bold mt-1">{calc.office.toFixed(0)} ₪</p>}
             </div>
           </div>
 
@@ -164,7 +235,7 @@ export default function EntryPage() {
                 </div>
               </div>
               {/* Parking */}
-              <div className="p-4 flex items-center justify-between">
+              <div className="p-4 flex items-center justify-between border-b border-slate-50">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
                     <span className="material-symbols-outlined text-blue-600" style={{ fontSize: 20 }}>local_parking</span>
@@ -184,6 +255,152 @@ export default function EntryPage() {
                     placeholder="0.00"
                   />
                 </div>
+              </div>
+
+              {/* Parking Receipt Upload — multiple */}
+              <div className="p-4 space-y-3 border-b border-slate-50">
+                {(parkingReceipts.length > 0 || pendingParkingFiles.length > 0) && (
+                  <div className="flex flex-wrap gap-2">
+                    {parkingReceipts.map(r => (
+                      <div key={r.path} className="relative w-16 h-16 flex-shrink-0">
+                        {r.signedUrl ? (
+                          <img
+                            src={r.signedUrl}
+                            alt="parking receipt"
+                            className="w-16 h-16 object-cover rounded-xl cursor-pointer border-2 border-white shadow"
+                            onClick={() => openReceipt(r.path, 'parking')}
+                          />
+                        ) : (
+                          <div
+                            className="w-16 h-16 rounded-xl bg-slate-200 flex items-center justify-center border-2 border-slate-300"
+                          >
+                            <span className="material-symbols-outlined text-slate-400" style={{ fontSize: 20 }}>broken_image</span>
+                          </div>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => deleteParkingReceipt(r.path)}
+                          className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center shadow"
+                        >
+                          <span className="material-symbols-outlined text-white" style={{ fontSize: 12 }}>close</span>
+                        </button>
+                      </div>
+                    ))}
+                    {pendingParkingFiles.map((item, i) => (
+                      <div key={i} className="relative w-16 h-16 flex-shrink-0">
+                        <img
+                          src={item.previewUrl}
+                          alt="pending"
+                          className="w-16 h-16 object-cover rounded-xl opacity-70 border-2 border-dashed border-blue-300 cursor-pointer"
+                          onClick={() => setViewingUrl(item.previewUrl)}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setPendingParkingFiles(prev => prev.filter((_, idx) => idx !== i))}
+                          className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-slate-400 rounded-full flex items-center justify-center shadow"
+                        >
+                          <span className="material-symbols-outlined text-white" style={{ fontSize: 12 }}>close</span>
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <label className="flex items-center gap-3 cursor-pointer hover:bg-slate-50 rounded-xl transition-colors py-1">
+                  <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
+                    <span className="material-symbols-outlined text-blue-600" style={{ fontSize: 20 }}>add_a_photo</span>
+                  </div>
+                  <div>
+                    <p className="text-[13px] font-bold text-slate-900">Add Parking Receipt</p>
+                    <p className="text-[11px] text-slate-400">Tap to add photo(s)</p>
+                  </div>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    className="hidden"
+                    onChange={e => {
+                      const files = Array.from(e.target.files).map(file => ({
+                        file,
+                        previewUrl: URL.createObjectURL(file),
+                      }));
+                      setPendingParkingFiles(prev => [...prev, ...files]);
+                      e.target.value = '';
+                    }}
+                  />
+                </label>
+              </div>
+
+              {/* Food Receipt Upload — multiple */}
+              <div className="p-4 space-y-3">
+                {(foodReceipts.length > 0 || pendingFoodFiles.length > 0) && (
+                  <div className="flex flex-wrap gap-2">
+                    {foodReceipts.map(r => (
+                      <div key={r.path} className="relative w-16 h-16 flex-shrink-0">
+                        {r.signedUrl ? (
+                          <img
+                            src={r.signedUrl}
+                            alt="receipt"
+                            className="w-16 h-16 object-cover rounded-xl cursor-pointer border-2 border-white shadow"
+                            onClick={() => openReceipt(r.path, 'food')}
+                          />
+                        ) : (
+                          <div
+                            className="w-16 h-16 rounded-xl bg-slate-200 flex items-center justify-center border-2 border-slate-300"
+                          >
+                            <span className="material-symbols-outlined text-slate-400" style={{ fontSize: 20 }}>broken_image</span>
+                          </div>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => deleteReceipt(r.path)}
+                          className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center shadow"
+                        >
+                          <span className="material-symbols-outlined text-white" style={{ fontSize: 12 }}>close</span>
+                        </button>
+                      </div>
+                    ))}
+                    {pendingFoodFiles.map((item, i) => (
+                      <div key={i} className="relative w-16 h-16 flex-shrink-0">
+                        <img
+                          src={item.previewUrl}
+                          alt="pending"
+                          className="w-16 h-16 object-cover rounded-xl opacity-70 border-2 border-dashed border-orange-300 cursor-pointer"
+                          onClick={() => setViewingUrl(item.previewUrl)}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setPendingFoodFiles(prev => prev.filter((_, idx) => idx !== i))}
+                          className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-slate-400 rounded-full flex items-center justify-center shadow"
+                        >
+                          <span className="material-symbols-outlined text-white" style={{ fontSize: 12 }}>close</span>
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <label className="flex items-center gap-3 cursor-pointer hover:bg-slate-50 rounded-xl transition-colors py-1">
+                  <div className="w-10 h-10 rounded-full bg-orange-100 flex items-center justify-center flex-shrink-0">
+                    <span className="material-symbols-outlined text-orange-600" style={{ fontSize: 20 }}>add_a_photo</span>
+                  </div>
+                  <div>
+                    <p className="text-[13px] font-bold text-slate-900">Add Food Receipt</p>
+                    <p className="text-[11px] text-slate-400">Tap to add photo(s)</p>
+                  </div>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    className="hidden"
+                    onChange={e => {
+                      const files = Array.from(e.target.files).map(file => ({
+                        file,
+                        previewUrl: URL.createObjectURL(file),
+                      }));
+                      setPendingFoodFiles(prev => [...prev, ...files]);
+                      e.target.value = '';
+                    }}
+                  />
+                </label>
               </div>
             </div>
           </div>
@@ -224,6 +441,26 @@ export default function EntryPage() {
           </button>
         </form>
       </main>
+      {viewingUrl && (
+        <div
+          className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4"
+          onClick={() => setViewingUrl(null)}
+        >
+          <button
+            type="button"
+            className="absolute top-4 right-4 text-white"
+            onClick={() => setViewingUrl(null)}
+          >
+            <span className="material-symbols-outlined text-3xl">close</span>
+          </button>
+          <img
+            src={viewingUrl}
+            alt="Receipt"
+            className="max-h-[90vh] max-w-[90vw] object-contain rounded-xl"
+            onClick={e => e.stopPropagation()}
+          />
+        </div>
+      )}
     </div>
   );
 }
