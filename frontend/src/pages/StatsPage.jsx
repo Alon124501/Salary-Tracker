@@ -28,7 +28,7 @@ export default function StatsPage() {
       const s = {
         insurance_tests: 0, screening_tests: 0,
         mixed_screening_tests: 0, partial_tests: 0,
-        kilometers: 0, learning_hours: 0, days: data.length,
+        kilometers: 0, km_pay: 0, office_hours: 0, days: data.length,
       };
       for (const e of data) {
         s.insurance_tests += e.insurance_tests;
@@ -36,7 +36,8 @@ export default function StatsPage() {
         s.mixed_screening_tests += e.mixed_screening_tests;
         s.partial_tests += e.partial_tests;
         s.kilometers += e.kilometers;
-        s.learning_hours += e.learning_hours;
+        s.km_pay += e.calc.km;
+        s.office_hours += e.office_hours;
       }
       s.total_tests = s.insurance_tests + s.screening_tests + s.mixed_screening_tests + s.partial_tests;
       setStats(s);
@@ -106,10 +107,14 @@ export default function StatsPage() {
               <span className="material-symbols-outlined">directions_car</span>
             </div>
           </div>
-          {s.learning_hours > 0 && (
-            <div className="mt-4 flex items-center gap-2 text-cupertino-label text-sm">
-              <span className="material-symbols-outlined text-base">school</span>
-              <span className="font-medium">{s.learning_hours} learning hours this month</span>
+          <div className="mt-4 flex items-center gap-2 text-brand-purple text-sm font-bold">
+            <span className="material-symbols-outlined text-base" style={{ fontVariationSettings: "'FILL' 1" }}>payments</span>
+            <span>₪{(s.km_pay || 0).toFixed(0)} km reimbursement</span>
+          </div>
+          {s.office_hours > 0 && (
+            <div className="mt-2 flex items-center gap-2 text-cupertino-label text-sm">
+              <span className="material-symbols-outlined text-base">corporate_fare</span>
+              <span className="font-medium">{s.office_hours} office hours this month</span>
             </div>
           )}
         </div>

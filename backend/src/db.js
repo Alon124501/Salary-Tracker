@@ -23,7 +23,7 @@ db.exec(`
     mixed_screening_tests INTEGER DEFAULT 0,
     partial_tests INTEGER DEFAULT 0,
     kilometers REAL DEFAULT 0,
-    learning_hours REAL DEFAULT 0,
+    office_hours REAL DEFAULT 0,
     food_expense REAL DEFAULT 0,
     parking_expense REAL DEFAULT 0,
     FOREIGN KEY (user_id) REFERENCES users(id),

@@ -15,7 +15,7 @@ function calcDaily(f) {
   const km = f.kilometers * 2 + (f.kilometers >= 100 ? 100 : 0);
   const office = f.office_hours * 60;
   const expenses = f.food_expense + f.parking_expense;
-  return { insurance, screening, mixed, partial: partial + minBonus, km, office, expenses,
+  return { insurance, screening, mixed, partial, minBonus, km, office, expenses,
            total: testsPay + km + office + expenses };
 }
 

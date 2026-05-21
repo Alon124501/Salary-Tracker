@@ -6,8 +6,9 @@ export default function MonthlySummary({ summary }) {
     { label: 'Screening Tests', value: summary.screening, color: '#8b5cf6' },
     { label: 'Mixed Screening', value: summary.mixed, color: '#a78bfa' },
     { label: 'Partial Tests', value: summary.partial, color: '#c4b5fd' },
+    ...(summary.minBonus > 0 ? [{ label: 'Min. Guarantee', value: summary.minBonus, color: '#f97316' }] : []),
     { label: 'Kilometers', value: summary.km, color: '#06b6d4' },
-    { label: 'Learning Hours', value: summary.learning, color: '#10b981' },
+    { label: 'Office Hours', value: summary.office, color: '#10b981' },
     { label: 'Expenses', value: summary.expenses, color: '#f59e0b' },
   ];
 

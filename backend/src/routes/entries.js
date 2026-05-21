@@ -24,7 +24,7 @@ function calcDaily(e) {
   const km = (e.kilometers || 0) * 2 + ((e.kilometers || 0) >= 100 ? 100 : 0);
   const office = (e.office_hours || 0) * 60;
   const expenses = (e.food_expense || 0) + (e.parking_expense || 0);
-  return { insurance, screening, mixed, partial: partial + minBonus, km, office, expenses,
+  return { insurance, screening, mixed, partial, minBonus, km, office, expenses,
            total: testsPay + km + office + expenses };
 }
 
@@ -60,7 +60,7 @@ router.get('/summary', async (req, res) => {
   if (error) return res.status(500).json({ error: error.message });
 
   const totals = {
-    insurance: 0, screening: 0, mixed: 0, partial: 0,
+    insurance: 0, screening: 0, mixed: 0, partial: 0, minBonus: 0,
     km: 0, office: 0, expenses: 0, total: 0, days: rows.length
   };
   for (const e of rows) {
@@ -69,6 +69,7 @@ router.get('/summary', async (req, res) => {
     totals.screening += c.screening;
     totals.mixed += c.mixed;
     totals.partial += c.partial;
+    totals.minBonus += c.minBonus;
     totals.km += c.km;
     totals.office += c.office;
     totals.expenses += c.expenses;

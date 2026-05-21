@@ -4,7 +4,8 @@ const items = [
   { path: '/', icon: 'home', label: 'Home' },
   { path: '/stats', icon: 'insights', label: 'Stats' },
   { path: '/entry', icon: 'add_circle', label: 'Entry' },
-  { path: '/settings', icon: 'manage_accounts', label: 'Settings' },
+  { path: '/screening-locations', icon: 'business', label: 'סקר' },
+  { path: '/faq', icon: 'quiz', label: 'FAQ' },
 ];
 
 export default function BottomNav() {

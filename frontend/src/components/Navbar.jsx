@@ -6,7 +6,8 @@ const navItems = [
   { path: '/', icon: 'home', label: 'Home' },
   { path: '/stats', icon: 'insights', label: 'Stats' },
   { path: '/entry', icon: 'add_circle', label: 'Entry' },
-  { path: '/settings', icon: 'manage_accounts', label: 'Settings' },
+  { path: '/screening-locations', icon: 'business', label: 'סקר' },
+  { path: '/faq', icon: 'quiz', label: 'FAQ' },
 ];
 
 export default function Navbar() {
@@ -66,13 +67,28 @@ export default function Navbar() {
           })}
         </div>
 
-        {/* Right: greeting + logout */}
+        {/* Right: greeting + settings + logout */}
         <div className="flex items-center gap-2 ml-auto flex-shrink-0">
           {displayName && (
             <span className="text-sm font-semibold text-slate-600 hidden sm:block">
               Hi, <span className="brand-gradient-text">{displayName}</span>
             </span>
           )}
+          <button
+            onClick={() => navigate('/settings')}
+            className={`flex items-center justify-center w-9 h-9 rounded-xl transition-all duration-200 active:scale-95 ${
+              location.pathname === '/settings'
+                ? 'brand-gradient text-white'
+                : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'
+            }`}
+            title="Settings"
+            style={location.pathname === '/settings' ? { boxShadow: '0 4px 14px rgba(139,53,217,0.35)' } : {}}
+          >
+            <span
+              className="material-symbols-outlined text-[20px]"
+              style={{ fontVariationSettings: location.pathname === '/settings' ? "'FILL' 1" : "'FILL' 0" }}
+            >manage_accounts</span>
+          </button>
           <button
             onClick={logout}
             className="flex items-center justify-center w-9 h-9 rounded-xl text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all duration-200 active:scale-95"

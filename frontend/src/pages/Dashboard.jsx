@@ -181,13 +181,13 @@ export default function Dashboard() {
             <div className="text-2xl font-bold text-red-500 font-headline">{(s.expenses || 0).toFixed(0)} <span className="text-sm font-normal text-slate-400">₪</span></div>
           </div>
 
-          {/* Learning */}
+          {/* Office */}
           <div className="bg-white p-4 rounded-2xl shadow-card border border-slate-100 hover:shadow-card-hover transition-shadow duration-200">
             <div className="w-9 h-9 rounded-xl bg-amber-50 flex items-center justify-center mb-3">
-              <span className="material-symbols-outlined text-amber-500 text-lg" style={{ fontVariationSettings: "'FILL' 1" }}>school</span>
+              <span className="material-symbols-outlined text-amber-500 text-lg" style={{ fontVariationSettings: "'FILL' 1" }}>corporate_fare</span>
             </div>
-            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">Learning</p>
-            <div className="text-2xl font-bold text-slate-900 font-headline">{(s.learning || 0).toFixed(0)} <span className="text-sm font-normal text-slate-400">₪</span></div>
+            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">Office</p>
+            <div className="text-2xl font-bold text-slate-900 font-headline">{(s.office || 0).toFixed(0)} <span className="text-sm font-normal text-slate-400">₪</span></div>
           </div>
 
           {/* Screening */}

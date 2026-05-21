@@ -1,12 +1,12 @@
 # Salary Tracker
 
-A personal web app to track and calculate your salary from daily work data — tests, kilometers, learning hours, and expenses.
+A personal web app to track and calculate your salary from daily work data — tests, kilometers, office hours, and expenses.
 
 ---
 
 ## Features
 
-- Log daily work entries (tests, km, learning hours, food & parking expenses)
+- Log daily work entries (tests, km, office hours, food & parking expenses)
 - Real-time salary calculation with a live preview while filling the form
 - Monthly dashboard showing earnings broken down per category
 - Stats page showing test counts and kilometers for the month
@@ -24,7 +24,7 @@ A personal web app to track and calculate your salary from daily work data — t
 | Mixed screening test | 120 ₪ each |
 | Partial test | 50 ₪ each |
 | Kilometers | 2 ₪/km + **100 ₪ bonus** if ≥ 100 km/day |
-| Learning hours | 60 ₪/hour |
+| Office hours | 60 ₪/hour |
 | Expenses (food + parking) | Actual cost reimbursed |
 
 ---

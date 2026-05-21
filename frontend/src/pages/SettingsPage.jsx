@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import api from '../api.js';
 
 export default function SettingsPage() {
+  const navigate = useNavigate();
   const [gmailUser, setGmailUser] = useState('');
   const [gmailPass, setGmailPass] = useState('');
   const [showPass, setShowPass] = useState(false);
@@ -82,6 +84,24 @@ export default function SettingsPage() {
         <span className="material-symbols-outlined text-brand-purple" style={{ fontVariationSettings: "'FILL' 1" }}>manage_accounts</span>
         Settings
       </h1>
+
+      {/* Edit Profile */}
+      <section className="bg-white rounded-2xl shadow-[0_2px_8px_rgba(0,0,0,0.04)] border border-slate-100 p-5">
+        <button
+          type="button"
+          onClick={() => navigate('/edit-profile')}
+          className="w-full flex items-center gap-4 text-left"
+        >
+          <div className="w-10 h-10 rounded-xl bg-purple-50 flex items-center justify-center flex-shrink-0">
+            <span className="material-symbols-outlined text-brand-purple" style={{ fontVariationSettings: "'FILL' 1" }}>person</span>
+          </div>
+          <div className="flex-1">
+            <p className="text-sm font-bold text-slate-800">My Profile</p>
+            <p className="text-xs text-slate-400">Edit your name, profession &amp; district</p>
+          </div>
+          <span className="material-symbols-outlined text-slate-400">chevron_right</span>
+        </button>
+      </section>
 
       {/* Payment Type */}
       <section className="bg-white rounded-2xl shadow-[0_2px_8px_rgba(0,0,0,0.04)] border border-slate-100 p-6 flex flex-col gap-4">

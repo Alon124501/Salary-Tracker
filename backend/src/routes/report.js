@@ -29,10 +29,10 @@ function calcDaily(e) {
   const minBonus = testsPay - rawTestsPay;
 
   const km = (e.kilometers || 0) * 2 + ((e.kilometers || 0) >= 100 ? 100 : 0);
-  const learning = (e.learning_hours || 0) * 60;
+  const office = (e.office_hours || 0) * 60;
   const expenses = (e.food_expense || 0) + (e.parking_expense || 0);
-  return { insurance, screening, mixed, partial: partial + minBonus, km, learning, expenses,
-           total: testsPay + km + learning + expenses };
+  return { insurance, screening, mixed, partial, minBonus, km, office, expenses,
+           total: testsPay + km + office + expenses };
 }
 
 function monthRange(month) {
@@ -40,6 +40,126 @@ function monthRange(month) {
   const start = `${month}-01`;
   const end = new Date(year, mon, 0).toISOString().slice(0, 10);
   return { start, end };
+}
+
+function buildSheet(sheet, entries) {
+  const headerFill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4F46E5' } };
+  const headerFont = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
+  const centerAlign = { horizontal: 'center', vertical: 'middle' };
+  const moneyFont = { italic: true, size: 9, color: { argb: 'FF6B7280' } };
+  const stripeFill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF9FAFB' } };
+  const totalFill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF0F2F5' } };
+  const numCols = 12;
+
+  sheet.columns = [
+    { header: 'Date',                key: 'date',       width: 14 },
+    { header: 'Insurance Tests',     key: 'ins',        width: 16 },
+    { header: 'Screening Tests',     key: 'scr',        width: 16 },
+    { header: 'Mixed Screening',     key: 'mix',        width: 16 },
+    { header: 'Partial Tests',       key: 'par',        width: 14 },
+    { header: 'Kilometers',          key: 'km',         width: 12 },
+    { header: '100km Bonus (₪)',     key: 'km_bonus',   width: 14 },
+    { header: 'Office Hours',        key: 'hrs',        width: 14 },
+    { header: 'Food (₪)',            key: 'food',       width: 12 },
+    { header: 'Parking (₪)',         key: 'parking',    width: 12 },
+    { header: 'Tests Pay (₪)',       key: 'tests_pay',  width: 14 },
+    { header: 'Min. Guarantee (₪)', key: 'min_bonus',  width: 16 },
+  ];
+
+  sheet.getRow(1).eachCell(cell => {
+    cell.fill = headerFill;
+    cell.font = headerFont;
+    cell.alignment = centerAlign;
+  });
+  sheet.getRow(1).height = 22;
+
+  const sums = { ins: 0, scr: 0, mix: 0, par: 0, km: 0, km_bonus: 0, hrs: 0, food: 0, parking: 0,
+                 tests_pay: 0, min_bonus: 0 };
+  const moneySums = { ins: 0, scr: 0, mix: 0, par: 0, km: 0, hrs: 0 };
+  let grandTotal = 0;
+
+  for (let i = 0; i < entries.length; i++) {
+    const e = entries[i];
+    const c = calcDaily(e);
+    const tests_pay = c.insurance + c.screening + c.mixed + c.partial;
+
+    const dataRow = sheet.addRow({
+      date: e.date, ins: e.insurance_tests, scr: e.screening_tests,
+      mix: e.mixed_screening_tests, par: e.partial_tests, km: e.kilometers,
+      km_bonus: (e.kilometers || 0) >= 100 ? 100 : null,
+      hrs: e.office_hours, food: e.food_expense, parking: e.parking_expense,
+      tests_pay, min_bonus: c.minBonus || 0,
+    });
+
+    if (i % 2 === 0) {
+      for (let col = 1; col <= numCols; col++) {
+        dataRow.getCell(col).fill = stripeFill;
+      }
+    }
+
+    sums.ins        += e.insurance_tests       || 0;
+    sums.scr        += e.screening_tests       || 0;
+    sums.mix        += e.mixed_screening_tests || 0;
+    sums.par        += e.partial_tests         || 0;
+    sums.km         += e.kilometers            || 0;
+    sums.km_bonus   += (e.kilometers || 0) >= 100 ? 100 : 0;
+    sums.hrs        += e.office_hours          || 0;
+    sums.food       += e.food_expense          || 0;
+    sums.parking    += e.parking_expense       || 0;
+    sums.tests_pay  += tests_pay;
+    sums.min_bonus  += c.minBonus || 0;
+    moneySums.ins   += (e.insurance_tests       || 0) * 80;
+    moneySums.scr   += (e.screening_tests       || 0) * 105;
+    moneySums.mix   += (e.mixed_screening_tests || 0) * 120;
+    moneySums.par   += (e.partial_tests         || 0) * 50;
+    moneySums.km    += c.km;
+    moneySums.hrs   += (e.office_hours || 0) * 60;
+    grandTotal      += c.total;
+  }
+
+  // Blank separator
+  sheet.addRow({});
+
+  // TOTAL count row
+  const totalsRow = sheet.addRow({ date: 'TOTAL', ...sums });
+  totalsRow.eachCell(cell => {
+    cell.font = { bold: true };
+    cell.fill = totalFill;
+    cell.alignment = centerAlign;
+  });
+
+  // TOTAL money sub-row
+  const totalMoneyRow = sheet.addRow({
+    ins:       moneySums.ins  > 0 ? `₪${moneySums.ins}`        : '',
+    scr:       moneySums.scr  > 0 ? `₪${moneySums.scr}`        : '',
+    mix:       moneySums.mix  > 0 ? `₪${moneySums.mix}`        : '',
+    par:       moneySums.par  > 0 ? `₪${moneySums.par}`        : '',
+    km:        moneySums.km   > 0 ? `₪${moneySums.km}`         : '',
+    km_bonus:  sums.km_bonus  > 0 ? `₪${sums.km_bonus}`        : '',
+    hrs:       moneySums.hrs  > 0 ? `₪${moneySums.hrs}`        : '',
+    food:      sums.food      > 0 ? `₪${sums.food}`            : '',
+    parking:   sums.parking   > 0 ? `₪${sums.parking}`         : '',
+    tests_pay: sums.tests_pay > 0 ? `₪${sums.tests_pay}`       : '',
+    min_bonus: sums.min_bonus > 0 ? `₪${sums.min_bonus}`       : '',
+  });
+  totalMoneyRow.height = 14;
+  for (let col = 1; col <= numCols; col++) {
+    const cell = totalMoneyRow.getCell(col);
+    cell.font = { bold: true, italic: true, size: 9, color: { argb: 'FF6B7280' } };
+    cell.fill = totalFill;
+    cell.alignment = centerAlign;
+  }
+
+  // Grand total row
+  sheet.addRow({});
+  const grandTotalRow = sheet.addRow({ date: 'TOTAL EARNINGS', min_bonus: `₪${grandTotal}` });
+  grandTotalRow.height = 26;
+  for (let col = 1; col <= numCols; col++) {
+    const cell = grandTotalRow.getCell(col);
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4F46E5' } };
+    cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 12 };
+    cell.alignment = centerAlign;
+  }
 }
 
 // GET /api/report/excel?month=YYYY-MM
@@ -58,65 +178,7 @@ router.get('/excel', async (req, res) => {
 
   const workbook = new ExcelJS.Workbook();
   const sheet = workbook.addWorksheet('Salary Report');
-
-  const headerFill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4F46E5' } };
-  const headerFont = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
-  const centerAlign = { horizontal: 'center', vertical: 'middle' };
-
-  sheet.columns = [
-    { header: 'Date',             key: 'date',         width: 14 },
-    { header: 'Insurance Tests',  key: 'ins',          width: 16 },
-    { header: 'Screening Tests',  key: 'scr',          width: 16 },
-    { header: 'Mixed Screening',  key: 'mix',          width: 16 },
-    { header: 'Partial Tests',    key: 'par',          width: 14 },
-    { header: 'Kilometers',       key: 'km',           width: 12 },
-    { header: 'Learning Hours',   key: 'hrs',          width: 14 },
-    { header: 'Food (₪)',         key: 'food',         width: 12 },
-    { header: 'Parking (₪)',      key: 'parking',      width: 12 },
-    { header: 'Tests Pay (₪)',    key: 'tests_pay',    width: 14 },
-    { header: 'KM Pay (₪)',       key: 'km_pay',       width: 12 },
-    { header: 'Learning Pay (₪)', key: 'learning_pay', width: 15 },
-    { header: 'Expenses (₪)',     key: 'expenses',     width: 12 },
-    { header: 'Daily Total (₪)',  key: 'total',        width: 14 },
-  ];
-
-  sheet.getRow(1).eachCell(cell => {
-    cell.fill = headerFill;
-    cell.font = headerFont;
-    cell.alignment = centerAlign;
-  });
-  sheet.getRow(1).height = 22;
-
-  const sums = { ins: 0, scr: 0, mix: 0, par: 0, km: 0, hrs: 0, food: 0, parking: 0,
-                 tests_pay: 0, km_pay: 0, learning_pay: 0, expenses: 0, total: 0 };
-
-  for (const e of entries) {
-    const c = calcDaily(e);
-    const tests_pay = c.insurance + c.screening + c.mixed + c.partial;
-    const row = {
-      date: e.date, ins: e.insurance_tests, scr: e.screening_tests,
-      mix: e.mixed_screening_tests, par: e.partial_tests, km: e.kilometers,
-      hrs: e.learning_hours, food: e.food_expense, parking: e.parking_expense,
-      tests_pay, km_pay: c.km, learning_pay: c.learning, expenses: c.expenses, total: c.total,
-    };
-    sheet.addRow(row);
-    for (const k of Object.keys(sums)) sums[k] += row[k] || 0;
-  }
-
-  sheet.addRow({});
-  const totalsRow = sheet.addRow({ date: 'TOTAL', ...sums });
-  totalsRow.eachCell(cell => {
-    cell.font = { bold: true };
-    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF0F2F5' } };
-  });
-
-  for (let i = 2; i <= entries.length + 1; i++) {
-    if (i % 2 === 0) {
-      sheet.getRow(i).eachCell(cell => {
-        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF9FAFB' } };
-      });
-    }
-  }
+  buildSheet(sheet, entries);
 
   const [year, monthNum] = month.split('-');
   const monthName = new Date(year, monthNum - 1).toLocaleString('en-US', { month: 'long' });
@@ -142,78 +204,9 @@ router.post('/', upload.fields([{ name: 'receipts' }, { name: 'parking' }]), asy
     .eq('user_id', req.userId).gte('date', start).lte('date', end).order('date', { ascending: true });
   if (entriesErr) return res.status(500).json({ error: entriesErr.message });
 
-  // Build Excel
   const workbook = new ExcelJS.Workbook();
   const sheet = workbook.addWorksheet('Salary Report');
-
-  const headerFill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4F46E5' } };
-  const headerFont = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
-  const centerAlign = { horizontal: 'center', vertical: 'middle' };
-
-  sheet.columns = [
-    { header: 'Date',                  key: 'date',           width: 14 },
-    { header: 'Insurance Tests',       key: 'ins',            width: 16 },
-    { header: 'Screening Tests',       key: 'scr',            width: 16 },
-    { header: 'Mixed Screening',       key: 'mix',            width: 16 },
-    { header: 'Partial Tests',         key: 'par',            width: 14 },
-    { header: 'Kilometers',            key: 'km',             width: 12 },
-    { header: 'Learning Hours',        key: 'hrs',            width: 14 },
-    { header: 'Food (₪)',              key: 'food',           width: 12 },
-    { header: 'Parking (₪)',           key: 'parking',        width: 12 },
-    { header: 'Tests Pay (₪)',         key: 'tests_pay',      width: 14 },
-    { header: 'KM Pay (₪)',            key: 'km_pay',         width: 12 },
-    { header: 'Learning Pay (₪)',      key: 'learning_pay',   width: 15 },
-    { header: 'Expenses (₪)',          key: 'expenses',       width: 12 },
-    { header: 'Daily Total (₪)',       key: 'total',          width: 14 },
-  ];
-
-  sheet.getRow(1).eachCell(cell => {
-    cell.fill = headerFill;
-    cell.font = headerFont;
-    cell.alignment = centerAlign;
-  });
-  sheet.getRow(1).height = 22;
-
-  const sums = { ins: 0, scr: 0, mix: 0, par: 0, km: 0, hrs: 0, food: 0, parking: 0,
-                 tests_pay: 0, km_pay: 0, learning_pay: 0, expenses: 0, total: 0 };
-
-  for (const e of entries) {
-    const c = calcDaily(e);
-    const tests_pay = c.insurance + c.screening + c.mixed + c.partial;
-    const row = {
-      date: e.date,
-      ins: e.insurance_tests,
-      scr: e.screening_tests,
-      mix: e.mixed_screening_tests,
-      par: e.partial_tests,
-      km: e.kilometers,
-      hrs: e.learning_hours,
-      food: e.food_expense,
-      parking: e.parking_expense,
-      tests_pay,
-      km_pay: c.km,
-      learning_pay: c.learning,
-      expenses: c.expenses,
-      total: c.total,
-    };
-    sheet.addRow(row);
-    for (const k of Object.keys(sums)) sums[k] += row[k] || 0;
-  }
-
-  sheet.addRow({});
-  const totalsRow = sheet.addRow({ date: 'TOTAL', ...sums });
-  totalsRow.eachCell(cell => {
-    cell.font = { bold: true };
-    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF0F2F5' } };
-  });
-
-  for (let i = 2; i <= entries.length + 1; i++) {
-    if (i % 2 === 0) {
-      sheet.getRow(i).eachCell(cell => {
-        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF9FAFB' } };
-      });
-    }
-  }
+  buildSheet(sheet, entries);
 
   const buffer = await workbook.xlsx.writeBuffer();
 
