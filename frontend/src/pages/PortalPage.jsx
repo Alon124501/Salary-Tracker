@@ -112,7 +112,16 @@ export default function PortalPage() {
                       className="bg-white rounded-2xl border border-slate-100 px-5 py-4"
                       style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}
                     >
-                      <p className="font-bold text-slate-800 text-sm mb-3">{cred.name}</p>
+                      <div className="flex items-center gap-3 mb-3">
+                        {cred.image_signed_url ? (
+                          <img src={cred.image_signed_url} alt={cred.name} className="w-10 h-10 rounded-xl object-cover flex-shrink-0" />
+                        ) : (
+                          <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center flex-shrink-0">
+                            <span className="material-symbols-outlined text-slate-400 text-lg">apps</span>
+                          </div>
+                        )}
+                        <p className="font-bold text-slate-800 text-sm">{cred.name}</p>
+                      </div>
                       <div className="space-y-2">
                         <div className="flex items-center gap-2">
                           <span className="text-[11px] font-semibold text-slate-400 w-20 flex-shrink-0">Username</span>

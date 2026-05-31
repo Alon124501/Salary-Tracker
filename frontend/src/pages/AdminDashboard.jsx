@@ -77,10 +77,12 @@ export default function AdminDashboard() {
   const [newAppName, setNewAppName] = useState('');
   const [newAppUser, setNewAppUser] = useState('');
   const [newAppPass, setNewAppPass] = useState('');
+  const [newAppImage, setNewAppImage] = useState(null);
   const [editingAppId, setEditingAppId] = useState(null);
   const [editAppName, setEditAppName] = useState('');
   const [editAppUser, setEditAppUser] = useState('');
   const [editAppPass, setEditAppPass] = useState('');
+  const [editAppImage, setEditAppImage] = useState(null);
   const [appSaving, setAppSaving] = useState(false);
 
   // Reports state
@@ -267,12 +269,15 @@ export default function AdminDashboard() {
     if (!newAppName.trim() || !newAppUser.trim() || !newAppPass.trim()) return;
     setAppSaving(true);
     try {
-      const { data } = await api.post('/portal/credentials', {
-        name: newAppName.trim(), username: newAppUser.trim(), password: newAppPass.trim(),
-        sort_order: appCreds.length,
-      });
+      const fd = new FormData();
+      fd.append('name', newAppName.trim());
+      fd.append('username', newAppUser.trim());
+      fd.append('password', newAppPass.trim());
+      fd.append('sort_order', appCreds.length);
+      if (newAppImage) fd.append('image', newAppImage);
+      const { data } = await api.post('/portal/credentials', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
       setAppCreds(prev => [...prev, data]);
-      setNewAppName(''); setNewAppUser(''); setNewAppPass(''); setAddingApp(false);
+      setNewAppName(''); setNewAppUser(''); setNewAppPass(''); setNewAppImage(null); setAddingApp(false);
     } catch { /* silent */ }
     finally { setAppSaving(false); }
   }
@@ -281,13 +286,14 @@ export default function AdminDashboard() {
     if (!editAppName.trim() || !editAppUser.trim() || !editAppPass.trim()) return;
     setAppSaving(true);
     try {
-      await api.patch(`/portal/credentials/${id}`, {
-        name: editAppName.trim(), username: editAppUser.trim(), password: editAppPass.trim(),
-      });
-      setAppCreds(prev => prev.map(x => x.id === id
-        ? { ...x, name: editAppName.trim(), username: editAppUser.trim(), password: editAppPass.trim() }
-        : x));
-      setEditingAppId(null);
+      const fd = new FormData();
+      fd.append('name', editAppName.trim());
+      fd.append('username', editAppUser.trim());
+      fd.append('password', editAppPass.trim());
+      if (editAppImage) fd.append('image', editAppImage);
+      const { data } = await api.patch(`/portal/credentials/${id}`, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+      setAppCreds(prev => prev.map(x => x.id === id ? data : x));
+      setEditingAppId(null); setEditAppImage(null);
     } catch { /* silent */ }
     finally { setAppSaving(false); }
   }
@@ -659,10 +665,25 @@ export default function AdminDashboard() {
                             <Field label="App Name" value={editAppName} onChange={setEditAppName} />
                             <Field label="Username" value={editAppUser} onChange={setEditAppUser} />
                             <Field label="Password" value={editAppPass} onChange={setEditAppPass} />
+                            {/* Image picker */}
+                            <div>
+                              <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Image</label>
+                              <label className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all ${editAppImage ? 'border-brand-purple/40 bg-purple-50' : 'border-slate-200 hover:border-brand-purple/30'}`}>
+                                {editAppImage ? (
+                                  <img src={URL.createObjectURL(editAppImage)} className="w-8 h-8 rounded-lg object-cover flex-shrink-0" alt="" />
+                                ) : cred.image_signed_url ? (
+                                  <img src={cred.image_signed_url} className="w-8 h-8 rounded-lg object-cover flex-shrink-0" alt="" />
+                                ) : (
+                                  <span className="material-symbols-outlined text-slate-400 text-xl flex-shrink-0">image</span>
+                                )}
+                                <span className="text-xs text-slate-500 flex-1">{editAppImage ? editAppImage.name : cred.image_signed_url ? 'Change image' : 'Upload image'}</span>
+                                <input type="file" accept="image/*" className="hidden" onChange={e => setEditAppImage(e.target.files[0] || null)} />
+                              </label>
+                            </div>
                             <div className="flex gap-2">
                               <button onClick={() => updateApp(cred.id)} disabled={appSaving || !editAppName.trim() || !editAppUser.trim() || !editAppPass.trim()}
                                 className="flex-1 py-2 rounded-xl text-sm font-bold text-white brand-gradient active:scale-95 transition-all disabled:opacity-50">Save</button>
-                              <button onClick={() => setEditingAppId(null)}
+                              <button onClick={() => { setEditingAppId(null); setEditAppImage(null); }}
                                 className="flex-1 py-2 rounded-xl text-sm font-bold text-slate-600 bg-slate-100 active:scale-95 transition-all">Cancel</button>
                             </div>
                           </>
@@ -678,7 +699,10 @@ export default function AdminDashboard() {
                                 <span className="material-symbols-outlined text-base">arrow_downward</span>
                               </button>
                             </div>
-                            <div className="flex-1 min-w-0 cursor-pointer" onClick={() => { setEditingAppId(cred.id); setEditAppName(cred.name); setEditAppUser(cred.username); setEditAppPass(cred.password); }}>
+                            {cred.image_signed_url && (
+                              <img src={cred.image_signed_url} className="w-10 h-10 rounded-xl object-cover flex-shrink-0" alt={cred.name} />
+                            )}
+                            <div className="flex-1 min-w-0 cursor-pointer" onClick={() => { setEditingAppId(cred.id); setEditAppName(cred.name); setEditAppUser(cred.username); setEditAppPass(cred.password); setEditAppImage(null); }}>
                               <p className="text-sm font-bold text-slate-800">{cred.name}</p>
                               <p className="text-xs text-slate-400 mt-0.5">{cred.username}</p>
                               <p className="text-[10px] text-brand-purple mt-1 font-medium">Tap to edit</p>
@@ -698,12 +722,25 @@ export default function AdminDashboard() {
                       <Field label="App Name" value={newAppName} onChange={setNewAppName} />
                       <Field label="Username" value={newAppUser} onChange={setNewAppUser} />
                       <Field label="Password" value={newAppPass} onChange={setNewAppPass} />
+                      {/* Image picker */}
+                      <div>
+                        <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Image</label>
+                        <label className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all ${newAppImage ? 'border-brand-purple/40 bg-purple-50' : 'border-slate-200 hover:border-brand-purple/30'}`}>
+                          {newAppImage ? (
+                            <img src={URL.createObjectURL(newAppImage)} className="w-8 h-8 rounded-lg object-cover flex-shrink-0" alt="" />
+                          ) : (
+                            <span className="material-symbols-outlined text-slate-400 text-xl flex-shrink-0">image</span>
+                          )}
+                          <span className="text-xs text-slate-500 flex-1">{newAppImage ? newAppImage.name : 'Upload image (optional)'}</span>
+                          <input type="file" accept="image/*" className="hidden" onChange={e => setNewAppImage(e.target.files[0] || null)} />
+                        </label>
+                      </div>
                       <div className="flex gap-2">
                         <button onClick={saveApp} disabled={appSaving || !newAppName.trim() || !newAppUser.trim() || !newAppPass.trim()}
                           className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white brand-gradient active:scale-95 transition-all disabled:opacity-50">
                           {appSaving ? 'Saving...' : 'Save'}
                         </button>
-                        <button onClick={() => { setAddingApp(false); setNewAppName(''); setNewAppUser(''); setNewAppPass(''); }}
+                        <button onClick={() => { setAddingApp(false); setNewAppName(''); setNewAppUser(''); setNewAppPass(''); setNewAppImage(null); }}
                           className="flex-1 py-2.5 rounded-xl text-sm font-bold text-slate-600 bg-slate-100 active:scale-95 transition-all">Cancel</button>
                       </div>
                     </div>
