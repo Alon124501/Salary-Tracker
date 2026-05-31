@@ -5,7 +5,7 @@ const supabase = require('../supabase');
 
 const router = express.Router();
 
-const ADMIN_EMAIL = 'Yelena.p@mpcheck.co.il';
+const ADMIN_EMAIL = 'davida@mpcheck.co.il';
 const MONTH_NAMES = ['January','February','March','April','May','June',
                      'July','August','September','October','November','December'];
 

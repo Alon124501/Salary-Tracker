@@ -10,7 +10,7 @@ const router = express.Router();
 router.use(auth);
 router.use(adminAuth);
 
-const ACCOUNTING_EMAIL = 'Yelena.p@mpcheck.co.il';
+const ACCOUNTING_EMAIL = 'davida@mpcheck.co.il';
 const EQUIPMENT_TYPES = ['bone_density', 'tonometer', 'echocardiogram', 'tanita', 'ge'];
 
 function calcDaily(e, mileageRate = 2) {
