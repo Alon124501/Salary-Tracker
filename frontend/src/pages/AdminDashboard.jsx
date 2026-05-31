@@ -34,6 +34,23 @@ function nowMonth() {
   return new Date().toISOString().slice(0, 7);
 }
 
+function Field({ label, value, onChange, type = 'text', dir, placeholder, step }) {
+  return (
+    <div>
+      <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">{label}</label>
+      <input
+        type={type}
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        dir={dir}
+        placeholder={placeholder || label}
+        step={step}
+        className="w-full px-3 py-2.5 text-sm rounded-xl border border-slate-200 focus:border-brand-purple/50 focus:outline-none bg-white"
+      />
+    </div>
+  );
+}
+
 export default function AdminDashboard() {
   const [activeTab, setActiveTab] = useState('directory');
   const [users, setUsers] = useState([]);
@@ -60,8 +77,13 @@ export default function AdminDashboard() {
   const [approvingId, setApprovingId] = useState(null);
   const [approveMsgs, setApproveMsgs] = useState({});
 
-  // Inline edit state: { [userId]: { field: value } }
+  // Inline edit state for compensation tab
   const [edits, setEdits] = useState({});
+
+  // Directory drawer state
+  const [selectedUser, setSelectedUser] = useState(null);
+  const [drawerEdits, setDrawerEdits] = useState({});
+  const [drawerSaving, setDrawerSaving] = useState(false);
 
   const loadUsers = useCallback(async () => {
     try {
@@ -240,6 +262,40 @@ export default function AdminDashboard() {
     }
   }
 
+  // ── Directory drawer ───────────────────────────────────────────────────
+  function openDrawer(user) {
+    setSelectedUser(user);
+    setDrawerEdits({
+      first_name: user.first_name || '',
+      last_name: user.last_name || '',
+      email: user.email || '',
+      phone: user.phone || '',
+      address: user.address || '',
+      profession: user.profession || '',
+      district: user.district || '',
+      shifts_per_week: user.shifts_per_week || '',
+      vehicle_type_color: user.vehicle_type_color || '',
+      vehicle_number: user.vehicle_number || '',
+      clothing_size: user.clothing_size || '',
+      uniform_sets: user.uniform_sets ?? '',
+      mileage_rate: user.mileage_rate ?? 2,
+    });
+  }
+
+  async function saveDrawer() {
+    if (!selectedUser) return;
+    setDrawerSaving(true);
+    try {
+      const updates = { ...drawerEdits };
+      if (updates.uniform_sets !== '') updates.uniform_sets = parseInt(updates.uniform_sets, 10);
+      if (updates.mileage_rate !== '') updates.mileage_rate = parseFloat(updates.mileage_rate);
+      await api.patch(`/admin/users/${selectedUser.id}`, updates);
+      setUsers(prev => prev.map(u => u.id === selectedUser.id ? { ...u, ...updates } : u));
+      setSelectedUser(null);
+    } catch { /* silent */ }
+    finally { setDrawerSaving(false); }
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen pt-16 flex items-center justify-center">
@@ -288,186 +344,78 @@ export default function AdminDashboard() {
 
       {/* ── Tab: Directory ─────────────────────────────────────────────── */}
       {activeTab === 'directory' && (
+        <div className="px-4 space-y-2">
+          {users.map(u => {
+            const name = `${u.first_name || ''} ${u.last_name || ''}`.trim() || u.username;
+            const initials = (`${(u.first_name || '')[0] || ''}${(u.last_name || '')[0] || ''}`.toUpperCase()) || u.username[0]?.toUpperCase() || '?';
+            return (
+              <button
+                key={u.id}
+                onClick={() => openDrawer(u)}
+                className="w-full bg-white rounded-2xl border border-slate-100 px-4 py-3.5 flex items-center gap-3 text-left active:scale-[0.99] transition-all"
+                style={{ boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}
+              >
+                <div className="w-10 h-10 rounded-full brand-gradient flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
+                  {initials}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <p className="font-bold text-slate-800 text-sm">{name}</p>
+                    {u.is_admin && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full brand-gradient text-white">Admin</span>}
+                  </div>
+                  <p className="text-xs text-slate-400 mt-0.5 truncate">
+                    {[u.district, u.profession].filter(Boolean).join(' · ') || '—'}
+                  </p>
+                </div>
+                <span className="material-symbols-outlined text-slate-300 text-xl flex-shrink-0">chevron_right</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* ── Tab: Equipment ─────────────────────────────────────────────── */}
+      {activeTab === 'equipment' && (
         <div className="overflow-x-auto px-4">
-          <table className="min-w-full text-sm">
+          <table className="min-w-full text-xs">
             <thead>
               <tr className="bg-slate-50 text-[10px] uppercase tracking-wide text-slate-500 font-semibold">
-                <th className="sticky left-0 z-10 bg-slate-50 text-left px-3 py-2.5 min-w-[140px]">Full Name</th>
-                <th className="text-left px-3 py-2.5 min-w-[90px]">Region</th>
-                <th className="text-left px-3 py-2.5 min-w-[130px]">Certification</th>
-                <th className="text-center px-3 py-2.5 min-w-[70px]">Echo</th>
-                <th className="text-center px-3 py-2.5 min-w-[90px]">Bone Density</th>
-                <th className="text-center px-3 py-2.5 min-w-[80px]">Tonometer</th>
-                <th className="text-center px-3 py-2.5 min-w-[80px]">Days/Wk</th>
-                <th className="text-left px-3 py-2.5 min-w-[130px]">Uniform</th>
+                <th className="sticky left-0 z-10 bg-slate-50 text-left px-3 py-2.5 min-w-[140px]">Employee</th>
+                {EQUIPMENT_TYPES.map(t => (
+                  <th key={t} className="text-center px-3 py-2.5 min-w-[80px]">{EQUIPMENT_LABELS[t]}</th>
+                ))}
+                <th className="text-center px-3 py-2.5 min-w-[90px]">Echo Cert.</th>
               </tr>
             </thead>
             <tbody>
               {users.map((u, i) => {
-                const name = u.first_name || u.last_name
-                  ? `${u.first_name || ''} ${u.last_name || ''}`.trim()
-                  : u.username;
+                const name = `${u.first_name || ''} ${u.last_name || ''}`.trim() || u.username;
                 const rowBg = i % 2 === 0 ? 'bg-white' : 'bg-slate-50/50';
-                const hasEcho = u.equipment.includes('echocardiogram');
-                const hasBone = u.equipment.includes('bone_density');
-                const hasTono = u.equipment.includes('tonometer');
                 return (
                   <tr key={u.id} className={`${rowBg} border-b border-slate-100`}>
-                    {/* Full Name — sticky */}
-                    <td className={`sticky left-0 z-10 ${rowBg} px-3 py-2.5 min-w-[140px]`}>
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className="font-semibold text-slate-900 whitespace-nowrap">{name}</span>
-                        {u.is_admin && (
-                          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full brand-gradient text-white">Admin</span>
-                        )}
-                      </div>
-                    </td>
-
-                    {/* Region */}
-                    <td className="px-3 py-2.5 text-slate-600 whitespace-nowrap">{u.district || '—'}</td>
-
-                    {/* Certification */}
-                    <td className="px-3 py-2.5">
-                      <div className="text-slate-700">{u.profession || '—'}</div>
-                      {u.profession_document_signed_url && (
-                        <a
-                          href={u.profession_document_signed_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-[11px] font-semibold text-brand-purple underline"
-                        >View</a>
-                      )}
-                    </td>
-
-                    {/* Echo */}
+                    <td className={`sticky left-0 z-10 ${rowBg} px-3 py-2.5 font-semibold text-slate-800 whitespace-nowrap`}>{name}</td>
+                    {EQUIPMENT_TYPES.map(type => {
+                      const has = u.equipment.includes(type);
+                      return (
+                        <td key={type} className="px-3 py-2.5 text-center">
+                          <button
+                            onClick={() => toggleEquipment(u.id, type, has)}
+                            className={`px-2 py-1 rounded-lg text-[11px] font-bold transition-all active:scale-95 ${has ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-600'}`}
+                          >{has ? 'Yes' : 'No'}</button>
+                        </td>
+                      );
+                    })}
                     <td className="px-3 py-2.5 text-center">
                       <button
-                        onClick={() => toggleEquipment(u.id, 'echocardiogram', hasEcho)}
-                        className={`px-2 py-1 rounded-lg text-[11px] font-bold transition-all active:scale-95 ${
-                          hasEcho ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-600'
-                        }`}
-                      >{hasEcho ? 'Yes' : 'No'}</button>
-                    </td>
-
-                    {/* Bone Density */}
-                    <td className="px-3 py-2.5 text-center">
-                      <button
-                        onClick={() => toggleEquipment(u.id, 'bone_density', hasBone)}
-                        className={`px-2 py-1 rounded-lg text-[11px] font-bold transition-all active:scale-95 ${
-                          hasBone ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-600'
-                        }`}
-                      >{hasBone ? 'Yes' : 'No'}</button>
-                    </td>
-
-                    {/* Tonometer */}
-                    <td className="px-3 py-2.5 text-center">
-                      <button
-                        onClick={() => toggleEquipment(u.id, 'tonometer', hasTono)}
-                        className={`px-2 py-1 rounded-lg text-[11px] font-bold transition-all active:scale-95 ${
-                          hasTono ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-600'
-                        }`}
-                      >{hasTono ? 'Yes' : 'No'}</button>
-                    </td>
-
-                    {/* Days/Week */}
-                    <td className="px-3 py-2.5 text-center">
-                      <select
-                        value={u.shifts_per_week || ''}
-                        onChange={async e => {
-                          const val = e.target.value || null;
-                          setUsers(prev => prev.map(x => x.id === u.id ? { ...x, shifts_per_week: val } : x));
-                          try { await api.patch(`/admin/users/${u.id}`, { shifts_per_week: val }); } catch { /* silent */ }
-                        }}
-                        className={`px-2 py-1 rounded-lg text-[11px] font-bold border-0 cursor-pointer focus:outline-none ${activityColor(u.shifts_per_week)} ${!u.shifts_per_week ? 'bg-slate-100 text-slate-400' : ''}`}
-                      >
-                        <option value="">—</option>
-                        <option value="1-2">1–2</option>
-                        <option value="3-4">3–4</option>
-                        <option value="5-6">5–6</option>
-                      </select>
-                    </td>
-
-                    {/* Uniform */}
-                    <td className="px-3 py-2.5">
-                      <div className="flex gap-1">
-                        <input
-                          type="text"
-                          defaultValue={u.clothing_size || ''}
-                          placeholder="Size"
-                          className="w-14 px-1.5 py-1 text-xs rounded-lg border border-slate-200 focus:border-brand-purple/50 focus:outline-none"
-                          onFocus={e => setEdit(u.id, 'clothing_size', e.target.value)}
-                          onChange={e => setEdit(u.id, 'clothing_size', e.target.value)}
-                          onBlur={() => commitEdit(u.id, 'clothing_size')}
-                        />
-                        <input
-                          type="number"
-                          min="0"
-                          defaultValue={u.uniform_sets ?? 0}
-                          placeholder="Sets"
-                          className="w-12 px-1.5 py-1 text-xs rounded-lg border border-slate-200 focus:border-brand-purple/50 focus:outline-none text-center"
-                          onChange={e => setEdit(u.id, 'uniform_sets', e.target.value)}
-                          onBlur={() => commitEdit(u.id, 'uniform_sets')}
-                        />
-                      </div>
+                        onClick={() => toggleEcho(u.id, u.echo_certified)}
+                        className={`px-2 py-1 rounded-lg text-[11px] font-bold transition-all active:scale-95 ${u.echo_certified ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-600'}`}
+                      >{u.echo_certified ? 'Yes' : 'No'}</button>
                     </td>
                   </tr>
                 );
               })}
             </tbody>
           </table>
-        </div>
-      )}
-
-      {/* ── Tab: Equipment ─────────────────────────────────────────────── */}
-      {activeTab === 'equipment' && (
-        <div className="px-4 space-y-3">
-          {users.map(u => (
-            <div key={u.id} className="bg-white rounded-2xl shadow-sm border border-slate-100 p-4">
-              <p className="font-bold text-slate-900 mb-3">
-                {u.first_name || u.last_name
-                  ? `${u.first_name || ''} ${u.last_name || ''}`.trim()
-                  : u.username}
-              </p>
-
-              {/* Equipment toggles */}
-              <div className="flex flex-wrap gap-2 mb-3">
-                {EQUIPMENT_TYPES.map(type => {
-                  const has = u.equipment.includes(type);
-                  return (
-                    <button
-                      key={type}
-                      onClick={() => toggleEquipment(u.id, type, has)}
-                      className={`flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold transition-all active:scale-95 border ${
-                        has
-                          ? 'brand-gradient text-white border-transparent'
-                          : 'bg-white text-slate-400 border-slate-200 hover:border-brand-purple/40'
-                      }`}
-                    >
-                      <span className="material-symbols-outlined text-sm" style={{ fontVariationSettings: has ? "'FILL' 1" : "'FILL' 0" }}>
-                        {type === 'echocardiogram' ? 'ecg_heart' : 'stethoscope'}
-                      </span>
-                      {EQUIPMENT_LABELS[type]}
-                    </button>
-                  );
-                })}
-              </div>
-
-              {/* Echo certified */}
-              <button
-                onClick={() => toggleEcho(u.id, u.echo_certified)}
-                className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold transition-all active:scale-95 border ${
-                  u.echo_certified
-                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                    : 'bg-slate-50 text-slate-400 border-slate-200 hover:border-emerald-300'
-                }`}
-              >
-                <span className="material-symbols-outlined text-sm" style={{ fontVariationSettings: u.echo_certified ? "'FILL' 1" : "'FILL' 0" }}>
-                  verified
-                </span>
-                Echo Certified: {u.echo_certified ? 'Yes' : 'No'}
-              </button>
-            </div>
-          ))}
         </div>
       )}
 
@@ -754,6 +702,101 @@ export default function AdminDashboard() {
             </>
           )}
         </div>
+      )}
+
+      {/* ── User Detail Drawer ─────────────────────────────────────────── */}
+      {selectedUser && (
+        <>
+          <div className="fixed inset-0 z-40 bg-black/40" onClick={() => setSelectedUser(null)} />
+          <div className="fixed inset-x-0 bottom-0 z-50 bg-white rounded-t-3xl flex flex-col" style={{ maxHeight: '85vh' }}>
+            <div className="flex justify-center pt-3 pb-1 flex-shrink-0">
+              <div className="w-10 h-1 rounded-full bg-slate-200" />
+            </div>
+            <div className="px-5 py-3 flex items-center justify-between flex-shrink-0 border-b border-slate-100">
+              <div>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-base font-extrabold text-slate-900">
+                    {`${selectedUser.first_name || ''} ${selectedUser.last_name || ''}`.trim() || selectedUser.username}
+                  </h2>
+                  {selectedUser.is_admin && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full brand-gradient text-white">Admin</span>}
+                </div>
+                <p className="text-xs text-slate-400 mt-0.5">{selectedUser.username}</p>
+              </div>
+              <button onClick={() => setSelectedUser(null)} className="w-8 h-8 flex items-center justify-center rounded-xl bg-slate-100 text-slate-500">
+                <span className="material-symbols-outlined text-base">close</span>
+              </button>
+            </div>
+            <div className="overflow-y-auto flex-1 px-5 py-4 space-y-5">
+              <section>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-3">Personal</p>
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <Field label="First Name" value={drawerEdits.first_name} onChange={v => setDrawerEdits(p => ({...p, first_name: v}))} />
+                    <Field label="Last Name" value={drawerEdits.last_name} onChange={v => setDrawerEdits(p => ({...p, last_name: v}))} />
+                  </div>
+                  <Field label="Email" value={drawerEdits.email} onChange={v => setDrawerEdits(p => ({...p, email: v}))} type="email" />
+                  <Field label="Phone" value={drawerEdits.phone} onChange={v => setDrawerEdits(p => ({...p, phone: v}))} type="tel" />
+                  <Field label="כתובת מגורים" value={drawerEdits.address} onChange={v => setDrawerEdits(p => ({...p, address: v}))} dir="rtl" placeholder="רחוב, עיר" />
+                </div>
+              </section>
+              <section>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-3">Work</p>
+                <div className="space-y-3">
+                  <Field label="Profession" value={drawerEdits.profession} onChange={v => setDrawerEdits(p => ({...p, profession: v}))} />
+                  <Field label="District" value={drawerEdits.district} onChange={v => setDrawerEdits(p => ({...p, district: v}))} />
+                  <Field label="Shifts / Week" value={drawerEdits.shifts_per_week} onChange={v => setDrawerEdits(p => ({...p, shifts_per_week: v}))} />
+                  {selectedUser.profession_document_signed_url && (
+                    <a href={selectedUser.profession_document_signed_url} target="_blank" rel="noopener noreferrer"
+                      className="flex items-center gap-2 text-xs font-semibold text-brand-purple">
+                      <span className="material-symbols-outlined text-sm">description</span>View Profession Document
+                    </a>
+                  )}
+                </div>
+              </section>
+              <section>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-3">פרטי רכב</p>
+                <div className="space-y-3">
+                  <Field label="סוג רכב וצבע" value={drawerEdits.vehicle_type_color} onChange={v => setDrawerEdits(p => ({...p, vehicle_type_color: v}))} dir="rtl" />
+                  <Field label="מספר רכב" value={drawerEdits.vehicle_number} onChange={v => setDrawerEdits(p => ({...p, vehicle_number: v}))} dir="rtl" />
+                </div>
+              </section>
+              <section>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-3">Uniform & Pay</p>
+                <div className="grid grid-cols-3 gap-3">
+                  <Field label="Size" value={drawerEdits.clothing_size} onChange={v => setDrawerEdits(p => ({...p, clothing_size: v}))} placeholder="M" />
+                  <Field label="Sets" value={String(drawerEdits.uniform_sets)} onChange={v => setDrawerEdits(p => ({...p, uniform_sets: v}))} type="number" />
+                  <Field label="₪ / km" value={String(drawerEdits.mileage_rate)} onChange={v => setDrawerEdits(p => ({...p, mileage_rate: v}))} type="number" step="0.5" />
+                </div>
+              </section>
+              <section>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-3">Equipment</p>
+                <div className="flex flex-wrap gap-2">
+                  {EQUIPMENT_TYPES.map(t => {
+                    const has = selectedUser.equipment.includes(t);
+                    return (
+                      <span key={t} className={`text-xs font-bold px-2.5 py-1 rounded-xl border ${has ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-slate-50 text-slate-400 border-slate-200'}`}>
+                        {EQUIPMENT_LABELS[t]}
+                      </span>
+                    );
+                  })}
+                  <span className={`text-xs font-bold px-2.5 py-1 rounded-xl border ${selectedUser.echo_certified ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-slate-50 text-slate-400 border-slate-200'}`}>
+                    Echo Certified
+                  </span>
+                </div>
+              </section>
+            </div>
+            <div className="px-5 py-4 border-t border-slate-100 flex-shrink-0">
+              <button
+                onClick={saveDrawer}
+                disabled={drawerSaving}
+                className="w-full py-3 rounded-2xl text-sm font-bold text-white brand-gradient active:scale-[0.98] transition-all disabled:opacity-50"
+                style={{ boxShadow: '0 4px 14px rgba(139,53,217,0.3)' }}
+              >
+                {drawerSaving ? 'Saving...' : 'Save Changes'}
+              </button>
+            </div>
+          </div>
+        </>
       )}
     </div>
   );

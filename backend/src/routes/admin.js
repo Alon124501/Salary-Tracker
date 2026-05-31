@@ -147,7 +147,7 @@ function monthRange(month) {
 router.get('/users', async (req, res) => {
   const [{ data: profiles, error }, { data: equipment, error: eqErr }] = await Promise.all([
     supabase.from('profiles')
-      .select('id, first_name, last_name, username, email, district, profession, profession_document_url, phone, shifts_per_week, shift_preference, clothing_size, uniform_sets, echo_certified, mileage_rate, is_admin')
+      .select('id, first_name, last_name, username, email, district, profession, profession_document_url, phone, shifts_per_week, shift_preference, clothing_size, uniform_sets, echo_certified, mileage_rate, is_admin, address, vehicle_type_color, vehicle_number')
       .order('first_name'),
     supabase.from('user_equipment').select('user_id, equipment_type'),
   ]);
@@ -177,10 +177,14 @@ router.get('/users', async (req, res) => {
 
 // PATCH /api/admin/users/:id
 router.patch('/users/:id', async (req, res) => {
-  const allowed = ['clothing_size', 'uniform_sets', 'echo_certified', 'mileage_rate', 'shift_preference', 'shifts_per_week'];
+  const allowed = [
+    'first_name', 'last_name', 'email', 'phone', 'profession', 'district', 'address',
+    'vehicle_type_color', 'vehicle_number', 'shifts_per_week', 'shift_preference',
+    'clothing_size', 'uniform_sets', 'echo_certified', 'mileage_rate',
+  ];
   const updates = {};
   for (const key of allowed) {
-    if (req.body[key] !== undefined) updates[key] = req.body[key];
+    if (req.body[key] !== undefined) updates[key] = req.body[key] === '' ? null : req.body[key];
   }
   if (Object.keys(updates).length === 0)
     return res.status(400).json({ error: 'No valid fields provided' });
