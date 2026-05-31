@@ -707,11 +707,9 @@ export default function AdminDashboard() {
       {/* ── User Detail Drawer ─────────────────────────────────────────── */}
       {selectedUser && (
         <>
-          <div className="fixed inset-0 z-40 bg-black/40" onClick={() => setSelectedUser(null)} />
-          <div className="fixed inset-x-0 bottom-0 z-50 bg-white rounded-t-3xl flex flex-col" style={{ maxHeight: '85vh' }}>
-            <div className="flex justify-center pt-3 pb-1 flex-shrink-0">
-              <div className="w-10 h-1 rounded-full bg-slate-200" />
-            </div>
+          <div className="fixed inset-0 z-40 bg-black/40 flex items-center justify-center p-4" onClick={e => { if (e.target === e.currentTarget) setSelectedUser(null); }}>
+          <div className="relative z-50 bg-white rounded-3xl flex flex-col w-full max-w-lg shadow-2xl" style={{ maxHeight: '85vh' }}>
+            <div className="flex justify-center pt-3 pb-1 flex-shrink-0" />
             <div className="px-5 py-3 flex items-center justify-between flex-shrink-0 border-b border-slate-100">
               <div>
                 <div className="flex items-center gap-2">
@@ -796,7 +794,7 @@ export default function AdminDashboard() {
               </button>
             </div>
           </div>
-        </>
+          </div>
       )}
     </div>
   );
