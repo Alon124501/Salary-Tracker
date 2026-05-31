@@ -11,6 +11,7 @@ app.use('/api/report', require('./routes/report'));
 app.use('/api/cron', require('./routes/cron'));
 app.use('/api/screening', require('./routes/screening'));
 app.use('/api/admin', require('./routes/admin'));
+app.use('/api/faq',   require('./routes/faq'));
 app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
 
 module.exports = app;

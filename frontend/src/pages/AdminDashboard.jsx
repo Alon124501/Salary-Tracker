@@ -22,6 +22,12 @@ const TABS = [
   { id: 'equipment',    label: 'Equipment',    icon: 'medical_services' },
   { id: 'compensation', label: 'Compensation', icon: 'payments' },
   { id: 'reports',      label: 'Reports',      icon: 'assignment' },
+  { id: 'faq',          label: 'FAQ',          icon: 'quiz' },
+];
+
+const FAQ_CATEGORIES = [
+  { id: 'insurance', label: 'בדיקות ביטוח' },
+  { id: 'screening', label: 'בדיקות סקר' },
 ];
 
 function nowMonth() {
@@ -33,6 +39,18 @@ export default function AdminDashboard() {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError]   = useState(null);
+
+  // FAQ state
+  const [faqItems, setFaqItems] = useState({ insurance: [], screening: [] });
+  const [faqLoading, setFaqLoading] = useState(false);
+  const [faqCategory, setFaqCategory] = useState('insurance');
+  const [addingFaq, setAddingFaq] = useState(false);
+  const [newFaqQ, setNewFaqQ] = useState('');
+  const [newFaqA, setNewFaqA] = useState('');
+  const [editingFaqId, setEditingFaqId] = useState(null);
+  const [editFaqQ, setEditFaqQ] = useState('');
+  const [editFaqA, setEditFaqA] = useState('');
+  const [faqSaving, setFaqSaving] = useState(false);
 
   // Reports state
   const [reportMonth, setReportMonth] = useState(nowMonth);
@@ -58,6 +76,19 @@ export default function AdminDashboard() {
   }, []);
 
   useEffect(() => { loadUsers(); }, [loadUsers]);
+
+  const loadFaq = useCallback(async () => {
+    setFaqLoading(true);
+    try {
+      const { data } = await api.get('/faq');
+      setFaqItems(data);
+    } catch { /* silent */ }
+    finally { setFaqLoading(false); }
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === 'faq') loadFaq();
+  }, [activeTab, loadFaq]);
 
   const loadReportSummary = useCallback(async (month) => {
     setSummaryLoading(true);
@@ -135,6 +166,55 @@ export default function AdminDashboard() {
       URL.revokeObjectURL(url);
     } catch { /* silent */ }
     finally { setDownloadingId(null); }
+  }
+
+  // ── FAQ management ────────────────────────────────────────────────────────
+  async function saveFaq() {
+    if (!newFaqQ.trim() || !newFaqA.trim()) return;
+    setFaqSaving(true);
+    try {
+      const sort_order = faqItems[faqCategory].length;
+      const { data } = await api.post('/faq', { category: faqCategory, question: newFaqQ.trim(), answer: newFaqA.trim(), sort_order });
+      setFaqItems(prev => ({ ...prev, [faqCategory]: [...prev[faqCategory], data] }));
+      setNewFaqQ(''); setNewFaqA(''); setAddingFaq(false);
+    } catch { /* silent */ }
+    finally { setFaqSaving(false); }
+  }
+
+  async function updateFaq(id) {
+    if (!editFaqQ.trim() || !editFaqA.trim()) return;
+    setFaqSaving(true);
+    try {
+      await api.patch(`/faq/${id}`, { question: editFaqQ.trim(), answer: editFaqA.trim() });
+      setFaqItems(prev => ({
+        ...prev,
+        [faqCategory]: prev[faqCategory].map(x => x.id === id ? { ...x, question: editFaqQ.trim(), answer: editFaqA.trim() } : x),
+      }));
+      setEditingFaqId(null);
+    } catch { /* silent */ }
+    finally { setFaqSaving(false); }
+  }
+
+  async function deleteFaq(id) {
+    const backup = faqItems[faqCategory];
+    setFaqItems(prev => ({ ...prev, [faqCategory]: prev[faqCategory].filter(x => x.id !== id) }));
+    try { await api.delete(`/faq/${id}`); }
+    catch { setFaqItems(prev => ({ ...prev, [faqCategory]: backup })); }
+  }
+
+  async function moveFaq(id, direction) {
+    const items = faqItems[faqCategory];
+    const idx = items.findIndex(x => x.id === id);
+    if (direction === 'up' && idx === 0) return;
+    if (direction === 'down' && idx === items.length - 1) return;
+    const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
+    const newItems = [...items];
+    [newItems[idx], newItems[swapIdx]] = [newItems[swapIdx], newItems[idx]];
+    const reordered = newItems.map((item, i) => ({ ...item, sort_order: i }));
+    setFaqItems(prev => ({ ...prev, [faqCategory]: reordered }));
+    try {
+      await api.post('/faq/reorder', { items: reordered.map(({ id: xid, sort_order }) => ({ id: xid, sort_order })) });
+    } catch { setFaqItems(prev => ({ ...prev, [faqCategory]: items })); }
   }
 
   // ── Approve + email one user's report ─────────────────────────────────
@@ -512,6 +592,166 @@ export default function AdminDashboard() {
                 );
               })}
             </div>
+          )}
+        </div>
+      )}
+      {/* ── Tab: FAQ ───────────────────────────────────────────────────── */}
+      {activeTab === 'faq' && (
+        <div className="px-4 space-y-4">
+          {/* Category toggle */}
+          <div className="flex gap-2">
+            {FAQ_CATEGORIES.map(cat => {
+              const active = faqCategory === cat.id;
+              return (
+                <button
+                  key={cat.id}
+                  onClick={() => { setFaqCategory(cat.id); setAddingFaq(false); setEditingFaqId(null); }}
+                  className={`flex-1 py-2.5 rounded-2xl text-sm font-bold transition-all active:scale-95 ${
+                    active ? 'brand-gradient text-white' : 'bg-white text-slate-500 border border-slate-200'
+                  }`}
+                  style={active ? { boxShadow: '0 4px 14px rgba(139,53,217,0.3)' } : {}}
+                  dir="rtl"
+                >
+                  {cat.label}
+                </button>
+              );
+            })}
+          </div>
+
+          {faqLoading ? (
+            <div className="flex justify-center py-10">
+              <span className="material-symbols-outlined text-3xl text-slate-300 animate-spin">progress_activity</span>
+            </div>
+          ) : (
+            <>
+              {/* Question list */}
+              {faqItems[faqCategory].length === 0 && !addingFaq && (
+                <div className="bg-white rounded-2xl border border-slate-100 py-10 flex flex-col items-center gap-2 text-slate-400">
+                  <span className="material-symbols-outlined text-4xl opacity-30">quiz</span>
+                  <p className="text-sm font-medium">No questions yet</p>
+                </div>
+              )}
+
+              {faqItems[faqCategory].map((item, i) => {
+                const isEditing = editingFaqId === item.id;
+                const total = faqItems[faqCategory].length;
+                return (
+                  <div key={item.id} className="bg-white rounded-2xl border border-slate-100 p-4 space-y-3">
+                    {isEditing ? (
+                      <>
+                        <input
+                          value={editFaqQ}
+                          onChange={e => setEditFaqQ(e.target.value)}
+                          dir="rtl"
+                          placeholder="Question"
+                          className="w-full px-3 py-2.5 text-sm rounded-xl border border-slate-200 focus:border-brand-purple/50 focus:outline-none"
+                        />
+                        <textarea
+                          value={editFaqA}
+                          onChange={e => setEditFaqA(e.target.value)}
+                          dir="rtl"
+                          rows={3}
+                          placeholder="Answer"
+                          className="w-full px-3 py-2.5 text-sm rounded-xl border border-slate-200 focus:border-brand-purple/50 focus:outline-none resize-none"
+                        />
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => updateFaq(item.id)}
+                            disabled={faqSaving || !editFaqQ.trim() || !editFaqA.trim()}
+                            className="flex-1 py-2 rounded-xl text-sm font-bold text-white brand-gradient active:scale-95 transition-all disabled:opacity-50"
+                          >Save</button>
+                          <button
+                            onClick={() => setEditingFaqId(null)}
+                            className="flex-1 py-2 rounded-xl text-sm font-bold text-slate-600 bg-slate-100 active:scale-95 transition-all"
+                          >Cancel</button>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="flex items-start gap-3">
+                        {/* Reorder buttons */}
+                        <div className="flex flex-col gap-1 flex-shrink-0 pt-0.5">
+                          <button
+                            onClick={() => moveFaq(item.id, 'up')}
+                            disabled={i === 0}
+                            className="w-8 h-8 flex items-center justify-center rounded-lg bg-slate-50 text-slate-400 hover:bg-slate-100 active:scale-95 transition-all disabled:opacity-20"
+                          >
+                            <span className="material-symbols-outlined text-base">arrow_upward</span>
+                          </button>
+                          <button
+                            onClick={() => moveFaq(item.id, 'down')}
+                            disabled={i === total - 1}
+                            className="w-8 h-8 flex items-center justify-center rounded-lg bg-slate-50 text-slate-400 hover:bg-slate-100 active:scale-95 transition-all disabled:opacity-20"
+                          >
+                            <span className="material-symbols-outlined text-base">arrow_downward</span>
+                          </button>
+                        </div>
+
+                        {/* Content — tap to edit */}
+                        <div
+                          className="flex-1 min-w-0 cursor-pointer"
+                          onClick={() => { setEditingFaqId(item.id); setEditFaqQ(item.question); setEditFaqA(item.answer); }}
+                        >
+                          <p className="text-sm font-semibold text-slate-800 leading-snug" dir="rtl">{item.question}</p>
+                          <p className="text-xs text-slate-400 mt-1 leading-relaxed line-clamp-2" dir="rtl">{item.answer}</p>
+                          <p className="text-[10px] text-brand-purple mt-1.5 font-medium">Tap to edit</p>
+                        </div>
+
+                        {/* Delete */}
+                        <button
+                          onClick={() => deleteFaq(item.id)}
+                          className="flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-lg bg-red-50 text-red-400 hover:bg-red-100 active:scale-95 transition-all"
+                        >
+                          <span className="material-symbols-outlined text-base">delete</span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+
+              {/* Add question form / button */}
+              {addingFaq ? (
+                <div className="bg-white rounded-2xl border border-brand-purple/20 p-4 space-y-3">
+                  <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">New Question</p>
+                  <input
+                    value={newFaqQ}
+                    onChange={e => setNewFaqQ(e.target.value)}
+                    dir="rtl"
+                    placeholder="Question..."
+                    className="w-full px-3 py-2.5 text-sm rounded-xl border border-slate-200 focus:border-brand-purple/50 focus:outline-none"
+                  />
+                  <textarea
+                    value={newFaqA}
+                    onChange={e => setNewFaqA(e.target.value)}
+                    dir="rtl"
+                    rows={3}
+                    placeholder="Answer..."
+                    className="w-full px-3 py-2.5 text-sm rounded-xl border border-slate-200 focus:border-brand-purple/50 focus:outline-none resize-none"
+                  />
+                  <div className="flex gap-2">
+                    <button
+                      onClick={saveFaq}
+                      disabled={faqSaving || !newFaqQ.trim() || !newFaqA.trim()}
+                      className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white brand-gradient active:scale-95 transition-all disabled:opacity-50"
+                    >
+                      {faqSaving ? 'Saving...' : 'Save'}
+                    </button>
+                    <button
+                      onClick={() => { setAddingFaq(false); setNewFaqQ(''); setNewFaqA(''); }}
+                      className="flex-1 py-2.5 rounded-xl text-sm font-bold text-slate-600 bg-slate-100 active:scale-95 transition-all"
+                    >Cancel</button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  onClick={() => { setAddingFaq(true); setEditingFaqId(null); }}
+                  className="w-full py-3 rounded-2xl text-sm font-bold text-brand-purple border-2 border-dashed border-brand-purple/30 hover:border-brand-purple/50 bg-white active:scale-95 transition-all flex items-center justify-center gap-2"
+                >
+                  <span className="material-symbols-outlined text-base">add</span>
+                  Add Question
+                </button>
+              )}
+            </>
           )}
         </div>
       )}
