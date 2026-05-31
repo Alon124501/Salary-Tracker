@@ -413,34 +413,34 @@ router.post('/users/:userId/report/approve', async (req, res) => {
     if (!gmailUser || !gmailPass)
       return res.status(500).json({ error: 'Gmail credentials not configured on server' });
 
-    // Build attachments: Excel + all receipt photos
-    const attachments = [{
-      filename: `${name} - ${monthName} ${year}.xlsx`,
-      content: Buffer.from(buf),
-      contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    }];
-
+    // Build signed URLs for receipts (7-day expiry) — avoids Gmail size limits
     const receiptPaths = entries.flatMap(e => [
       ...(e.food_receipt_urls || []),
       ...(e.parking_receipt_urls || []),
     ]);
-    const receiptAttachments = (await Promise.all(
+    const signedUrls = (await Promise.all(
       receiptPaths.map(async path => {
-        const { data: blob, error: dlErr } = await supabase.storage.from('receipts').download(path);
-        if (dlErr || !blob) return null;
-        const arrayBuf = await blob.arrayBuffer();
-        return { filename: path.split('/').pop(), content: Buffer.from(arrayBuf) };
+        const { data, error } = await supabase.storage.from('receipts').createSignedUrl(path, 60 * 60 * 24 * 7);
+        if (error || !data?.signedUrl) return null;
+        return { filename: path.split('/').pop(), url: data.signedUrl };
       })
     )).filter(Boolean);
-    attachments.push(...receiptAttachments);
+
+    const receiptSection = signedUrls.length
+      ? `\n\nReceipts (links valid for 7 days):\n${signedUrls.map((r, i) => `${i + 1}. ${r.filename}\n   ${r.url}`).join('\n')}`
+      : '';
 
     const transporter = nodemailer.createTransport({ service: 'gmail', auth: { user: gmailUser, pass: gmailPass } });
     await transporter.sendMail({
       from: `Salary Tracker <${gmailUser}>`,
       to: ACCOUNTING_EMAIL,
       subject: `Salary Report — ${name} ${monthName} ${year}`,
-      text: `Please find attached the salary report for ${name} (${monthName} ${year}).`,
-      attachments,
+      text: `Please find attached the salary report for ${name} (${monthName} ${year}).${receiptSection}`,
+      attachments: [{
+        filename: `${name} - ${monthName} ${year}.xlsx`,
+        content: Buffer.from(buf),
+        contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      }],
     });
 
     const { data: approval, error: insertError } = await supabase.from('user_monthly_approvals')
