@@ -17,6 +17,7 @@ export default function EditProfilePage() {
   const [district, setDistrict] = useState('');
   const [vehicleTypeColor, setVehicleTypeColor] = useState('');
   const [vehicleNumber, setVehicleNumber] = useState('');
+  const [shiftsPerWeek, setShiftsPerWeek] = useState('');
   const [newDoc, setNewDoc] = useState(null);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState('');
@@ -37,6 +38,7 @@ export default function EditProfilePage() {
       setDistrict(res.data.district || '');
       setVehicleTypeColor(res.data.vehicle_type_color || '');
       setVehicleNumber(res.data.vehicle_number || '');
+      setShiftsPerWeek(res.data.shifts_per_week || '');
     }).finally(() => setLoading(false));
   }, []);
 
@@ -53,6 +55,7 @@ export default function EditProfilePage() {
       formData.append('district', district);
       formData.append('vehicle_type_color', vehicleTypeColor);
       formData.append('vehicle_number', vehicleNumber);
+      formData.append('shifts_per_week', shiftsPerWeek);
       if (newDoc) formData.append('profession_document', newDoc);
       await api.patch('/auth/profile', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
@@ -201,6 +204,23 @@ export default function EditProfilePage() {
                   {DISTRICTS.map(d => (
                     <option key={d} value={d}>{d}</option>
                   ))}
+                </select>
+                <span className="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none text-lg">expand_more</span>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-widest mb-1">Shifts Per Week</label>
+              <div className="relative">
+                <select
+                  className={selectBase}
+                  value={shiftsPerWeek}
+                  onChange={e => setShiftsPerWeek(e.target.value)}
+                >
+                  <option value="">Select shifts per week</option>
+                  <option value="1-2">1–2 shifts</option>
+                  <option value="3-4">3–4 shifts</option>
+                  <option value="5-6">5–6 shifts</option>
                 </select>
                 <span className="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none text-lg">expand_more</span>
               </div>

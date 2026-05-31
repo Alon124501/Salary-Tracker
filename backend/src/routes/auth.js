@@ -23,8 +23,12 @@ router.post('/register', upload.single('profession_document'), async (req, res) 
     return res.status(409).json({ error: 'Username already taken' });
   }
 
-  const supabaseEmail = `${username}@salary-tracker.local`;
-  const { data, error } = await supabase.auth.signUp({ email: supabaseEmail, password });
+  const supabaseEmail = `${username}@salary-tracker.app`;
+  const { data, error } = await supabase.auth.admin.createUser({
+    email: supabaseEmail,
+    password,
+    email_confirm: true,
+  });
   if (error) {
     return res.status(400).json({ error: error.message });
   }
@@ -80,7 +84,7 @@ router.post('/login', async (req, res) => {
     return res.status(401).json({ error: 'Invalid credentials' });
   }
 
-  const email = `${username}@salary-tracker.local`;
+  const email = `${username}@salary-tracker.app`;
   const { data, error } = await supabase.auth.signInWithPassword({ email, password });
   if (error) {
     return res.status(401).json({ error: 'Invalid credentials' });
@@ -91,7 +95,7 @@ router.post('/login', async (req, res) => {
 
 router.get('/me', auth, async (req, res) => {
   const { data: user, error } = await supabase.from('profiles')
-    .select('username, gmail_user, payment_type, global_salary, first_name, last_name, profession, district, email, phone, vehicle_type_color, vehicle_number, is_admin')
+    .select('username, gmail_user, payment_type, global_salary, first_name, last_name, profession, district, email, phone, vehicle_type_color, vehicle_number, shifts_per_week, is_admin')
     .eq('id', req.userId)
     .single();
   if (error || !user) return res.status(404).json({ error: 'User not found' });
@@ -99,7 +103,7 @@ router.get('/me', auth, async (req, res) => {
 });
 
 router.patch('/profile', auth, upload.single('profession_document'), async (req, res) => {
-  const { first_name, last_name, profession, district, email, vehicle_type_color, vehicle_number } = req.body;
+  const { first_name, last_name, profession, district, email, vehicle_type_color, vehicle_number, shifts_per_week } = req.body;
 
   const updates = {
     first_name: first_name || null,
@@ -109,6 +113,7 @@ router.patch('/profile', auth, upload.single('profession_document'), async (req,
     email: email || null,
     vehicle_type_color: vehicle_type_color || null,
     vehicle_number: vehicle_number || null,
+    shifts_per_week: shifts_per_week || null,
   };
 
   if (req.file) {

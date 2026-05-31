@@ -33,8 +33,9 @@ export default function Dashboard() {
   const [receiptFiles, setReceiptFiles] = useState([]);
   const [parkingFiles, setParkingFiles] = useState([]);
   const [toast, setToast] = useState('');
+  const [submitted, setSubmitted] = useState(false);
 
-  useEffect(() => { loadData(); }, [month]);
+  useEffect(() => { loadData(); checkSubmission(); }, [month]);
 
   async function loadData() {
     try {
@@ -45,6 +46,15 @@ export default function Dashboard() {
       setEntries(entriesRes.data);
       setSummary(summaryRes.data);
     } catch {}
+  }
+
+  async function checkSubmission() {
+    try {
+      const { data } = await api.get(`/report/submission?month=${month}`);
+      setSubmitted(data.submitted);
+    } catch {
+      setSubmitted(false);
+    }
   }
 
   async function downloadExcel() {
@@ -69,18 +79,19 @@ export default function Dashboard() {
     setShowModal(true);
   }
 
-  async function sendReport() {
+  async function submitReport() {
     setSending(true);
     setSendMsg('');
     try {
       const formData = new FormData();
       receiptFiles.forEach(f => formData.append('receipts', f));
       parkingFiles.forEach(f => formData.append('parking', f));
-      const { data } = await api.post(`/report?month=${month}`, formData, {
+      await api.post(`/report/submit?month=${month}`, formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
       setShowModal(false);
-      setToast(`Report sent: "${data.subject}"`);
+      setSubmitted(true);
+      setToast('Report submitted to admin for review.');
       setTimeout(() => setToast(''), 4000);
     } catch (err) {
       setSendMsg('Failed: ' + (err.response?.data?.error || err.message));
@@ -119,14 +130,21 @@ export default function Dashboard() {
             <span className="material-symbols-outlined text-sm">download</span>
             Export Excel
           </button>
-          <button
-            onClick={openModal}
-            disabled={sending}
-            className="flex items-center gap-1.5 text-xs font-semibold text-action-blue bg-blue-50 px-3 py-1.5 rounded-full disabled:opacity-50"
-          >
-            <span className="material-symbols-outlined text-sm">send</span>
-            Send Report
-          </button>
+          {submitted ? (
+            <span className="flex items-center gap-1.5 text-xs font-semibold text-slate-400 bg-slate-100 px-3 py-1.5 rounded-full">
+              <span className="material-symbols-outlined text-sm" style={{ fontVariationSettings: "'FILL' 1" }}>check_circle</span>
+              Submitted
+            </span>
+          ) : (
+            <button
+              onClick={openModal}
+              disabled={sending}
+              className="flex items-center gap-1.5 text-xs font-semibold text-action-blue bg-blue-50 px-3 py-1.5 rounded-full disabled:opacity-50"
+            >
+              <span className="material-symbols-outlined text-sm">upload</span>
+              Submit to Admin
+            </button>
+          )}
         </div>
       </div>
 
@@ -299,10 +317,10 @@ export default function Dashboard() {
 
       {/* Send Report Modal */}
       {showModal && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 px-4 pb-4 sm:pb-0">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
           <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl flex flex-col gap-5 p-6">
             <div className="flex items-center justify-between">
-              <h3 className="text-lg font-extrabold text-slate-900 font-headline">Send Report — {monthLabel(month)}</h3>
+              <h3 className="text-lg font-extrabold text-slate-900 font-headline">Submit Report — {monthLabel(month)}</h3>
               <button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-slate-600">
                 <span className="material-symbols-outlined">close</span>
               </button>
@@ -374,12 +392,12 @@ export default function Dashboard() {
                 Cancel
               </button>
               <button
-                onClick={sendReport}
+                onClick={submitReport}
                 disabled={sending}
                 className="flex-1 flex items-center justify-center gap-1.5 text-sm font-semibold text-white brand-gradient px-4 py-2.5 rounded-full brand-shadow disabled:opacity-50"
               >
-                <span className="material-symbols-outlined text-sm">{sending ? 'hourglass_top' : 'send'}</span>
-                {sending ? 'Sending...' : 'Send'}
+                <span className="material-symbols-outlined text-sm">{sending ? 'hourglass_top' : 'upload'}</span>
+                {sending ? 'Submitting...' : 'Submit'}
               </button>
             </div>
           </div>

@@ -8,7 +8,7 @@ router.use(auth);
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
 
-function calcDaily(e) {
+function calcDaily(e, mileageRate = 2) {
   const totalTests = (e.insurance_tests || 0) + (e.screening_tests || 0) +
                      (e.mixed_screening_tests || 0) + (e.partial_tests || 0);
 
@@ -17,15 +17,20 @@ function calcDaily(e) {
   const mixed = (e.mixed_screening_tests || 0) * 120;
   const partial = (e.partial_tests || 0) * 50;
   const rawTestsPay = insurance + screening + mixed + partial;
-  const MIN_TESTS_PAY = 240; // minimum = 3 insurance tests
+  const MIN_TESTS_PAY = 240;
   const testsPay = totalTests > 0 && totalTests < 3 ? Math.max(rawTestsPay, MIN_TESTS_PAY) : rawTestsPay;
   const minBonus = testsPay - rawTestsPay;
 
-  const km = (e.kilometers || 0) * 2 + ((e.kilometers || 0) >= 100 ? 100 : 0);
+  const km = (e.kilometers || 0) * mileageRate + ((e.kilometers || 0) >= 100 ? 100 : 0);
   const office = (e.office_hours || 0) * 60;
   const expenses = (e.food_expense || 0) + (e.parking_expense || 0);
   return { insurance, screening, mixed, partial, minBonus, km, office, expenses,
            total: testsPay + km + office + expenses };
+}
+
+async function getUserMileageRate(userId) {
+  const { data } = await supabase.from('profiles').select('mileage_rate').eq('id', userId).single();
+  return data?.mileage_rate ?? 2;
 }
 
 // Returns { start, end } as 'YYYY-MM-DD' strings for a given 'YYYY-MM' month
@@ -44,9 +49,9 @@ router.get('/', async (req, res) => {
     const { start, end } = monthRange(month);
     query = query.gte('date', start).lte('date', end);
   }
-  const { data: rows, error } = await query;
+  const [{ data: rows, error }, mileageRate] = await Promise.all([query, getUserMileageRate(req.userId)]);
   if (error) return res.status(500).json({ error: error.message });
-  res.json(rows.map(e => ({ ...e, calc: calcDaily(e) })));
+  res.json(rows.map(e => ({ ...e, calc: calcDaily(e, mileageRate) })));
 });
 
 // GET /api/entries/summary?month=YYYY-MM
@@ -55,8 +60,10 @@ router.get('/summary', async (req, res) => {
   if (!month) return res.status(400).json({ error: 'month param required (YYYY-MM)' });
 
   const { start, end } = monthRange(month);
-  const { data: rows, error } = await supabase.from('entries').select('*')
-    .eq('user_id', req.userId).gte('date', start).lte('date', end);
+  const [{ data: rows, error }, mileageRate] = await Promise.all([
+    supabase.from('entries').select('*').eq('user_id', req.userId).gte('date', start).lte('date', end),
+    getUserMileageRate(req.userId),
+  ]);
   if (error) return res.status(500).json({ error: error.message });
 
   const totals = {
@@ -64,7 +71,7 @@ router.get('/summary', async (req, res) => {
     km: 0, office: 0, expenses: 0, total: 0, days: rows.length
   };
   for (const e of rows) {
-    const c = calcDaily(e);
+    const c = calcDaily(e, mileageRate);
     totals.insurance += c.insurance;
     totals.screening += c.screening;
     totals.mixed += c.mixed;
@@ -107,7 +114,8 @@ router.post('/', async (req, res) => {
   }, { onConflict: 'user_id,date' }).select().single();
 
   if (error) return res.status(500).json({ error: error.message });
-  res.status(201).json({ ...entry, calc: calcDaily(entry) });
+  const mileageRate = await getUserMileageRate(req.userId);
+  res.status(201).json({ ...entry, calc: calcDaily(entry, mileageRate) });
 });
 
 // PUT /api/entries/:id/receipt
@@ -298,7 +306,8 @@ router.put('/:id', async (req, res) => {
   }).eq('id', entry.id).select().single();
 
   if (updateErr) return res.status(500).json({ error: updateErr.message });
-  res.json({ ...updated, calc: calcDaily(updated) });
+  const mileageRate = await getUserMileageRate(req.userId);
+  res.json({ ...updated, calc: calcDaily(updated, mileageRate) });
 });
 
 // DELETE /api/entries/:id

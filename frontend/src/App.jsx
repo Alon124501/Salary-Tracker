@@ -1,4 +1,11 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { useEffect } from 'react';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+
+function ScrollToTop() {
+  const { pathname } = useLocation();
+  useEffect(() => { window.scrollTo(0, 0); }, [pathname]);
+  return null;
+}
 import Login from './pages/Login.jsx';
 import Dashboard from './pages/Dashboard.jsx';
 import EntryPage from './pages/EntryPage.jsx';
@@ -8,11 +15,18 @@ import EditProfilePage from './pages/EditProfilePage.jsx';
 import ResetPasswordPage from './pages/ResetPasswordPage.jsx';
 import ScreeningLocationsPage from './pages/ScreeningLocationsPage.jsx';
 import FAQPage from './pages/FAQPage.jsx';
+import AdminDashboard from './pages/AdminDashboard.jsx';
 import Navbar from './components/Navbar.jsx';
 import BottomNav from './components/BottomNav.jsx';
 
 function PrivateRoute({ children }) {
   return localStorage.getItem('token') ? children : <Navigate to="/login" replace />;
+}
+
+function AdminRoute({ children }) {
+  if (!localStorage.getItem('token')) return <Navigate to="/login" replace />;
+  // Full admin check happens server-side; the page itself won't load data if not admin (403)
+  return children;
 }
 
 function AppLayout({ children }) {
@@ -28,6 +42,7 @@ function AppLayout({ children }) {
 export default function App() {
   return (
     <BrowserRouter>
+      <ScrollToTop />
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
@@ -38,6 +53,7 @@ export default function App() {
         <Route path="/edit-profile" element={<PrivateRoute><AppLayout><EditProfilePage /></AppLayout></PrivateRoute>} />
         <Route path="/screening-locations" element={<PrivateRoute><AppLayout><ScreeningLocationsPage /></AppLayout></PrivateRoute>} />
         <Route path="/faq" element={<PrivateRoute><AppLayout><FAQPage /></AppLayout></PrivateRoute>} />
+        <Route path="/admin" element={<AdminRoute><AppLayout><AdminDashboard /></AppLayout></AdminRoute>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>

@@ -442,6 +442,7 @@ export default function Login() {
                   value={vehicleNumber}
                   onChange={e => setVehicleNumber(e.target.value)}
                   dir="rtl"
+                  maxLength={8}
                 />
               </>
             )}

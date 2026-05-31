@@ -53,6 +53,8 @@ function WhatsAppIcon() {
   );
 }
 
+const isPdf = (url) => url?.toLowerCase().endsWith('.pdf');
+
 export default function ScreeningLocationsPage() {
   const [companies, setCompanies] = useState([]);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -89,6 +91,17 @@ export default function ScreeningLocationsPage() {
   const [branchFormError, setBranchFormError] = useState('');
   const [brochureFile, setBrochureFile] = useState(null);
   const [brochurePreview, setBrochurePreview] = useState(null);
+
+  useEffect(() => {
+    const viewport = document.querySelector('meta[name=viewport]');
+    if (!viewport) return;
+    viewport.setAttribute(
+      'content',
+      lightboxOpen
+        ? 'width=device-width, initial-scale=1.0'
+        : 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no'
+    );
+  }, [lightboxOpen]);
 
   // ── Load ───────────────────────────────────────────────────────────────
 
@@ -633,27 +646,47 @@ export default function ScreeningLocationsPage() {
               {activeTab === 'brochures' && (<>
                 {selectedBranch.brochure_url ? (
                   <div className="space-y-3">
-                    <button
-                      onClick={() => setLightboxOpen(true)}
-                      className="w-full rounded-2xl overflow-hidden border border-slate-100 hover:border-brand-purple/40 transition-colors active:scale-[0.98]"
-                    >
-                      <img
-                        src={selectedBranch.brochure_url}
-                        alt="חוברת"
-                        className="w-full object-contain max-h-64"
-                      />
-                      <div className="flex items-center justify-center gap-1.5 py-3 text-xs font-bold text-brand-purple">
-                        <span className="material-symbols-outlined text-base">open_in_full</span>
-                        לחץ לצפייה מלאה
+                    {isPdf(selectedBranch.brochure_url) ? (
+                      <div className="rounded-2xl overflow-hidden border border-slate-100">
+                        <embed
+                          src={selectedBranch.brochure_url}
+                          type="application/pdf"
+                          className="w-full"
+                          style={{ height: '480px' }}
+                        />
+                        <a
+                          href={selectedBranch.brochure_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center justify-center gap-1.5 py-3 text-xs font-bold text-brand-purple hover:underline"
+                        >
+                          <span className="material-symbols-outlined text-base">open_in_new</span>
+                          פתח בחלון נפרד
+                        </a>
                       </div>
-                    </button>
+                    ) : (
+                      <button
+                        onClick={() => setLightboxOpen(true)}
+                        className="w-full rounded-2xl overflow-hidden border border-slate-100 hover:border-brand-purple/40 transition-colors active:scale-[0.98]"
+                      >
+                        <img
+                          src={selectedBranch.brochure_url}
+                          alt="חוברת"
+                          className="w-full object-contain max-h-64"
+                        />
+                        <div className="flex items-center justify-center gap-1.5 py-3 text-xs font-bold text-brand-purple">
+                          <span className="material-symbols-outlined text-base">open_in_full</span>
+                          לחץ לצפייה מלאה
+                        </div>
+                      </button>
+                    )}
                     {isAdmin && (
                       <label className="flex items-center justify-center gap-2 w-full py-3 border-2 border-dashed border-slate-200 rounded-2xl text-sm font-semibold text-slate-400 hover:border-brand-purple/40 hover:text-brand-purple cursor-pointer transition-colors">
                         {brochureUploading
                           ? <><span className="material-symbols-outlined text-base animate-spin">progress_activity</span> מעלה...</>
                           : <><span className="material-symbols-outlined text-base">upload</span> החלף חוברת</>
                         }
-                        <input type="file" accept="image/*" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) uploadBrochureInline(f); }} disabled={brochureUploading} />
+                        <input type="file" accept="image/*,application/pdf" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) uploadBrochureInline(f); }} disabled={brochureUploading} />
                       </label>
                     )}
                   </div>
@@ -667,7 +700,7 @@ export default function ScreeningLocationsPage() {
                           ? <><span className="material-symbols-outlined text-base animate-spin">progress_activity</span> מעלה...</>
                           : <><span className="material-symbols-outlined text-base">upload</span> העלה חוברת</>
                         }
-                        <input type="file" accept="image/*" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) uploadBrochureInline(f); }} disabled={brochureUploading} />
+                        <input type="file" accept="image/*,application/pdf" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) uploadBrochureInline(f); }} disabled={brochureUploading} />
                       </label>
                     )}
                   </div>
@@ -680,7 +713,7 @@ export default function ScreeningLocationsPage() {
       )}
 
       {/* ══ Brochure lightbox ═════════════════════════════════════════ */}
-      {lightboxOpen && selectedBranch?.brochure_url && (
+      {lightboxOpen && selectedBranch?.brochure_url && !isPdf(selectedBranch.brochure_url) && (
         <div
           className="fixed inset-0 z-[70] flex items-center justify-center bg-black/90 p-4"
           onClick={() => setLightboxOpen(false)}

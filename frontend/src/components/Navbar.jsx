@@ -14,12 +14,14 @@ export default function Navbar() {
   const navigate = useNavigate();
   const location = useLocation();
   const [displayName, setDisplayName] = useState('');
+  const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
     api.get('/auth/me').then(({ data }) => {
       const first = data.first_name || '';
       const last = data.last_name || '';
       setDisplayName(first || last ? `${first} ${last}`.trim() : data.username || '');
+      setIsAdmin(!!data.is_admin);
     }).catch(() => {
       setDisplayName(localStorage.getItem('username') || '');
     });
@@ -73,6 +75,23 @@ export default function Navbar() {
             <span className="text-sm font-semibold text-slate-600 hidden sm:block">
               Hi, <span className="brand-gradient-text">{displayName}</span>
             </span>
+          )}
+          {isAdmin && (
+            <button
+              onClick={() => navigate('/admin')}
+              className={`flex items-center justify-center w-9 h-9 rounded-xl transition-all duration-200 active:scale-95 ${
+                location.pathname === '/admin'
+                  ? 'brand-gradient text-white'
+                  : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'
+              }`}
+              title="Admin"
+              style={location.pathname === '/admin' ? { boxShadow: '0 4px 14px rgba(139,53,217,0.35)' } : {}}
+            >
+              <span
+                className="material-symbols-outlined text-[20px]"
+                style={{ fontVariationSettings: location.pathname === '/admin' ? "'FILL' 1" : "'FILL' 0" }}
+              >admin_panel_settings</span>
+            </button>
           )}
           <button
             onClick={() => navigate('/settings')}
