@@ -6,6 +6,35 @@ const CATEGORIES = [
   { id: 'screening', label: 'בדיקות סקר' },
 ];
 
+function renderAnswer(text) {
+  const lines = text.split('\n');
+  const segments = [];
+  let bullets = [];
+
+  for (const line of lines) {
+    const isBullet = /^[-•]\s?/.test(line.trim());
+    if (isBullet) {
+      bullets.push(line.replace(/^[-•]\s?/, '').trim());
+    } else {
+      if (bullets.length) { segments.push({ type: 'bullets', items: bullets }); bullets = []; }
+      if (line.trim()) segments.push({ type: 'text', value: line });
+      else segments.push({ type: 'spacer' });
+    }
+  }
+  if (bullets.length) segments.push({ type: 'bullets', items: bullets });
+
+  return segments.map((seg, i) => {
+    if (seg.type === 'bullets')
+      return (
+        <ul key={i} className="list-disc list-inside space-y-1 text-slate-500 text-sm leading-relaxed">
+          {seg.items.map((item, j) => <li key={j}>{item}</li>)}
+        </ul>
+      );
+    if (seg.type === 'spacer') return <div key={i} className="h-2" />;
+    return <p key={i} className="text-slate-500 text-sm leading-relaxed">{seg.value}</p>;
+  });
+}
+
 export default function FAQPage() {
   const [items, setItems] = useState({ insurance: [], screening: [] });
   const [loading, setLoading] = useState(true);
@@ -67,8 +96,10 @@ export default function FAQPage() {
                           </span>
                         </button>
                         {isOpen && (
-                          <div className="px-5 pb-4 text-sm text-slate-500 leading-relaxed border-t border-slate-50">
-                            <p className="pt-3" dir="rtl">{item.answer}</p>
+                          <div className="px-5 pb-4 border-t border-slate-50">
+                            <div className="pt-3 space-y-1.5" dir="rtl">
+                              {renderAnswer(item.answer)}
+                            </div>
                           </div>
                         )}
                       </div>
