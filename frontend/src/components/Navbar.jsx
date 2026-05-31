@@ -7,7 +7,7 @@ const navItems = [
   { path: '/stats', icon: 'insights', label: 'Stats' },
   { path: '/entry', icon: 'add_circle', label: 'Entry' },
   { path: '/screening-locations', icon: 'business', label: 'סקר' },
-  { path: '/faq', icon: 'quiz', label: 'FAQ' },
+  { path: '/portal', icon: 'hub', label: 'Portal' },
 ];
 
 export default function Navbar() {

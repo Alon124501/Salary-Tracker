@@ -22,7 +22,7 @@ const TABS = [
   { id: 'equipment',    label: 'Equipment',    icon: 'medical_services' },
   { id: 'compensation', label: 'Compensation', icon: 'payments' },
   { id: 'reports',      label: 'Reports',      icon: 'assignment' },
-  { id: 'faq',          label: 'FAQ',          icon: 'quiz' },
+  { id: 'faq',          label: 'Portal',       icon: 'hub' },
 ];
 
 const FAQ_CATEGORIES = [
@@ -57,7 +57,9 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError]   = useState(null);
 
-  // FAQ state
+  // Portal tab state
+  const [portalSubTab, setPortalSubTab] = useState('faq');
+  // FAQ sub-tab
   const [faqItems, setFaqItems] = useState({ insurance: [], screening: [] });
   const [faqLoading, setFaqLoading] = useState(false);
   const [faqCategory, setFaqCategory] = useState('insurance');
@@ -68,6 +70,18 @@ export default function AdminDashboard() {
   const [editFaqQ, setEditFaqQ] = useState('');
   const [editFaqA, setEditFaqA] = useState('');
   const [faqSaving, setFaqSaving] = useState(false);
+  // Apps sub-tab
+  const [appCreds, setAppCreds] = useState([]);
+  const [appCredsLoading, setAppCredsLoading] = useState(false);
+  const [addingApp, setAddingApp] = useState(false);
+  const [newAppName, setNewAppName] = useState('');
+  const [newAppUser, setNewAppUser] = useState('');
+  const [newAppPass, setNewAppPass] = useState('');
+  const [editingAppId, setEditingAppId] = useState(null);
+  const [editAppName, setEditAppName] = useState('');
+  const [editAppUser, setEditAppUser] = useState('');
+  const [editAppPass, setEditAppPass] = useState('');
+  const [appSaving, setAppSaving] = useState(false);
 
   // Reports state
   const [reportMonth, setReportMonth] = useState(nowMonth);
@@ -108,9 +122,18 @@ export default function AdminDashboard() {
     finally { setFaqLoading(false); }
   }, []);
 
+  const loadAppCreds = useCallback(async () => {
+    setAppCredsLoading(true);
+    try {
+      const { data } = await api.get('/portal/credentials');
+      setAppCreds(data);
+    } catch { /* silent */ }
+    finally { setAppCredsLoading(false); }
+  }, []);
+
   useEffect(() => {
-    if (activeTab === 'faq') loadFaq();
-  }, [activeTab, loadFaq]);
+    if (activeTab === 'faq') { loadFaq(); loadAppCreds(); }
+  }, [activeTab, loadFaq, loadAppCreds]);
 
   const loadReportSummary = useCallback(async (month) => {
     setSummaryLoading(true);
@@ -237,6 +260,59 @@ export default function AdminDashboard() {
     try {
       await api.post('/faq/reorder', { items: reordered.map(({ id: xid, sort_order }) => ({ id: xid, sort_order })) });
     } catch { setFaqItems(prev => ({ ...prev, [faqCategory]: items })); }
+  }
+
+  // ── App credentials management ────────────────────────────────────────
+  async function saveApp() {
+    if (!newAppName.trim() || !newAppUser.trim() || !newAppPass.trim()) return;
+    setAppSaving(true);
+    try {
+      const { data } = await api.post('/portal/credentials', {
+        name: newAppName.trim(), username: newAppUser.trim(), password: newAppPass.trim(),
+        sort_order: appCreds.length,
+      });
+      setAppCreds(prev => [...prev, data]);
+      setNewAppName(''); setNewAppUser(''); setNewAppPass(''); setAddingApp(false);
+    } catch { /* silent */ }
+    finally { setAppSaving(false); }
+  }
+
+  async function updateApp(id) {
+    if (!editAppName.trim() || !editAppUser.trim() || !editAppPass.trim()) return;
+    setAppSaving(true);
+    try {
+      await api.patch(`/portal/credentials/${id}`, {
+        name: editAppName.trim(), username: editAppUser.trim(), password: editAppPass.trim(),
+      });
+      setAppCreds(prev => prev.map(x => x.id === id
+        ? { ...x, name: editAppName.trim(), username: editAppUser.trim(), password: editAppPass.trim() }
+        : x));
+      setEditingAppId(null);
+    } catch { /* silent */ }
+    finally { setAppSaving(false); }
+  }
+
+  async function deleteApp(id) {
+    const backup = appCreds;
+    setAppCreds(prev => prev.filter(x => x.id !== id));
+    try { await api.delete(`/portal/credentials/${id}`); }
+    catch { setAppCreds(backup); }
+  }
+
+  async function moveApp(id, direction) {
+    const idx = appCreds.findIndex(x => x.id === id);
+    if (direction === 'up' && idx === 0) return;
+    if (direction === 'down' && idx === appCreds.length - 1) return;
+    const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
+    const newItems = [...appCreds];
+    [newItems[idx], newItems[swapIdx]] = [newItems[swapIdx], newItems[idx]];
+    const reordered = newItems.map((item, i) => ({ ...item, sort_order: i }));
+    setAppCreds(reordered);
+    try {
+      await api.post('/portal/credentials/reorder', {
+        items: reordered.map(({ id: xid, sort_order }) => ({ id: xid, sort_order })),
+      });
+    } catch { setAppCreds(appCreds); }
   }
 
   // ── Approve + email one user's report ─────────────────────────────────
@@ -543,9 +619,108 @@ export default function AdminDashboard() {
           )}
         </div>
       )}
-      {/* ── Tab: FAQ ───────────────────────────────────────────────────── */}
+      {/* ── Tab: Portal (FAQ + Apps) ───────────────────────────────────── */}
       {activeTab === 'faq' && (
         <div className="px-4 space-y-4">
+          {/* Sub-tab toggle */}
+          <div className="flex gap-2">
+            {[{ id: 'faq', label: 'FAQ', icon: 'quiz' }, { id: 'apps', label: 'Apps', icon: 'apps' }].map(st => {
+              const active = portalSubTab === st.id;
+              return (
+                <button key={st.id} onClick={() => { setPortalSubTab(st.id); setAddingFaq(false); setEditingFaqId(null); setAddingApp(false); setEditingAppId(null); }}
+                  className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-2xl text-sm font-bold transition-all active:scale-95 ${active ? 'brand-gradient text-white' : 'bg-white text-slate-500 border border-slate-200'}`}
+                  style={active ? { boxShadow: '0 4px 14px rgba(139,53,217,0.3)' } : {}}>
+                  <span className="material-symbols-outlined text-base" style={{ fontVariationSettings: active ? "'FILL' 1" : "'FILL' 0" }}>{st.icon}</span>
+                  {st.label}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Apps sub-tab */}
+          {portalSubTab === 'apps' && (
+            <div className="space-y-3">
+              {appCredsLoading ? (
+                <div className="flex justify-center py-10"><span className="material-symbols-outlined text-3xl text-slate-300 animate-spin">progress_activity</span></div>
+              ) : (
+                <>
+                  {appCreds.length === 0 && !addingApp && (
+                    <div className="bg-white rounded-2xl border border-slate-100 py-10 flex flex-col items-center gap-2 text-slate-400">
+                      <span className="material-symbols-outlined text-4xl opacity-30">apps</span>
+                      <p className="text-sm font-medium">No apps yet</p>
+                    </div>
+                  )}
+                  {appCreds.map((cred, i) => {
+                    const isEditing = editingAppId === cred.id;
+                    return (
+                      <div key={cred.id} className="bg-white rounded-2xl border border-slate-100 p-4 space-y-3">
+                        {isEditing ? (
+                          <>
+                            <Field label="App Name" value={editAppName} onChange={setEditAppName} />
+                            <Field label="Username" value={editAppUser} onChange={setEditAppUser} />
+                            <Field label="Password" value={editAppPass} onChange={setEditAppPass} />
+                            <div className="flex gap-2">
+                              <button onClick={() => updateApp(cred.id)} disabled={appSaving || !editAppName.trim() || !editAppUser.trim() || !editAppPass.trim()}
+                                className="flex-1 py-2 rounded-xl text-sm font-bold text-white brand-gradient active:scale-95 transition-all disabled:opacity-50">Save</button>
+                              <button onClick={() => setEditingAppId(null)}
+                                className="flex-1 py-2 rounded-xl text-sm font-bold text-slate-600 bg-slate-100 active:scale-95 transition-all">Cancel</button>
+                            </div>
+                          </>
+                        ) : (
+                          <div className="flex items-start gap-3">
+                            <div className="flex flex-col gap-1 flex-shrink-0 pt-0.5">
+                              <button onClick={() => moveApp(cred.id, 'up')} disabled={i === 0}
+                                className="w-8 h-8 flex items-center justify-center rounded-lg bg-slate-50 text-slate-400 hover:bg-slate-100 active:scale-95 transition-all disabled:opacity-20">
+                                <span className="material-symbols-outlined text-base">arrow_upward</span>
+                              </button>
+                              <button onClick={() => moveApp(cred.id, 'down')} disabled={i === appCreds.length - 1}
+                                className="w-8 h-8 flex items-center justify-center rounded-lg bg-slate-50 text-slate-400 hover:bg-slate-100 active:scale-95 transition-all disabled:opacity-20">
+                                <span className="material-symbols-outlined text-base">arrow_downward</span>
+                              </button>
+                            </div>
+                            <div className="flex-1 min-w-0 cursor-pointer" onClick={() => { setEditingAppId(cred.id); setEditAppName(cred.name); setEditAppUser(cred.username); setEditAppPass(cred.password); }}>
+                              <p className="text-sm font-bold text-slate-800">{cred.name}</p>
+                              <p className="text-xs text-slate-400 mt-0.5">{cred.username}</p>
+                              <p className="text-[10px] text-brand-purple mt-1 font-medium">Tap to edit</p>
+                            </div>
+                            <button onClick={() => deleteApp(cred.id)}
+                              className="flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-lg bg-red-50 text-red-400 hover:bg-red-100 active:scale-95 transition-all">
+                              <span className="material-symbols-outlined text-base">delete</span>
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                  {addingApp ? (
+                    <div className="bg-white rounded-2xl border border-brand-purple/20 p-4 space-y-3">
+                      <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">New App</p>
+                      <Field label="App Name" value={newAppName} onChange={setNewAppName} />
+                      <Field label="Username" value={newAppUser} onChange={setNewAppUser} />
+                      <Field label="Password" value={newAppPass} onChange={setNewAppPass} />
+                      <div className="flex gap-2">
+                        <button onClick={saveApp} disabled={appSaving || !newAppName.trim() || !newAppUser.trim() || !newAppPass.trim()}
+                          className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white brand-gradient active:scale-95 transition-all disabled:opacity-50">
+                          {appSaving ? 'Saving...' : 'Save'}
+                        </button>
+                        <button onClick={() => { setAddingApp(false); setNewAppName(''); setNewAppUser(''); setNewAppPass(''); }}
+                          className="flex-1 py-2.5 rounded-xl text-sm font-bold text-slate-600 bg-slate-100 active:scale-95 transition-all">Cancel</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button onClick={() => { setAddingApp(true); setEditingAppId(null); }}
+                      className="w-full py-3 rounded-2xl text-sm font-bold text-brand-purple border-2 border-dashed border-brand-purple/30 hover:border-brand-purple/50 bg-white active:scale-95 transition-all flex items-center justify-center gap-2">
+                      <span className="material-symbols-outlined text-base">add</span>Add App
+                    </button>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+
+          {/* FAQ sub-tab */}
+          {portalSubTab === 'faq' && (
+          <div className="space-y-4">
           {/* Category toggle */}
           <div className="flex gap-2">
             {FAQ_CATEGORIES.map(cat => {
@@ -700,6 +875,8 @@ export default function AdminDashboard() {
                 </button>
               )}
             </>
+          )}
+          </div>
           )}
         </div>
       )}

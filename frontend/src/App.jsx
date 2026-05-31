@@ -14,7 +14,7 @@ import SettingsPage from './pages/SettingsPage.jsx';
 import EditProfilePage from './pages/EditProfilePage.jsx';
 import ResetPasswordPage from './pages/ResetPasswordPage.jsx';
 import ScreeningLocationsPage from './pages/ScreeningLocationsPage.jsx';
-import FAQPage from './pages/FAQPage.jsx';
+import PortalPage from './pages/PortalPage.jsx';
 import AdminDashboard from './pages/AdminDashboard.jsx';
 import Navbar from './components/Navbar.jsx';
 import BottomNav from './components/BottomNav.jsx';
@@ -52,7 +52,7 @@ export default function App() {
         <Route path="/settings" element={<PrivateRoute><AppLayout><SettingsPage /></AppLayout></PrivateRoute>} />
         <Route path="/edit-profile" element={<PrivateRoute><AppLayout><EditProfilePage /></AppLayout></PrivateRoute>} />
         <Route path="/screening-locations" element={<PrivateRoute><AppLayout><ScreeningLocationsPage /></AppLayout></PrivateRoute>} />
-        <Route path="/faq" element={<PrivateRoute><AppLayout><FAQPage /></AppLayout></PrivateRoute>} />
+        <Route path="/portal" element={<PrivateRoute><AppLayout><PortalPage /></AppLayout></PrivateRoute>} />
         <Route path="/admin" element={<AdminRoute><AppLayout><AdminDashboard /></AppLayout></AdminRoute>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
