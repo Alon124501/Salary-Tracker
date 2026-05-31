@@ -30,7 +30,6 @@ export default function Dashboard() {
   const [sending, setSending] = useState(false);
   const [sendMsg, setSendMsg] = useState('');
   const [showModal, setShowModal] = useState(false);
-  const [receiptFiles, setReceiptFiles] = useState([]);
   const [parkingFiles, setParkingFiles] = useState([]);
   const [toast, setToast] = useState('');
   const [submitted, setSubmitted] = useState(false);
@@ -75,7 +74,6 @@ export default function Dashboard() {
   }
 
   function openModal() {
-    setReceiptFiles([]);
     setParkingFiles([]);
     setSendMsg('');
     setShowModal(true);
@@ -86,7 +84,6 @@ export default function Dashboard() {
     setSendMsg('');
     try {
       const formData = new FormData();
-      receiptFiles.forEach(f => formData.append('receipts', f));
       parkingFiles.forEach(f => formData.append('parking', f));
       await api.post(`/report/submit?month=${month}`, formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
@@ -328,39 +325,12 @@ export default function Dashboard() {
               </button>
             </div>
 
-            {/* Receipts upload */}
-            <div>
-              <p className="text-xs font-bold uppercase tracking-widest text-slate-500 mb-2 flex items-center gap-1.5">
-                <span className="material-symbols-outlined text-base">receipt_long</span>
-                Food Receipts
-              </p>
-              <label className="flex items-center gap-2 cursor-pointer border-2 border-dashed border-slate-200 rounded-xl px-4 py-3 hover:border-action-blue transition-colors">
-                <span className="material-symbols-outlined text-slate-400">add_photo_alternate</span>
-                <span className="text-sm text-slate-500">{receiptFiles.length > 0 ? `${receiptFiles.length} photo${receiptFiles.length > 1 ? 's' : ''} selected` : 'Add photos'}</span>
-                <input
-                  type="file"
-                  accept="image/*"
-                  multiple
-                  className="hidden"
-                  onChange={e => setReceiptFiles(Array.from(e.target.files))}
-                />
-              </label>
-              {receiptFiles.length > 0 && (
-                <div className="flex flex-wrap gap-2 mt-2">
-                  {receiptFiles.map((f, i) => (
-                    <div key={i} className="relative w-16 h-16 rounded-lg overflow-hidden border border-slate-200">
-                      <img src={URL.createObjectURL(f)} alt="" className="w-full h-full object-cover" />
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Parking receipts upload */}
+            {/* Cellopark / Pango upload */}
             <div>
               <p className="text-xs font-bold uppercase tracking-widest text-slate-500 mb-2 flex items-center gap-1.5">
                 <span className="material-symbols-outlined text-base">local_parking</span>
-                Parking Receipts
+                Cellopark / Pango
+                <span className="text-xs font-normal normal-case tracking-normal text-slate-400 ml-1">— optional</span>
               </p>
               <label className="flex items-center gap-2 cursor-pointer border-2 border-dashed border-slate-200 rounded-xl px-4 py-3 hover:border-action-blue transition-colors">
                 <span className="material-symbols-outlined text-slate-400">upload_file</span>
