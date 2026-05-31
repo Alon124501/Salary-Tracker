@@ -221,14 +221,16 @@ router.get('/reports', async (req, res) => {
   const [
     { data: profiles, error: pErr },
     { data: allEntries, error: eErr },
-    { data: approval },
+    { data: approvals },
   ] = await Promise.all([
     supabase.from('profiles').select('id, first_name, last_name, username, mileage_rate').order('first_name'),
     supabase.from('entries').select('*').gte('date', start).lte('date', end),
-    supabase.from('monthly_report_approvals').select('id, approved_at').eq('month', month).maybeSingle(),
+    supabase.from('user_monthly_approvals').select('user_id, approved_at').eq('month', month),
   ]);
   if (pErr) return res.status(500).json({ error: pErr.message });
   if (eErr) return res.status(500).json({ error: eErr.message });
+
+  const approvalMap = Object.fromEntries((approvals || []).map(a => [a.user_id, a.approved_at]));
 
   const entriesByUser = {};
   for (const e of allEntries || []) {
@@ -258,10 +260,11 @@ router.get('/reports', async (req, res) => {
         username: p.username,
       },
       totals,
+      approved: approvalMap[p.id] ? { at: approvalMap[p.id] } : null,
     };
   });
 
-  res.json({ month, summaries, approved: approval ? { at: approval.approved_at } : null });
+  res.json({ month, summaries });
 });
 
 // POST /api/admin/reports/approve
@@ -334,6 +337,80 @@ router.post('/reports/approve', async (req, res) => {
   await supabase.from('monthly_report_approvals').insert({ month, approved_by: req.userId });
 
   res.json({ success: true, month });
+});
+
+// GET /api/admin/users/:userId/report/excel?month=YYYY-MM
+router.get('/users/:userId/report/excel', async (req, res) => {
+  const { userId } = req.params;
+  const { month } = req.query;
+  if (!month) return res.status(400).json({ error: 'month param required (YYYY-MM)' });
+
+  const { start, end } = monthRange(month);
+  const [year, mon] = month.split('-').map(Number);
+  const monthName = new Date(year, mon - 1).toLocaleString('en-US', { month: 'long' });
+
+  const [{ data: profile }, { data: entries }] = await Promise.all([
+    supabase.from('profiles').select('first_name, last_name, username, mileage_rate').eq('id', userId).single(),
+    supabase.from('entries').select('*').eq('user_id', userId).gte('date', start).lte('date', end).order('date', { ascending: true }),
+  ]);
+  if (!profile) return res.status(404).json({ error: 'User not found' });
+  if (!entries || entries.length === 0) return res.status(404).json({ error: 'No entries for this month' });
+
+  const name = `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || profile.username;
+  const workbook = new ExcelJS.Workbook();
+  buildSheet(workbook.addWorksheet('Salary Report'), entries, profile.mileage_rate ?? 2);
+  const buf = await workbook.xlsx.writeBuffer();
+
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.setHeader('Content-Disposition', `attachment; filename="${name} - ${monthName} ${year}.xlsx"`);
+  res.send(Buffer.from(buf));
+});
+
+// POST /api/admin/users/:userId/report/approve
+router.post('/users/:userId/report/approve', async (req, res) => {
+  const { userId } = req.params;
+  const { month } = req.body;
+  if (!month) return res.status(400).json({ error: 'month is required' });
+
+  const { data: existing } = await supabase.from('user_monthly_approvals')
+    .select('id').eq('user_id', userId).eq('month', month).maybeSingle();
+  if (existing) return res.status(409).json({ error: 'This report has already been approved and sent.' });
+
+  const { start, end } = monthRange(month);
+  const [year, mon] = month.split('-').map(Number);
+  const monthName = new Date(year, mon - 1).toLocaleString('en-US', { month: 'long' });
+
+  const [{ data: profile }, { data: entries }] = await Promise.all([
+    supabase.from('profiles').select('first_name, last_name, username, mileage_rate').eq('id', userId).single(),
+    supabase.from('entries').select('*').eq('user_id', userId).gte('date', start).lte('date', end).order('date', { ascending: true }),
+  ]);
+  if (!profile) return res.status(404).json({ error: 'User not found' });
+  if (!entries || entries.length === 0) return res.status(404).json({ error: 'No entries for this month' });
+
+  const name = `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || profile.username;
+  const workbook = new ExcelJS.Workbook();
+  buildSheet(workbook.addWorksheet('Salary Report'), entries, profile.mileage_rate ?? 2);
+  const buf = await workbook.xlsx.writeBuffer();
+
+  const gmailUser = process.env.GMAIL_USER;
+  const gmailPass = process.env.GMAIL_APP_PASSWORD;
+  if (!gmailUser || !gmailPass)
+    return res.status(500).json({ error: 'Gmail credentials not configured on server' });
+
+  const transporter = nodemailer.createTransport({ service: 'gmail', auth: { user: gmailUser, pass: gmailPass } });
+  await transporter.sendMail({
+    from: `Salary Tracker <${gmailUser}>`,
+    to: ACCOUNTING_EMAIL,
+    subject: `Salary Report — ${name} ${monthName} ${year}`,
+    text: `Please find attached the salary report for ${name} (${monthName} ${year}).`,
+    attachments: [{ filename: `${name} - ${monthName} ${year}.xlsx`, content: Buffer.from(buf), contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }],
+  });
+
+  const { data: approval } = await supabase.from('user_monthly_approvals')
+    .insert({ user_id: userId, month, approved_by: req.userId })
+    .select('approved_at').single();
+
+  res.json({ success: true, approvedAt: approval.approved_at });
 });
 
 // ── Submissions ────────────────────────────────────────────────────────────
