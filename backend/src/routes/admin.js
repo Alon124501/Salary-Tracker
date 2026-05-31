@@ -391,59 +391,64 @@ router.post('/users/:userId/report/approve', async (req, res) => {
     .select('id').eq('user_id', userId).eq('month', month).maybeSingle();
   if (existing) return res.status(409).json({ error: 'This report has already been approved and sent.' });
 
-  const { start, end } = monthRange(month);
-  const [year, mon] = month.split('-').map(Number);
-  const monthName = new Date(year, mon - 1).toLocaleString('en-US', { month: 'long' });
+  try {
+    const { start, end } = monthRange(month);
+    const [year, mon] = month.split('-').map(Number);
+    const monthName = new Date(year, mon - 1).toLocaleString('en-US', { month: 'long' });
 
-  const [{ data: profile }, { data: entries }] = await Promise.all([
-    supabase.from('profiles').select('first_name, last_name, username, mileage_rate').eq('id', userId).single(),
-    supabase.from('entries').select('*').eq('user_id', userId).gte('date', start).lte('date', end).order('date', { ascending: true }),
-  ]);
-  if (!profile) return res.status(404).json({ error: 'User not found' });
-  if (!entries || entries.length === 0) return res.status(404).json({ error: 'No entries for this month' });
+    const [{ data: profile }, { data: entries }] = await Promise.all([
+      supabase.from('profiles').select('first_name, last_name, username, mileage_rate').eq('id', userId).single(),
+      supabase.from('entries').select('*').eq('user_id', userId).gte('date', start).lte('date', end).order('date', { ascending: true }),
+    ]);
+    if (!profile) return res.status(404).json({ error: 'User not found' });
+    if (!entries || entries.length === 0) return res.status(404).json({ error: 'No entries for this month' });
 
-  const name = `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || profile.username;
-  const workbook = new ExcelJS.Workbook();
-  buildSheet(workbook.addWorksheet('Salary Report'), entries, profile.mileage_rate ?? 2, `${name} — ${monthName} ${year}`);
-  const buf = await workbook.xlsx.writeBuffer();
+    const name = `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || profile.username;
+    const workbook = new ExcelJS.Workbook();
+    buildSheet(workbook.addWorksheet('Salary Report'), entries, profile.mileage_rate ?? 2, `${name} — ${monthName} ${year}`);
+    const buf = await workbook.xlsx.writeBuffer();
 
-  const gmailUser = process.env.GMAIL_USER;
-  const gmailPass = process.env.GMAIL_APP_PASSWORD;
-  if (!gmailUser || !gmailPass)
-    return res.status(500).json({ error: 'Gmail credentials not configured on server' });
+    const gmailUser = process.env.GMAIL_USER;
+    const gmailPass = process.env.GMAIL_APP_PASSWORD;
+    if (!gmailUser || !gmailPass)
+      return res.status(500).json({ error: 'Gmail credentials not configured on server' });
 
-  // Build attachments: Excel + all receipt photos
-  const attachments = [{
-    filename: `${name} - ${monthName} ${year}.xlsx`,
-    content: Buffer.from(buf),
-    contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  }];
+    // Build attachments: Excel + all receipt photos
+    const attachments = [{
+      filename: `${name} - ${monthName} ${year}.xlsx`,
+      content: Buffer.from(buf),
+      contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    }];
 
-  const receiptPaths = entries.flatMap(e => [
-    ...(e.food_receipt_urls || []),
-    ...(e.parking_receipt_urls || []),
-  ]);
-  for (const path of receiptPaths) {
-    const { data: blob, error: dlErr } = await supabase.storage.from('receipts').download(path);
-    if (dlErr || !blob) continue;
-    const arrayBuf = await blob.arrayBuffer();
-    attachments.push({ filename: path.split('/').pop(), content: Buffer.from(arrayBuf) });
+    const receiptPaths = entries.flatMap(e => [
+      ...(e.food_receipt_urls || []),
+      ...(e.parking_receipt_urls || []),
+    ]);
+    for (const path of receiptPaths) {
+      const { data: blob, error: dlErr } = await supabase.storage.from('receipts').download(path);
+      if (dlErr || !blob) continue;
+      const arrayBuf = await blob.arrayBuffer();
+      attachments.push({ filename: path.split('/').pop(), content: Buffer.from(arrayBuf) });
+    }
+
+    const transporter = nodemailer.createTransport({ service: 'gmail', auth: { user: gmailUser, pass: gmailPass } });
+    await transporter.sendMail({
+      from: `Salary Tracker <${gmailUser}>`,
+      to: ACCOUNTING_EMAIL,
+      subject: `Salary Report — ${name} ${monthName} ${year}`,
+      text: `Please find attached the salary report for ${name} (${monthName} ${year}).`,
+      attachments,
+    });
+
+    const { data: approval, error: insertError } = await supabase.from('user_monthly_approvals')
+      .insert({ user_id: userId, month, approved_by: req.userId })
+      .select('approved_at').single();
+    if (insertError) throw new Error(insertError.message);
+
+    res.json({ success: true, approvedAt: approval.approved_at });
+  } catch (err) {
+    res.status(500).json({ error: err.message || 'Failed to approve report' });
   }
-
-  const transporter = nodemailer.createTransport({ service: 'gmail', auth: { user: gmailUser, pass: gmailPass } });
-  await transporter.sendMail({
-    from: `Salary Tracker <${gmailUser}>`,
-    to: ACCOUNTING_EMAIL,
-    subject: `Salary Report — ${name} ${monthName} ${year}`,
-    text: `Please find attached the salary report for ${name} (${monthName} ${year}).`,
-    attachments,
-  });
-
-  const { data: approval } = await supabase.from('user_monthly_approvals')
-    .insert({ user_id: userId, month, approved_by: req.userId })
-    .select('approved_at').single();
-
-  res.json({ success: true, approvedAt: approval.approved_at });
 });
 
 // ── Submissions ────────────────────────────────────────────────────────────
