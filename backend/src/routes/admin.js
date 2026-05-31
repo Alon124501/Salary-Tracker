@@ -397,13 +397,31 @@ router.post('/users/:userId/report/approve', async (req, res) => {
   if (!gmailUser || !gmailPass)
     return res.status(500).json({ error: 'Gmail credentials not configured on server' });
 
+  // Build attachments: Excel + all receipt photos
+  const attachments = [{
+    filename: `${name} - ${monthName} ${year}.xlsx`,
+    content: Buffer.from(buf),
+    contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  }];
+
+  const receiptPaths = entries.flatMap(e => [
+    ...(e.food_receipt_urls || []),
+    ...(e.parking_receipt_urls || []),
+  ]);
+  for (const path of receiptPaths) {
+    const { data: blob, error: dlErr } = await supabase.storage.from('receipts').download(path);
+    if (dlErr || !blob) continue;
+    const arrayBuf = await blob.arrayBuffer();
+    attachments.push({ filename: path.split('/').pop(), content: Buffer.from(arrayBuf) });
+  }
+
   const transporter = nodemailer.createTransport({ service: 'gmail', auth: { user: gmailUser, pass: gmailPass } });
   await transporter.sendMail({
     from: `Salary Tracker <${gmailUser}>`,
     to: ACCOUNTING_EMAIL,
     subject: `Salary Report — ${name} ${monthName} ${year}`,
     text: `Please find attached the salary report for ${name} (${monthName} ${year}).`,
-    attachments: [{ filename: `${name} - ${monthName} ${year}.xlsx`, content: Buffer.from(buf), contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }],
+    attachments,
   });
 
   const { data: approval } = await supabase.from('user_monthly_approvals')
