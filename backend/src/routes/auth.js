@@ -9,7 +9,7 @@ const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
 router.post('/register', upload.single('profession_document'), async (req, res) => {
-  const { username, password, first_name, last_name, profession, district, email, shifts_per_week, phone, vehicle_type_color, vehicle_number } = req.body;
+  const { username, password, first_name, last_name, profession, district, email, shifts_per_week, phone, vehicle_type_color, vehicle_number, address } = req.body;
   if (!username || !password) {
     return res.status(400).json({ error: 'Username and password are required' });
   }
@@ -57,6 +57,7 @@ router.post('/register', upload.single('profession_document'), async (req, res) 
     phone: phone || null,
     vehicle_type_color: vehicle_type_color || null,
     vehicle_number: vehicle_number || null,
+    address: address || null,
     profession_document_url,
   });
   if (profileErr) {
@@ -95,7 +96,7 @@ router.post('/login', async (req, res) => {
 
 router.get('/me', auth, async (req, res) => {
   const { data: user, error } = await supabase.from('profiles')
-    .select('username, gmail_user, payment_type, global_salary, first_name, last_name, profession, district, email, phone, vehicle_type_color, vehicle_number, shifts_per_week, is_admin')
+    .select('username, gmail_user, payment_type, global_salary, first_name, last_name, profession, district, email, phone, vehicle_type_color, vehicle_number, shifts_per_week, address, is_admin')
     .eq('id', req.userId)
     .single();
   if (error || !user) return res.status(404).json({ error: 'User not found' });
@@ -103,7 +104,7 @@ router.get('/me', auth, async (req, res) => {
 });
 
 router.patch('/profile', auth, upload.single('profession_document'), async (req, res) => {
-  const { first_name, last_name, profession, district, email, vehicle_type_color, vehicle_number, shifts_per_week } = req.body;
+  const { first_name, last_name, profession, district, email, vehicle_type_color, vehicle_number, shifts_per_week, address } = req.body;
 
   const updates = {
     first_name: first_name || null,
@@ -114,6 +115,7 @@ router.patch('/profile', auth, upload.single('profession_document'), async (req,
     vehicle_type_color: vehicle_type_color || null,
     vehicle_number: vehicle_number || null,
     shifts_per_week: shifts_per_week || null,
+    address: address || null,
   };
 
   if (req.file) {

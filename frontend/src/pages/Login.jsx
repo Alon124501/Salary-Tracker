@@ -102,6 +102,7 @@ export default function Login() {
   const [vehicleNumber, setVehicleNumber] = useState('');
   const [phoneCountry, setPhoneCountry] = useState('+972');
   const [phoneNumber, setPhoneNumber] = useState('');
+  const [address, setAddress] = useState('');
   const [showForgotModal, setShowForgotModal] = useState(false);
   const [forgotEmail, setForgotEmail] = useState('');
   const [forgotStatus, setForgotStatus] = useState('');
@@ -146,6 +147,7 @@ export default function Login() {
         formData.append('phone', phoneCountry + phoneNumber);
         formData.append('vehicle_type_color', vehicleTypeColor);
         formData.append('vehicle_number', vehicleNumber);
+        formData.append('address', address);
         if (professionDoc) formData.append('profession_document', professionDoc);
         ({ data } = await api.post('/auth/register', formData, {
           headers: { 'Content-Type': 'multipart/form-data' },
@@ -181,6 +183,7 @@ export default function Login() {
     setVehicleNumber('');
     setPhoneCountry('+972');
     setPhoneNumber('');
+    setAddress('');
   }
 
   const inputBase = "w-full px-5 py-4 bg-cupertino-grey border-none rounded-cupertino focus:ring-1 focus:ring-action-blue transition-all font-medium text-on-surface placeholder:text-cupertino-label/60";
@@ -357,6 +360,15 @@ export default function Login() {
                     onChange={e => setPhoneNumber(e.target.value.replace(/\D/g, '').slice(0, 9))}
                   />
                 </div>
+
+                <input
+                  className={inputBase}
+                  placeholder="כתובת מגורים"
+                  type="text"
+                  value={address}
+                  onChange={e => setAddress(e.target.value)}
+                  dir="rtl"
+                />
               </>
             )}
 

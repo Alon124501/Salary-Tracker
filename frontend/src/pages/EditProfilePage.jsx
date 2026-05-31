@@ -18,6 +18,7 @@ export default function EditProfilePage() {
   const [vehicleTypeColor, setVehicleTypeColor] = useState('');
   const [vehicleNumber, setVehicleNumber] = useState('');
   const [shiftsPerWeek, setShiftsPerWeek] = useState('');
+  const [address, setAddress] = useState('');
   const [newDoc, setNewDoc] = useState(null);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState('');
@@ -39,6 +40,7 @@ export default function EditProfilePage() {
       setVehicleTypeColor(res.data.vehicle_type_color || '');
       setVehicleNumber(res.data.vehicle_number || '');
       setShiftsPerWeek(res.data.shifts_per_week || '');
+      setAddress(res.data.address || '');
     }).finally(() => setLoading(false));
   }, []);
 
@@ -56,6 +58,7 @@ export default function EditProfilePage() {
       formData.append('vehicle_type_color', vehicleTypeColor);
       formData.append('vehicle_number', vehicleNumber);
       formData.append('shifts_per_week', shiftsPerWeek);
+      formData.append('address', address);
       if (newDoc) formData.append('profession_document', newDoc);
       await api.patch('/auth/profile', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
@@ -224,6 +227,18 @@ export default function EditProfilePage() {
                 </select>
                 <span className="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none text-lg">expand_more</span>
               </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-widest mb-1">כתובת מגורים</label>
+              <input
+                className={inputBase}
+                type="text"
+                value={address}
+                onChange={e => setAddress(e.target.value)}
+                placeholder="רחוב, עיר"
+                dir="rtl"
+              />
             </div>
 
             <button
