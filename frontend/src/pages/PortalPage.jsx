@@ -61,6 +61,7 @@ export default function PortalPage() {
   const [faqItems, setFaqItems] = useState({ insurance: [], screening: [] });
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(null);
+  const [tab, setTab] = useState('apps');
 
   useEffect(() => {
     Promise.all([
@@ -85,6 +86,26 @@ export default function PortalPage() {
           <p className="text-sm text-slate-400 mt-1">Applications &amp; FAQ</p>
         </div>
 
+        {/* Tab toggle */}
+        <div className="flex gap-2 mb-6">
+          {[{ id: 'apps', label: 'Apps', icon: 'apps' }, { id: 'faq', label: 'FAQ', icon: 'quiz' }].map(t => (
+            <button
+              key={t.id}
+              onClick={() => setTab(t.id)}
+              className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold transition-all active:scale-95 ${
+                tab === t.id ? 'brand-gradient text-white' : 'bg-white border border-slate-200 text-slate-500'
+              }`}
+              style={tab === t.id ? { boxShadow: '0 4px 14px rgba(139,53,217,0.25)' } : {}}
+            >
+              <span className="material-symbols-outlined text-[16px]"
+                style={{ fontVariationSettings: tab === t.id ? "'FILL' 1" : "'FILL' 0" }}>
+                {t.icon}
+              </span>
+              {t.label}
+            </button>
+          ))}
+        </div>
+
         {loading ? (
           <div className="flex justify-center py-16">
             <span className="material-symbols-outlined text-4xl text-slate-300 animate-spin">progress_activity</span>
@@ -92,7 +113,7 @@ export default function PortalPage() {
         ) : (
           <>
             {/* ── Applications ── */}
-            <div className="mb-8">
+            {tab === 'apps' && <div className="mb-8">
               <h2 className="text-base font-extrabold text-slate-700 mb-3 px-1 flex items-center gap-2">
                 <span className="material-symbols-outlined text-brand-purple text-lg" style={{ fontVariationSettings: "'FILL' 1" }}>apps</span>
                 Applications
@@ -138,10 +159,10 @@ export default function PortalPage() {
                   ))}
                 </div>
               )}
-            </div>
+            </div>}
 
             {/* ── FAQ ── */}
-            {CATEGORIES.map(cat => (
+            {tab === 'faq' && CATEGORIES.map(cat => (
               <div key={cat.id} className="mb-8">
                 <h2 className="text-base font-extrabold text-slate-700 mb-3 px-1" dir="rtl">{cat.label}</h2>
 

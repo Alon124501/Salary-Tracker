@@ -63,11 +63,13 @@ export default function Dashboard() {
       headers: { Authorization: `Bearer ${token}` },
     });
     if (!res.ok) return;
+    const cd = res.headers.get('Content-Disposition');
+    const match = cd && cd.match(/filename="([^"]+)"/);
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${month}.xlsx`;
+    a.download = match ? decodeURIComponent(match[1]) : `${month}.xlsx`;
     a.click();
     URL.revokeObjectURL(url);
   }

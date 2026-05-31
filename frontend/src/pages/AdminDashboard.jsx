@@ -206,9 +206,11 @@ export default function AdminDashboard() {
     try {
       const res = await api.get(`/admin/users/${userId}/report/excel?month=${reportMonth}`, { responseType: 'blob' });
       const url = URL.createObjectURL(new Blob([res.data]));
+      const [yr, mo] = reportMonth.split('-').map(Number);
+      const monthLabel = new Date(yr, mo - 1).toLocaleString('en-US', { month: 'long' });
       const a = document.createElement('a');
       a.href = url;
-      a.download = `${userName} - ${reportMonth}.xlsx`;
+      a.download = `${userName} - ${monthLabel} ${yr}.xlsx`;
       a.click();
       URL.revokeObjectURL(url);
     } catch { /* silent */ }

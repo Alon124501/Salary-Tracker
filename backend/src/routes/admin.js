@@ -31,7 +31,7 @@ function calcDaily(e, mileageRate = 2) {
            total: testsPay + km + office + expenses };
 }
 
-function buildSheet(sheet, entries, mileageRate = 2) {
+function buildSheet(sheet, entries, mileageRate = 2, title = '') {
   const headerFill   = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4F46E5' } };
   const headerFont   = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
   const centerAlign  = { horizontal: 'center', vertical: 'middle' };
@@ -130,6 +130,17 @@ function buildSheet(sheet, entries, mileageRate = 2) {
     cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4F46E5' } };
     cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 12 };
     cell.alignment = centerAlign;
+  }
+
+  if (title) {
+    sheet.spliceRows(1, 0, [title]);
+    sheet.mergeCells(1, 1, 1, numCols);
+    sheet.getRow(1).height = 30;
+    const titleCell = sheet.getCell(1, 1);
+    titleCell.value = title;
+    titleCell.font = { bold: true, size: 14, color: { argb: 'FF1E1B4B' } };
+    titleCell.alignment = centerAlign;
+    titleCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEDE9FE' } };
   }
 }
 
@@ -315,7 +326,7 @@ router.post('/reports/approve', async (req, res) => {
         const name = `${p.first_name || ''} ${p.last_name || ''}`.trim() || p.username;
 
         const workbook = new ExcelJS.Workbook();
-        buildSheet(workbook.addWorksheet('Salary Report'), entries, mileageRate);
+        buildSheet(workbook.addWorksheet('Salary Report'), entries, mileageRate, `${name} — ${monthName} ${year}`);
         const buf = await workbook.xlsx.writeBuffer();
         archive.append(Buffer.from(buf), { name: `${name} - ${monthName} ${year}.xlsx` });
       }
@@ -362,11 +373,11 @@ router.get('/users/:userId/report/excel', async (req, res) => {
 
   const name = `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || profile.username;
   const workbook = new ExcelJS.Workbook();
-  buildSheet(workbook.addWorksheet('Salary Report'), entries, profile.mileage_rate ?? 2);
+  buildSheet(workbook.addWorksheet('Salary Report'), entries, profile.mileage_rate ?? 2, `${name} — ${monthName} ${year}`);
   const buf = await workbook.xlsx.writeBuffer();
 
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-  res.setHeader('Content-Disposition', `attachment; filename="${name} - ${monthName} ${year}.xlsx"`);
+  res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(`${name} - ${monthName} ${year}.xlsx`)}"`);
   res.send(Buffer.from(buf));
 });
 
@@ -393,7 +404,7 @@ router.post('/users/:userId/report/approve', async (req, res) => {
 
   const name = `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || profile.username;
   const workbook = new ExcelJS.Workbook();
-  buildSheet(workbook.addWorksheet('Salary Report'), entries, profile.mileage_rate ?? 2);
+  buildSheet(workbook.addWorksheet('Salary Report'), entries, profile.mileage_rate ?? 2, `${name} — ${monthName} ${year}`);
   const buf = await workbook.xlsx.writeBuffer();
 
   const gmailUser = process.env.GMAIL_USER;
@@ -497,7 +508,7 @@ router.post('/submissions/:submissionId/send', async (req, res) => {
 
   // Build Excel
   const workbook = new ExcelJS.Workbook();
-  buildSheet(workbook.addWorksheet('Salary Report'), entries || [], mileageRate);
+  buildSheet(workbook.addWorksheet('Salary Report'), entries || [], mileageRate, `${name} — ${monthName} ${year}`);
   const excelBuffer = await workbook.xlsx.writeBuffer();
 
   // Download receipt files from storage

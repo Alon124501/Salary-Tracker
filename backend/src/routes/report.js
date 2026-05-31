@@ -41,11 +41,10 @@ function monthRange(month) {
   return { start, end };
 }
 
-function buildSheet(sheet, entries, mileageRate = 2) {
+function buildSheet(sheet, entries, mileageRate = 2, title = '') {
   const headerFill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4F46E5' } };
   const headerFont = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
   const centerAlign = { horizontal: 'center', vertical: 'middle' };
-  const moneyFont = { italic: true, size: 9, color: { argb: 'FF6B7280' } };
   const stripeFill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF9FAFB' } };
   const totalFill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF0F2F5' } };
   const numCols = 12;
@@ -159,6 +158,17 @@ function buildSheet(sheet, entries, mileageRate = 2) {
     cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 12 };
     cell.alignment = centerAlign;
   }
+
+  if (title) {
+    sheet.spliceRows(1, 0, [title]);
+    sheet.mergeCells(1, 1, 1, numCols);
+    sheet.getRow(1).height = 30;
+    const titleCell = sheet.getCell(1, 1);
+    titleCell.value = title;
+    titleCell.font = { bold: true, size: 14, color: { argb: 'FF1E1B4B' } };
+    titleCell.alignment = centerAlign;
+    titleCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEDE9FE' } };
+  }
 }
 
 // GET /api/report/excel?month=YYYY-MM
@@ -167,7 +177,7 @@ router.get('/excel', async (req, res) => {
   if (!month) return res.status(400).json({ error: 'month param required (YYYY-MM)' });
 
   const { data: user, error: userErr } = await supabase.from('profiles')
-    .select('username, mileage_rate').eq('id', req.userId).single();
+    .select('first_name, last_name, username, mileage_rate').eq('id', req.userId).single();
   if (userErr) return res.status(500).json({ error: userErr.message });
 
   const { start, end } = monthRange(month);
@@ -175,18 +185,25 @@ router.get('/excel', async (req, res) => {
     .eq('user_id', req.userId).gte('date', start).lte('date', end).order('date', { ascending: true });
   if (entriesErr) return res.status(500).json({ error: entriesErr.message });
 
-  const workbook = new ExcelJS.Workbook();
-  const sheet = workbook.addWorksheet('Salary Report');
-  buildSheet(sheet, entries, user.mileage_rate ?? 2);
-
-  const [year, monthNum] = month.split('-');
+  const [year, monthNum] = month.split('-').map(Number);
   const monthName = new Date(year, monthNum - 1).toLocaleString('en-US', { month: 'long' });
-  const filename = `${monthName} ${year} - ${user.username}.xlsx`;
+  const name = `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.username;
+  const title = `${name} — ${monthName} ${year}`;
+  const filename = `${name} - ${monthName} ${year}.xlsx`;
 
-  const buffer = await workbook.xlsx.writeBuffer();
-  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-  res.send(buffer);
+  try {
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet('Salary Report');
+    buildSheet(sheet, entries || [], user.mileage_rate ?? 2, title);
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(filename)}"`);
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.send(buffer);
+  } catch (err) {
+    console.error('[report/excel] Error:', err.message, err.stack);
+    return res.status(500).json({ error: err.message });
+  }
 });
 
 // GET /api/report/submission?month=YYYY-MM
