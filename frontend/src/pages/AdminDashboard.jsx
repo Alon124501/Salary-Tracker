@@ -337,9 +337,10 @@ export default function AdminDashboard() {
       }));
     } catch (err) {
       const status = err.response?.status;
+      const raw = err.response?.data?.error;
       const text = status === 409
         ? 'Already approved and sent.'
-        : err.response?.data?.error || 'Failed to approve.';
+        : (typeof raw === 'string' ? raw : 'Failed to approve.');
       setApproveMsgs(prev => ({ ...prev, [userId]: text }));
     } finally {
       setApprovingId(null);

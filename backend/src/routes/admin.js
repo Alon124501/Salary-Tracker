@@ -424,12 +424,15 @@ router.post('/users/:userId/report/approve', async (req, res) => {
       ...(e.food_receipt_urls || []),
       ...(e.parking_receipt_urls || []),
     ]);
-    for (const path of receiptPaths) {
-      const { data: blob, error: dlErr } = await supabase.storage.from('receipts').download(path);
-      if (dlErr || !blob) continue;
-      const arrayBuf = await blob.arrayBuffer();
-      attachments.push({ filename: path.split('/').pop(), content: Buffer.from(arrayBuf) });
-    }
+    const receiptAttachments = (await Promise.all(
+      receiptPaths.map(async path => {
+        const { data: blob, error: dlErr } = await supabase.storage.from('receipts').download(path);
+        if (dlErr || !blob) return null;
+        const arrayBuf = await blob.arrayBuffer();
+        return { filename: path.split('/').pop(), content: Buffer.from(arrayBuf) };
+      })
+    )).filter(Boolean);
+    attachments.push(...receiptAttachments);
 
     const transporter = nodemailer.createTransport({ service: 'gmail', auth: { user: gmailUser, pass: gmailPass } });
     await transporter.sendMail({
@@ -447,7 +450,8 @@ router.post('/users/:userId/report/approve', async (req, res) => {
 
     res.json({ success: true, approvedAt: approval.approved_at });
   } catch (err) {
-    res.status(500).json({ error: err.message || 'Failed to approve report' });
+    const msg = typeof err?.message === 'string' ? err.message : 'Failed to approve report';
+    res.status(500).json({ error: msg });
   }
 });
 
