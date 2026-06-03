@@ -44,15 +44,19 @@ router.get('/companies', async (req, res) => {
 });
 
 // POST /api/screening/companies  (admin)
-router.post('/companies', adminAuth, upload.single('logo'), async (req, res) => {
+router.post('/companies', adminAuth, upload.fields([{ name: 'logo' }, { name: 'brochure' }]), async (req, res) => {
   const { name } = req.body;
   if (!name?.trim()) return res.status(400).json({ error: 'Company name is required' });
 
-  const logo_url = req.file ? await uploadLogo(req.file) : null;
+  const logoFile = req.files?.logo?.[0];
+  const brochureFile = req.files?.brochure?.[0];
+
+  const logo_url = logoFile ? await uploadLogo(logoFile) : null;
+  const brochure_url = brochureFile ? await uploadBrochure(brochureFile) : null;
 
   const { data, error } = await supabase
     .from('screening_companies')
-    .insert({ name: name.trim(), logo_url })
+    .insert({ name: name.trim(), logo_url, brochure_url })
     .select()
     .single();
   if (error) return res.status(500).json({ error: error.message });
@@ -60,14 +64,21 @@ router.post('/companies', adminAuth, upload.single('logo'), async (req, res) => 
 });
 
 // PUT /api/screening/companies/:id  (admin)
-router.put('/companies/:id', adminAuth, upload.single('logo'), async (req, res) => {
+router.put('/companies/:id', adminAuth, upload.fields([{ name: 'logo' }, { name: 'brochure' }]), async (req, res) => {
   const { name } = req.body;
   if (!name?.trim()) return res.status(400).json({ error: 'Company name is required' });
 
   const updates = { name: name.trim() };
-  if (req.file) {
-    const logo_url = await uploadLogo(req.file);
+  const logoFile = req.files?.logo?.[0];
+  const brochureFile = req.files?.brochure?.[0];
+
+  if (logoFile) {
+    const logo_url = await uploadLogo(logoFile);
     if (logo_url) updates.logo_url = logo_url;
+  }
+  if (brochureFile) {
+    const brochure_url = await uploadBrochure(brochureFile);
+    if (brochure_url) updates.brochure_url = brochure_url;
   }
 
   const { data, error } = await supabase
@@ -104,11 +115,9 @@ router.get('/companies/:id/branches', async (req, res) => {
 });
 
 // POST /api/screening/companies/:id/branches  (admin)
-router.post('/companies/:id/branches', adminAuth, upload.single('brochure'), async (req, res) => {
+router.post('/companies/:id/branches', adminAuth, upload.none(), async (req, res) => {
   const { name, contact_name, contact_phone, requires_echo_bed, test_types, registration_url } = req.body;
   if (!name?.trim()) return res.status(400).json({ error: 'Branch name is required' });
-
-  const brochure_url = req.file ? await uploadBrochure(req.file) : null;
 
   const { data, error } = await supabase
     .from('screening_branches')
@@ -120,7 +129,6 @@ router.post('/companies/:id/branches', adminAuth, upload.single('brochure'), asy
       requires_echo_bed: requires_echo_bed === 'true' || requires_echo_bed === true,
       test_types: Array.isArray(test_types) ? test_types : (test_types ? JSON.parse(test_types) : []),
       registration_url: registration_url?.trim() || null,
-      brochure_url,
     })
     .select()
     .single();
@@ -129,7 +137,7 @@ router.post('/companies/:id/branches', adminAuth, upload.single('brochure'), asy
 });
 
 // PUT /api/screening/branches/:id  (admin)
-router.put('/branches/:id', adminAuth, upload.single('brochure'), async (req, res) => {
+router.put('/branches/:id', adminAuth, upload.none(), async (req, res) => {
   const { name, contact_name, contact_phone, requires_echo_bed, test_types, registration_url } = req.body;
   if (!name?.trim()) return res.status(400).json({ error: 'Branch name is required' });
 
@@ -141,11 +149,6 @@ router.put('/branches/:id', adminAuth, upload.single('brochure'), async (req, re
     test_types: Array.isArray(test_types) ? test_types : (test_types ? JSON.parse(test_types) : []),
     registration_url: registration_url?.trim() || null,
   };
-
-  if (req.file) {
-    const brochure_url = await uploadBrochure(req.file);
-    if (brochure_url) updates.brochure_url = brochure_url;
-  }
 
   const { data, error } = await supabase
     .from('screening_branches')

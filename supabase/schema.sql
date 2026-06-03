@@ -88,6 +88,7 @@ CREATE TABLE IF NOT EXISTS screening_companies (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name TEXT NOT NULL,
   logo_url TEXT,
+  brochure_url TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -101,7 +102,6 @@ CREATE TABLE IF NOT EXISTS screening_branches (
   requires_echo_bed BOOLEAN DEFAULT FALSE,
   test_types TEXT[] DEFAULT '{}',
   registration_url TEXT,
-  brochure_url TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 

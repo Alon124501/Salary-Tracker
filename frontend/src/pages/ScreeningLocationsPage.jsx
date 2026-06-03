@@ -68,7 +68,7 @@ export default function ScreeningLocationsPage() {
   // Branch detail sheet
   const [selectedBranch, setSelectedBranch] = useState(null);
   const [activeTab, setActiveTab] = useState('details');
-  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [lightboxUrl, setLightboxUrl] = useState(null);
   const [smsPhone, setSmsPhone] = useState('');
 
   // Brochure upload (inline, from detail sheet)
@@ -80,6 +80,8 @@ export default function ScreeningLocationsPage() {
   const [companyForm, setCompanyForm] = useState(EMPTY_COMPANY_FORM);
   const [companyLogoFile, setCompanyLogoFile] = useState(null);
   const [companyLogoPreview, setCompanyLogoPreview] = useState(null);
+  const [companyBrochureFile, setCompanyBrochureFile] = useState(null);
+  const [companyBrochurePreview, setCompanyBrochurePreview] = useState(null);
   const [companySubmitting, setCompanySubmitting] = useState(false);
   const [companyFormError, setCompanyFormError] = useState('');
 
@@ -89,19 +91,17 @@ export default function ScreeningLocationsPage() {
   const [branchForm, setBranchForm] = useState(EMPTY_BRANCH_FORM);
   const [branchSubmitting, setBranchSubmitting] = useState(false);
   const [branchFormError, setBranchFormError] = useState('');
-  const [brochureFile, setBrochureFile] = useState(null);
-  const [brochurePreview, setBrochurePreview] = useState(null);
 
   useEffect(() => {
     const viewport = document.querySelector('meta[name=viewport]');
     if (!viewport) return;
     viewport.setAttribute(
       'content',
-      lightboxOpen
+      lightboxUrl
         ? 'width=device-width, initial-scale=1.0'
         : 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no'
     );
-  }, [lightboxOpen]);
+  }, [lightboxUrl]);
 
   // ── Load ───────────────────────────────────────────────────────────────
 
@@ -148,6 +148,8 @@ export default function ScreeningLocationsPage() {
     setCompanyForm(EMPTY_COMPANY_FORM);
     setCompanyLogoFile(null);
     setCompanyLogoPreview(null);
+    setCompanyBrochureFile(null);
+    setCompanyBrochurePreview(null);
     setCompanyFormError('');
     setShowCompanyForm(true);
   }
@@ -157,6 +159,8 @@ export default function ScreeningLocationsPage() {
     setCompanyForm({ name: company.name });
     setCompanyLogoFile(null);
     setCompanyLogoPreview(company.logo_url || null);
+    setCompanyBrochureFile(null);
+    setCompanyBrochurePreview(company.brochure_url || null);
     setCompanyFormError('');
     setShowCompanyForm(true);
   }
@@ -168,6 +172,13 @@ export default function ScreeningLocationsPage() {
     setCompanyLogoPreview(URL.createObjectURL(file));
   }
 
+  function handleBrochureChange(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setCompanyBrochureFile(file);
+    setCompanyBrochurePreview(URL.createObjectURL(file));
+  }
+
   async function submitCompany() {
     if (!companyForm.name.trim()) { setCompanyFormError('שם החברה הוא שדה חובה'); return; }
     setCompanySubmitting(true);
@@ -176,6 +187,7 @@ export default function ScreeningLocationsPage() {
       const formData = new FormData();
       formData.append('name', companyForm.name.trim());
       if (companyLogoFile) formData.append('logo', companyLogoFile);
+      if (companyBrochureFile) formData.append('brochure', companyBrochureFile);
 
       if (editingCompany) {
         const { data } = await api.put(`/screening/companies/${editingCompany.id}`, formData, {
@@ -214,8 +226,6 @@ export default function ScreeningLocationsPage() {
     setEditingBranch(null);
     setBranchForm(EMPTY_BRANCH_FORM);
     setBranchFormError('');
-    setBrochureFile(null);
-    setBrochurePreview(null);
     setShowBranchForm(true);
   }
 
@@ -229,8 +239,6 @@ export default function ScreeningLocationsPage() {
       test_types: branch.test_types || [],
       registration_url: branch.registration_url || '',
     });
-    setBrochureFile(null);
-    setBrochurePreview(branch.brochure_url || null);
     setBranchFormError('');
     setShowBranchForm(true);
   }
@@ -256,7 +264,6 @@ export default function ScreeningLocationsPage() {
       fd.append('requires_echo_bed', branchForm.requires_echo_bed ? 'true' : 'false');
       fd.append('test_types', JSON.stringify(branchForm.test_types));
       fd.append('registration_url', branchForm.registration_url.trim());
-      if (brochureFile) fd.append('brochure', brochureFile);
 
       const headers = { 'Content-Type': 'multipart/form-data' };
       if (editingBranch) {
@@ -275,22 +282,17 @@ export default function ScreeningLocationsPage() {
     }
   }
 
-  async function uploadBrochureInline(file) {
+  async function uploadCompanyBrochure(file) {
     setBrochureUploading(true);
     try {
       const fd = new FormData();
-      fd.append('name', selectedBranch.name);
-      fd.append('contact_name', selectedBranch.contact_name || '');
-      fd.append('contact_phone', selectedBranch.contact_phone || '');
-      fd.append('requires_echo_bed', selectedBranch.requires_echo_bed ? 'true' : 'false');
-      fd.append('test_types', JSON.stringify(selectedBranch.test_types || []));
-      fd.append('registration_url', selectedBranch.registration_url || '');
+      fd.append('name', selectedCompany.name);
       fd.append('brochure', file);
-      const { data } = await api.put(`/screening/branches/${selectedBranch.id}`, fd, {
+      const { data } = await api.put(`/screening/companies/${selectedCompany.id}`, fd, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
-      setSelectedBranch(data);
-      setBranches(prev => prev.map(b => b.id === data.id ? data : b));
+      setSelectedCompany(data);
+      setCompanies(prev => prev.map(c => c.id === data.id ? data : c));
     } catch {
       alert('שגיאה בהעלאת החוברת');
     } finally {
@@ -366,6 +368,20 @@ export default function ScreeningLocationsPage() {
             >
               <CompanyAvatar company={company} size="lg" />
               <p className="text-sm font-bold text-slate-800 text-center leading-tight">{company.name}</p>
+
+              {company.brochure_url && (
+                <button
+                  onClick={e => {
+                    e.stopPropagation();
+                    if (isPdf(company.brochure_url)) window.open(company.brochure_url, '_blank');
+                    else setLightboxUrl(company.brochure_url);
+                  }}
+                  className="flex items-center gap-1 text-xs font-bold text-brand-purple bg-purple-50 px-2.5 py-1 rounded-full hover:bg-purple-100 transition-colors"
+                >
+                  <span className="material-symbols-outlined text-sm">description</span>
+                  חוברת
+                </button>
+              )}
 
               {isAdmin && (
                 <div className="absolute top-2 left-2 flex gap-1" onClick={e => e.stopPropagation()}>
@@ -644,18 +660,18 @@ export default function ScreeningLocationsPage() {
               </>)}
 
               {activeTab === 'brochures' && (<>
-                {selectedBranch.brochure_url ? (
+                {selectedCompany?.brochure_url ? (
                   <div className="space-y-3">
-                    {isPdf(selectedBranch.brochure_url) ? (
+                    {isPdf(selectedCompany.brochure_url) ? (
                       <div className="rounded-2xl overflow-hidden border border-slate-100">
                         <embed
-                          src={selectedBranch.brochure_url}
+                          src={selectedCompany.brochure_url}
                           type="application/pdf"
                           className="w-full"
                           style={{ height: '480px' }}
                         />
                         <a
-                          href={selectedBranch.brochure_url}
+                          href={selectedCompany.brochure_url}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="flex items-center justify-center gap-1.5 py-3 text-xs font-bold text-brand-purple hover:underline"
@@ -666,11 +682,11 @@ export default function ScreeningLocationsPage() {
                       </div>
                     ) : (
                       <button
-                        onClick={() => setLightboxOpen(true)}
+                        onClick={() => setLightboxUrl(selectedCompany.brochure_url)}
                         className="w-full rounded-2xl overflow-hidden border border-slate-100 hover:border-brand-purple/40 transition-colors active:scale-[0.98]"
                       >
                         <img
-                          src={selectedBranch.brochure_url}
+                          src={selectedCompany.brochure_url}
                           alt="חוברת"
                           className="w-full object-contain max-h-64"
                         />
@@ -686,21 +702,21 @@ export default function ScreeningLocationsPage() {
                           ? <><span className="material-symbols-outlined text-base animate-spin">progress_activity</span> מעלה...</>
                           : <><span className="material-symbols-outlined text-base">upload</span> החלף חוברת</>
                         }
-                        <input type="file" accept="image/*,application/pdf" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) uploadBrochureInline(f); }} disabled={brochureUploading} />
+                        <input type="file" accept="image/*,application/pdf" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) uploadCompanyBrochure(f); }} disabled={brochureUploading} />
                       </label>
                     )}
                   </div>
                 ) : (
                   <div className="flex flex-col items-center justify-center py-10 gap-3 text-slate-300">
                     <span className="material-symbols-outlined text-5xl">description</span>
-                    <p className="text-sm text-slate-400">אין חוברת לסניף זה</p>
+                    <p className="text-sm text-slate-400">אין חוברת לחברה זו</p>
                     {isAdmin && (
                       <label className="flex items-center gap-2 mt-1 px-5 py-2.5 brand-gradient text-white text-sm font-bold rounded-full cursor-pointer active:scale-95 transition-transform">
                         {brochureUploading
                           ? <><span className="material-symbols-outlined text-base animate-spin">progress_activity</span> מעלה...</>
                           : <><span className="material-symbols-outlined text-base">upload</span> העלה חוברת</>
                         }
-                        <input type="file" accept="image/*,application/pdf" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) uploadBrochureInline(f); }} disabled={brochureUploading} />
+                        <input type="file" accept="image/*,application/pdf" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) uploadCompanyBrochure(f); }} disabled={brochureUploading} />
                       </label>
                     )}
                   </div>
@@ -713,19 +729,19 @@ export default function ScreeningLocationsPage() {
       )}
 
       {/* ══ Brochure lightbox ═════════════════════════════════════════ */}
-      {lightboxOpen && selectedBranch?.brochure_url && !isPdf(selectedBranch.brochure_url) && (
+      {lightboxUrl && (
         <div
           className="fixed inset-0 z-[70] flex items-center justify-center bg-black/90 p-4"
-          onClick={() => setLightboxOpen(false)}
+          onClick={() => setLightboxUrl(null)}
         >
           <button
             className="absolute top-4 right-4 w-10 h-10 flex items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20 transition-colors"
-            onClick={() => setLightboxOpen(false)}
+            onClick={() => setLightboxUrl(null)}
           >
             <span className="material-symbols-outlined text-xl">close</span>
           </button>
           <img
-            src={selectedBranch.brochure_url}
+            src={lightboxUrl}
             alt="חוברת"
             className="max-w-full max-h-full object-contain rounded-2xl"
             onClick={e => e.stopPropagation()}
@@ -782,6 +798,28 @@ export default function ScreeningLocationsPage() {
                     <p className="text-xs text-slate-400">PNG, JPG, WEBP עד 5MB</p>
                   </div>
                   <input type="file" accept="image/*" className="hidden" onChange={handleLogoChange} />
+                </label>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1.5">חוברת החברה</label>
+                <label className={`flex items-center gap-3 p-4 rounded-2xl border-2 border-dashed cursor-pointer transition-all ${companyBrochurePreview ? 'border-brand-purple/40 bg-purple-50' : 'border-slate-200 hover:border-brand-purple/30 hover:bg-purple-50/40'}`}>
+                  {companyBrochurePreview && !isPdf(companyBrochurePreview) ? (
+                    <img src={companyBrochurePreview} alt="preview" className="w-12 h-12 rounded-xl object-contain bg-white border border-slate-100" />
+                  ) : (
+                    <div className="w-12 h-12 rounded-xl bg-slate-100 flex items-center justify-center flex-shrink-0">
+                      <span className="material-symbols-outlined text-slate-400 text-2xl">
+                        {companyBrochurePreview ? 'picture_as_pdf' : 'description'}
+                      </span>
+                    </div>
+                  )}
+                  <div className="flex-1 min-w-0 text-right">
+                    <p className="text-sm font-semibold text-slate-700">
+                      {companyBrochureFile ? companyBrochureFile.name : companyBrochurePreview ? 'לחץ להחלפת חוברת' : 'העלה חוברת'}
+                    </p>
+                    <p className="text-xs text-slate-400">PNG, JPG, PDF עד 10MB</p>
+                  </div>
+                  <input type="file" accept="image/*,application/pdf" className="hidden" onChange={handleBrochureChange} />
                 </label>
               </div>
             </div>
@@ -914,31 +952,6 @@ export default function ScreeningLocationsPage() {
                   value={branchForm.registration_url}
                   onChange={e => setBranchForm(p => ({ ...p, registration_url: e.target.value }))}
                 />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1.5">חוברת (תמונה)</label>
-                <label className={`flex items-center gap-3 p-4 rounded-2xl border-2 border-dashed cursor-pointer transition-all ${brochurePreview ? 'border-brand-purple/40 bg-purple-50' : 'border-slate-200 hover:border-brand-purple/30 hover:bg-purple-50/40'}`}>
-                  {brochurePreview ? (
-                    <img src={brochurePreview} alt="preview" className="w-12 h-12 rounded-xl object-contain bg-white border border-slate-100" />
-                  ) : (
-                    <div className="w-12 h-12 rounded-xl bg-slate-100 flex items-center justify-center flex-shrink-0">
-                      <span className="material-symbols-outlined text-slate-400 text-2xl">description</span>
-                    </div>
-                  )}
-                  <div className="flex-1 min-w-0 text-right">
-                    <p className="text-sm font-semibold text-slate-700">
-                      {brochureFile ? brochureFile.name : brochurePreview ? 'לחץ להחלפת חוברת' : 'העלה חוברת'}
-                    </p>
-                    <p className="text-xs text-slate-400">PNG, JPG עד 10MB</p>
-                  </div>
-                  <input type="file" accept="image/*" className="hidden" onChange={e => {
-                    const f = e.target.files?.[0];
-                    if (!f) return;
-                    setBrochureFile(f);
-                    setBrochurePreview(URL.createObjectURL(f));
-                  }} />
-                </label>
               </div>
 
               {branchFormError && (
