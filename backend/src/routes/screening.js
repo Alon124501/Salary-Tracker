@@ -1,6 +1,9 @@
 'use strict';
 const express = require('express');
 const multer = require('multer');
+const archiver = require('archiver');
+const ExcelJS = require('exceljs');
+const Tesseract = require('tesseract.js');
 const supabase = require('../supabase');
 const auth = require('../middleware/auth');
 const adminAuth = require('../middleware/adminAuth');
@@ -198,6 +201,104 @@ async function voucherSignedUrl(filePath) {
     .createSignedUrl(filePath, 604800);
   return data?.signedUrl ?? null;
 }
+
+const IMAGE_EXTS = new Set(['jpg', 'jpeg', 'png', 'webp', 'gif', 'bmp', 'tiff']);
+
+async function ocrImage(buffer) {
+  try {
+    const { data: { text } } = await Tesseract.recognize(buffer, 'heb+eng', {
+      cachePath: '/tmp',
+      logger: () => {},
+    });
+    return text.trim();
+  } catch {
+    return null;
+  }
+}
+
+// Extract Israeli ID numbers (exactly 9 digits) and voucher numbers (5-12 digits, not 9)
+function extractFields(text) {
+  if (!text) return { idNumbers: '', voucherNumber: '' };
+  const allNumbers = [...text.matchAll(/\b(\d+)\b/g)].map(m => m[1]);
+  const ids = allNumbers.filter(n => n.length === 9);
+  const vouchers = allNumbers.filter(n => n.length >= 5 && n.length !== 9 && n.length <= 12);
+  return {
+    idNumbers: ids.join(', ') || '–',
+    voucherNumber: vouchers[0] || '–',
+  };
+}
+
+// GET /api/screening/branches/:id/vouchers/download?date=YYYY-MM-DD  (admin only)
+router.get('/branches/:id/vouchers/download', async (req, res) => {
+  const { date } = req.query;
+  if (!date) return res.status(400).json({ error: 'date query param required' });
+
+  const { data: profile } = await supabase
+    .from('profiles').select('is_admin').eq('id', req.userId).single();
+  if (!profile?.is_admin) return res.status(403).json({ error: 'Admin access required' });
+
+  const { data: vouchers, error } = await supabase
+    .from('screening_vouchers')
+    .select('*, profiles(first_name, last_name, username)')
+    .eq('branch_id', req.params.id)
+    .eq('work_date', date)
+    .order('created_at', { ascending: true });
+  if (error) return res.status(500).json({ error: error.message });
+  if (!vouchers?.length) return res.status(404).json({ error: 'No vouchers for this date' });
+
+  res.setHeader('Content-Type', 'application/zip');
+  res.setHeader('Content-Disposition', `attachment; filename="vouchers-${date}.zip"`);
+
+  const archive = archiver('zip', { zlib: { level: 6 } });
+  archive.pipe(res);
+
+  const workbook = new ExcelJS.Workbook();
+  const sheet = workbook.addWorksheet('Vouchers');
+  sheet.columns = [
+    { header: '#', key: 'num', width: 5 },
+    { header: 'שם עובד', key: 'employee', width: 25 },
+    { header: 'מספר זהות', key: 'idNumbers', width: 30 },
+    { header: 'מספר שובר', key: 'voucherNumber', width: 20 },
+  ];
+  sheet.getRow(1).font = { bold: true };
+
+  for (let i = 0; i < vouchers.length; i++) {
+    const v = vouchers[i];
+    const p = v.profiles;
+    const employeeName = (p ? `${p.first_name || ''} ${p.last_name || ''}`.trim() || p.username : 'unknown')
+      .replace(/\s+/g, '_');
+    const safeFileName = `${i + 1}_${employeeName}_${v.file_name}`;
+    const ext = v.file_name.split('.').pop().toLowerCase();
+    const isImage = IMAGE_EXTS.has(ext);
+
+    const { data: fileData, error: dlErr } = await supabase.storage
+      .from('screening-vouchers').download(v.file_url);
+    if (dlErr || !fileData) { continue; }
+
+    const arrayBuf = await fileData.arrayBuffer();
+    const buf = Buffer.from(arrayBuf);
+
+    archive.append(buf, { name: safeFileName });
+
+    const rawText = isImage ? await ocrImage(buf) : null;
+    const { idNumbers, voucherNumber } = extractFields(rawText);
+    const employeeDisplay = p
+      ? `${p.first_name || ''} ${p.last_name || ''}`.trim() || p.username
+      : 'unknown';
+
+    sheet.addRow({
+      num: i + 1,
+      employee: employeeDisplay,
+      idNumbers: isImage ? idNumbers : 'PDF – OCR skipped',
+      voucherNumber: isImage ? voucherNumber : 'PDF – OCR skipped',
+    });
+  }
+
+  const xlsxBuf = await workbook.xlsx.writeBuffer();
+  archive.append(Buffer.from(xlsxBuf), { name: `vouchers-${date}.xlsx` });
+
+  await archive.finalize();
+});
 
 // GET /api/screening/branches/:id/vouchers?date=YYYY-MM-DD
 router.get('/branches/:id/vouchers', async (req, res) => {

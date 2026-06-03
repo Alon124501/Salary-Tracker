@@ -97,6 +97,7 @@ export default function ScreeningLocationsPage() {
   const [vouchers, setVouchers] = useState([]);
   const [vouchersLoading, setVouchersLoading] = useState(false);
   const [voucherUploading, setVoucherUploading] = useState(false);
+  const [voucherDownloading, setVoucherDownloading] = useState(false);
 
   useEffect(() => {
     const viewport = document.querySelector('meta[name=viewport]');
@@ -372,6 +373,26 @@ export default function ScreeningLocationsPage() {
       alert('שגיאה בהעלאת השובר');
     } finally {
       setVoucherUploading(false);
+    }
+  }
+
+  async function downloadVouchers() {
+    setVoucherDownloading(true);
+    try {
+      const res = await api.get(
+        `/screening/branches/${selectedBranch.id}/vouchers/download?date=${voucherDate}`,
+        { responseType: 'blob', timeout: 300000 }
+      );
+      const url = URL.createObjectURL(res.data);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `vouchers-${voucherDate}.zip`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      alert('שגיאה בהורדת השוברים');
+    } finally {
+      setVoucherDownloading(false);
     }
   }
 
@@ -827,6 +848,20 @@ export default function ScreeningLocationsPage() {
                     <span className="material-symbols-outlined text-slate-500 text-base">chevron_left</span>
                   </button>
                 </div>
+
+                {/* Admin download button */}
+                {isAdmin && vouchers.length > 0 && (
+                  <button
+                    onClick={downloadVouchers}
+                    disabled={voucherDownloading}
+                    className="flex items-center justify-center gap-2 w-full py-2.5 border-2 border-brand-purple/30 text-brand-purple text-sm font-bold rounded-2xl hover:bg-purple-50 disabled:opacity-50 transition-colors"
+                  >
+                    {voucherDownloading
+                      ? <><span className="material-symbols-outlined text-base animate-spin">progress_activity</span> מכין ZIP + OCR...</>
+                      : <><span className="material-symbols-outlined text-base">download</span> הורד הכל ({vouchers.length})</>
+                    }
+                  </button>
+                )}
 
                 {/* Voucher list */}
                 {vouchersLoading ? (
