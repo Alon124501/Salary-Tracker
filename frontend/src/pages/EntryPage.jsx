@@ -10,7 +10,7 @@ function calcDaily(f) {
   const partial = f.partial_tests * 50;
   const rawTestsPay = insurance + screening + mixed + partial;
   const MIN_TESTS_PAY = 240;
-  const testsPay = totalTests > 0 && totalTests < 3 ? Math.max(rawTestsPay, MIN_TESTS_PAY) : rawTestsPay;
+  const testsPay = totalTests > 0 ? Math.max(rawTestsPay, MIN_TESTS_PAY) : rawTestsPay;
   const minBonus = testsPay - rawTestsPay;
   const km = f.kilometers * 2 + (f.kilometers >= 100 ? 100 : 0);
   const office = f.office_hours * 60;

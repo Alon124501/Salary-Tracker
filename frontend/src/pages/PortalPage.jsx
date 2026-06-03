@@ -64,13 +64,11 @@ export default function PortalPage() {
   const [tab, setTab] = useState('apps');
 
   useEffect(() => {
-    Promise.all([
-      api.get('/portal/credentials').then(r => r.data),
-      api.get('/faq').then(r => r.data),
-    ]).then(([c, f]) => {
-      setCreds(c);
-      setFaqItems(f);
-    }).catch(() => {}).finally(() => setLoading(false));
+    let settled = 0;
+    const done = () => { if (++settled === 2) setLoading(false); };
+
+    api.get('/portal/credentials').then(r => setCreds(r.data)).catch(() => {}).finally(done);
+    api.get('/faq').then(r => setFaqItems(r.data)).catch(() => {}).finally(done);
   }, []);
 
   function toggle(key) {

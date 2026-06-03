@@ -3,7 +3,6 @@ const express = require('express');
 const multer = require('multer');
 const archiver = require('archiver');
 const ExcelJS = require('exceljs');
-const Tesseract = require('tesseract.js');
 const supabase = require('../supabase');
 const auth = require('../middleware/auth');
 const adminAuth = require('../middleware/adminAuth');
@@ -206,6 +205,7 @@ const IMAGE_EXTS = new Set(['jpg', 'jpeg', 'png', 'webp', 'gif', 'bmp', 'tiff'])
 
 async function ocrImage(buffer) {
   try {
+    const Tesseract = require('tesseract.js');
     const { data: { text } } = await Tesseract.recognize(buffer, 'heb+eng', {
       cachePath: '/tmp',
       logger: () => {},

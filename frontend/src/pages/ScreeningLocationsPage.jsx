@@ -218,7 +218,8 @@ export default function ScreeningLocationsPage() {
       }
       setShowCompanyForm(false);
     } catch (err) {
-      setCompanyFormError(err.response?.data?.error || 'שגיאה בשמירה');
+      const msg = err.response?.data?.error;
+      setCompanyFormError(typeof msg === 'string' ? msg : 'שגיאה בשמירה');
     } finally {
       setCompanySubmitting(false);
     }
@@ -304,7 +305,8 @@ export default function ScreeningLocationsPage() {
       }
       setShowBranchForm(false);
     } catch (err) {
-      setBranchFormError(err.response?.data?.error || 'שגיאה בשמירה');
+      const msg = err.response?.data?.error;
+      setBranchFormError(typeof msg === 'string' ? msg : 'שגיאה בשמירה');
     } finally {
       setBranchSubmitting(false);
     }
