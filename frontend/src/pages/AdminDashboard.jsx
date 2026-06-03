@@ -100,6 +100,7 @@ export default function AdminDashboard() {
   const [selectedUser, setSelectedUser] = useState(null);
   const [drawerEdits, setDrawerEdits] = useState({});
   const [drawerSaving, setDrawerSaving] = useState(false);
+  const [currentUserId, setCurrentUserId] = useState(null);
 
   const loadUsers = useCallback(async () => {
     try {
@@ -113,7 +114,10 @@ export default function AdminDashboard() {
     }
   }, []);
 
-  useEffect(() => { loadUsers(); }, [loadUsers]);
+  useEffect(() => {
+    loadUsers();
+    api.get('/auth/me').then(r => setCurrentUserId(r.data.id)).catch(() => {});
+  }, [loadUsers]);
 
   const loadFaq = useCallback(async () => {
     setFaqLoading(true);
@@ -364,6 +368,7 @@ export default function AdminDashboard() {
       clothing_size: user.clothing_size || '',
       uniform_sets: user.uniform_sets ?? '',
       mileage_rate: user.mileage_rate ?? 2,
+      is_admin: user.is_admin ?? false,
     });
   }
 
@@ -983,6 +988,28 @@ export default function AdminDashboard() {
                   <Field label="₪ / km" value={String(drawerEdits.mileage_rate)} onChange={v => setDrawerEdits(p => ({...p, mileage_rate: v}))} type="number" step="0.5" />
                 </div>
               </section>
+              <section>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-3">Permissions</p>
+                <label className={`flex items-center gap-3 p-4 rounded-2xl select-none ${selectedUser.id === currentUserId ? 'opacity-40 pointer-events-none bg-slate-50' : 'bg-red-50 cursor-pointer'}`}>
+                  <div
+                    className={`w-12 h-6 rounded-full transition-colors flex items-center px-0.5 ${drawerEdits.is_admin ? 'bg-red-500' : 'bg-slate-200'}`}
+                    onClick={() => {
+                      if (selectedUser.id === currentUserId) return;
+                      if (!drawerEdits.is_admin && !confirm(`Grant full admin access to ${selectedUser.first_name || selectedUser.username}?`)) return;
+                      setDrawerEdits(p => ({ ...p, is_admin: !p.is_admin }));
+                    }}
+                  >
+                    <div className={`w-5 h-5 rounded-full bg-white shadow transition-transform ${drawerEdits.is_admin ? 'translate-x-6' : 'translate-x-0'}`} />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-slate-800">Admin Access</p>
+                    <p className="text-xs text-slate-400">
+                      {selectedUser.id === currentUserId ? 'Cannot change your own status' : 'Full access to admin dashboard'}
+                    </p>
+                  </div>
+                </label>
+              </section>
+
               <section>
                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-3">Equipment</p>
                 <div className="flex flex-wrap gap-2">

@@ -194,6 +194,11 @@ router.patch('/users/:id', async (req, res) => {
     'clothing_size', 'uniform_sets', 'echo_certified', 'mileage_rate',
   ];
   const updates = {};
+  if (req.body.is_admin !== undefined) {
+    if (req.params.id === req.userId)
+      return res.status(403).json({ error: 'Cannot change your own admin status' });
+    updates.is_admin = req.body.is_admin === true || req.body.is_admin === 'true';
+  }
   for (const key of allowed) {
     if (req.body[key] !== undefined) updates[key] = req.body[key] === '' ? null : req.body[key];
   }
