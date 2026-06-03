@@ -702,7 +702,7 @@ export default function ScreeningLocationsPage() {
                           ? <><span className="material-symbols-outlined text-base animate-spin">progress_activity</span> מעלה...</>
                           : <><span className="material-symbols-outlined text-base">upload</span> החלף חוברת</>
                         }
-                        <input type="file" accept="image/*,application/pdf" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) uploadCompanyBrochure(f); }} disabled={brochureUploading} />
+                        <input type="file" accept="image/*,application/pdf,.pdf" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) uploadCompanyBrochure(f); }} disabled={brochureUploading} />
                       </label>
                     )}
                   </div>
@@ -716,7 +716,7 @@ export default function ScreeningLocationsPage() {
                           ? <><span className="material-symbols-outlined text-base animate-spin">progress_activity</span> מעלה...</>
                           : <><span className="material-symbols-outlined text-base">upload</span> העלה חוברת</>
                         }
-                        <input type="file" accept="image/*,application/pdf" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) uploadCompanyBrochure(f); }} disabled={brochureUploading} />
+                        <input type="file" accept="image/*,application/pdf,.pdf" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) uploadCompanyBrochure(f); }} disabled={brochureUploading} />
                       </label>
                     )}
                   </div>
@@ -819,7 +819,7 @@ export default function ScreeningLocationsPage() {
                     </p>
                     <p className="text-xs text-slate-400">PNG, JPG, PDF עד 10MB</p>
                   </div>
-                  <input type="file" accept="image/*,application/pdf" className="hidden" onChange={handleBrochureChange} />
+                  <input type="file" accept="image/*,application/pdf,.pdf" className="hidden" onChange={handleBrochureChange} />
                 </label>
               </div>
             </div>
