@@ -424,8 +424,8 @@ export default function ScreeningLocationsPage() {
         <div className="fixed inset-0 z-40 flex items-center justify-center p-4" onClick={closeCompanySheet}>
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
           <div
-            className="relative w-full max-w-md bg-white rounded-3xl flex flex-col"
-            style={{ maxHeight: '82vh' }}
+            className="relative w-full max-w-md bg-white rounded-3xl flex flex-col overflow-hidden"
+            style={{ maxHeight: '82dvh' }}
             onClick={e => e.stopPropagation()}
           >
 
@@ -456,7 +456,7 @@ export default function ScreeningLocationsPage() {
             </div>
 
             {/* Branch list */}
-            <div className="flex-1 overflow-y-auto">
+            <div className="flex-1 overflow-y-auto min-h-0">
               {branchesLoading ? (
                 <div className="flex justify-center py-12">
                   <span className="material-symbols-outlined text-brand-purple animate-spin text-3xl">progress_activity</span>
@@ -515,7 +515,7 @@ export default function ScreeningLocationsPage() {
           <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setSelectedBranch(null)} />
           <div
             className="relative w-full max-w-md bg-white rounded-3xl flex flex-col overflow-hidden"
-            style={{ maxHeight: '88vh' }}
+            style={{ maxHeight: '88dvh' }}
             onClick={e => e.stopPropagation()}
           >
 
@@ -560,7 +560,7 @@ export default function ScreeningLocationsPage() {
             </div>
 
             {/* Content */}
-            <div className="flex-1 overflow-y-auto p-5 space-y-4">
+            <div className="flex-1 overflow-y-auto min-h-0 p-5 space-y-4">
 
               {activeTab === 'details' && (<>
 
