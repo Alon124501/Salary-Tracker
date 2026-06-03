@@ -13,6 +13,10 @@ const TEST_COLORS = {
   fit_wellness: 'bg-sky-50 text-sky-600',
 };
 
+function localDateStr(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 const EMPTY_COMPANY_FORM = { name: '', requires_vouchers: false };
 const EMPTY_BRANCH_FORM = {
   name: '', contacts: [],
@@ -93,7 +97,7 @@ export default function ScreeningLocationsPage() {
   const [branchFormError, setBranchFormError] = useState('');
 
   // Vouchers
-  const [voucherDate, setVoucherDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [voucherDate, setVoucherDate] = useState(() => localDateStr(new Date()));
   const [vouchers, setVouchers] = useState([]);
   const [vouchersLoading, setVouchersLoading] = useState(false);
   const [voucherUploading, setVoucherUploading] = useState(false);
@@ -153,6 +157,8 @@ export default function ScreeningLocationsPage() {
     setSelectedCompany(null);
     setBranches([]);
     setSelectedBranch(null);
+    setVouchers([]);
+    setVoucherDate(localDateStr(new Date()));
   }
 
   // ── Company CRUD ───────────────────────────────────────────────────────
@@ -317,6 +323,7 @@ export default function ScreeningLocationsPage() {
     try {
       const fd = new FormData();
       fd.append('name', selectedCompany.name);
+      fd.append('requires_vouchers', selectedCompany.requires_vouchers ? 'true' : 'false');
       fd.append('brochure', file);
       const { data } = await api.put(`/screening/companies/${selectedCompany.id}`, fd, {
         headers: { 'Content-Type': 'multipart/form-data' },
@@ -390,7 +397,7 @@ export default function ScreeningLocationsPage() {
       a.href = url;
       a.download = `vouchers-${voucherDate}.zip`;
       a.click();
-      URL.revokeObjectURL(url);
+      setTimeout(() => URL.revokeObjectURL(url), 10000);
     } catch {
       alert('שגיאה בהורדת השוברים');
     } finally {
@@ -823,8 +830,8 @@ export default function ScreeningLocationsPage() {
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => {
-                      const d = new Date(voucherDate); d.setDate(d.getDate() - 1);
-                      const next = d.toISOString().slice(0, 10);
+                      const [y, m, d] = voucherDate.split('-').map(Number);
+                      const next = localDateStr(new Date(y, m - 1, d - 1));
                       setVoucherDate(next);
                       loadVouchers(selectedBranch.id, next);
                     }}
@@ -840,8 +847,8 @@ export default function ScreeningLocationsPage() {
                   />
                   <button
                     onClick={() => {
-                      const d = new Date(voucherDate); d.setDate(d.getDate() + 1);
-                      const next = d.toISOString().slice(0, 10);
+                      const [y, m, d] = voucherDate.split('-').map(Number);
+                      const next = localDateStr(new Date(y, m - 1, d + 1));
                       setVoucherDate(next);
                       loadVouchers(selectedBranch.id, next);
                     }}

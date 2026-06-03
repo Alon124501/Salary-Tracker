@@ -125,9 +125,14 @@ router.post('/companies/:id/branches', adminAuth, upload.none(), async (req, res
   const { name, contacts, requires_echo_bed, test_types, registration_url } = req.body;
   if (!name?.trim()) return res.status(400).json({ error: 'Branch name is required' });
 
-  const parsedContacts = contacts
-    ? (typeof contacts === 'string' ? JSON.parse(contacts) : contacts)
-    : [];
+  let parsedContacts;
+  try {
+    parsedContacts = contacts
+      ? (typeof contacts === 'string' ? JSON.parse(contacts) : contacts)
+      : [];
+  } catch {
+    return res.status(400).json({ error: 'Invalid contacts format' });
+  }
 
   const { data, error } = await supabase
     .from('screening_branches')
@@ -150,9 +155,14 @@ router.put('/branches/:id', adminAuth, upload.none(), async (req, res) => {
   const { name, contacts, requires_echo_bed, test_types, registration_url } = req.body;
   if (!name?.trim()) return res.status(400).json({ error: 'Branch name is required' });
 
-  const parsedContacts = contacts
-    ? (typeof contacts === 'string' ? JSON.parse(contacts) : contacts)
-    : [];
+  let parsedContacts;
+  try {
+    parsedContacts = contacts
+      ? (typeof contacts === 'string' ? JSON.parse(contacts) : contacts)
+      : [];
+  } catch {
+    return res.status(400).json({ error: 'Invalid contacts format' });
+  }
 
   const updates = {
     name: name.trim(),
@@ -250,6 +260,7 @@ router.get('/branches/:id/vouchers/download', async (req, res) => {
   res.setHeader('Content-Disposition', `attachment; filename="vouchers-${date}.zip"`);
 
   const archive = archiver('zip', { zlib: { level: 6 } });
+  archive.on('error', () => res.destroy());
   archive.pipe(res);
 
   const workbook = new ExcelJS.Workbook();
@@ -387,7 +398,8 @@ router.delete('/vouchers/:id', async (req, res) => {
     return res.status(403).json({ error: 'Not authorised' });
   }
 
-  await supabase.storage.from('screening-vouchers').remove([voucher.file_url]);
+  const { error: storageErr } = await supabase.storage.from('screening-vouchers').remove([voucher.file_url]);
+  if (storageErr) return res.status(500).json({ error: 'Failed to delete file from storage' });
   const { error } = await supabase.from('screening_vouchers').delete().eq('id', req.params.id);
   if (error) return res.status(500).json({ error: error.message });
   res.json({ success: true });
