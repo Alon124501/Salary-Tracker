@@ -117,16 +117,19 @@ router.get('/companies/:id/branches', async (req, res) => {
 
 // POST /api/screening/companies/:id/branches  (admin)
 router.post('/companies/:id/branches', adminAuth, upload.none(), async (req, res) => {
-  const { name, contact_name, contact_phone, requires_echo_bed, test_types, registration_url } = req.body;
+  const { name, contacts, requires_echo_bed, test_types, registration_url } = req.body;
   if (!name?.trim()) return res.status(400).json({ error: 'Branch name is required' });
+
+  const parsedContacts = contacts
+    ? (typeof contacts === 'string' ? JSON.parse(contacts) : contacts)
+    : [];
 
   const { data, error } = await supabase
     .from('screening_branches')
     .insert({
       company_id: req.params.id,
       name: name.trim(),
-      contact_name: contact_name?.trim() || null,
-      contact_phone: contact_phone?.trim() || null,
+      contacts: parsedContacts,
       requires_echo_bed: requires_echo_bed === 'true' || requires_echo_bed === true,
       test_types: Array.isArray(test_types) ? test_types : (test_types ? JSON.parse(test_types) : []),
       registration_url: registration_url?.trim() || null,
@@ -139,13 +142,16 @@ router.post('/companies/:id/branches', adminAuth, upload.none(), async (req, res
 
 // PUT /api/screening/branches/:id  (admin)
 router.put('/branches/:id', adminAuth, upload.none(), async (req, res) => {
-  const { name, contact_name, contact_phone, requires_echo_bed, test_types, registration_url } = req.body;
+  const { name, contacts, requires_echo_bed, test_types, registration_url } = req.body;
   if (!name?.trim()) return res.status(400).json({ error: 'Branch name is required' });
+
+  const parsedContacts = contacts
+    ? (typeof contacts === 'string' ? JSON.parse(contacts) : contacts)
+    : [];
 
   const updates = {
     name: name.trim(),
-    contact_name: contact_name?.trim() || null,
-    contact_phone: contact_phone?.trim() || null,
+    contacts: parsedContacts,
     requires_echo_bed: requires_echo_bed === 'true' || requires_echo_bed === true,
     test_types: Array.isArray(test_types) ? test_types : (test_types ? JSON.parse(test_types) : []),
     registration_url: registration_url?.trim() || null,

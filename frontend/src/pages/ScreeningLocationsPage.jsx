@@ -15,7 +15,7 @@ const TEST_COLORS = {
 
 const EMPTY_COMPANY_FORM = { name: '' };
 const EMPTY_BRANCH_FORM = {
-  name: '', contact_name: '', contact_phone: '',
+  name: '', contacts: [],
   requires_echo_bed: false, test_types: [], registration_url: '',
 };
 
@@ -233,14 +233,28 @@ export default function ScreeningLocationsPage() {
     setEditingBranch(branch);
     setBranchForm({
       name: branch.name,
-      contact_name: branch.contact_name || '',
-      contact_phone: branch.contact_phone || '',
+      contacts: branch.contacts || [],
       requires_echo_bed: !!branch.requires_echo_bed,
       test_types: branch.test_types || [],
       registration_url: branch.registration_url || '',
     });
     setBranchFormError('');
     setShowBranchForm(true);
+  }
+
+  function addContact() {
+    setBranchForm(p => ({ ...p, contacts: [...p.contacts, { name: '', phone: '' }] }));
+  }
+
+  function removeContact(index) {
+    setBranchForm(p => ({ ...p, contacts: p.contacts.filter((_, i) => i !== index) }));
+  }
+
+  function updateContact(index, field, value) {
+    setBranchForm(p => ({
+      ...p,
+      contacts: p.contacts.map((c, i) => i === index ? { ...c, [field]: value } : c),
+    }));
   }
 
   function toggleTestType(type) {
@@ -259,8 +273,7 @@ export default function ScreeningLocationsPage() {
     try {
       const fd = new FormData();
       fd.append('name', branchForm.name.trim());
-      fd.append('contact_name', branchForm.contact_name.trim());
-      fd.append('contact_phone', branchForm.contact_phone.trim());
+      fd.append('contacts', JSON.stringify(branchForm.contacts.filter(c => c.name.trim() || c.phone.trim())));
       fd.append('requires_echo_bed', branchForm.requires_echo_bed ? 'true' : 'false');
       fd.append('test_types', JSON.stringify(branchForm.test_types));
       fd.append('registration_url', branchForm.registration_url.trim());
@@ -465,8 +478,8 @@ export default function ScreeningLocationsPage() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="font-semibold text-slate-800 text-sm truncate">{branch.name}</p>
-                      {branch.contact_name && (
-                        <p className="text-xs text-slate-400 truncate">{branch.contact_name}</p>
+                      {branch.contacts?.[0]?.name && (
+                        <p className="text-xs text-slate-400 truncate">{branch.contacts[0].name}</p>
                       )}
                     </div>
 
@@ -551,47 +564,47 @@ export default function ScreeningLocationsPage() {
 
               {activeTab === 'details' && (<>
 
-                {/* Contact card */}
-                {(selectedBranch.contact_name || selectedBranch.contact_phone) && (
-                  <div className="bg-slate-50 rounded-2xl p-4 space-y-3">
-                    {selectedBranch.contact_name && (
-                      <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-xl bg-purple-50 flex items-center justify-center flex-shrink-0">
-                          <span className="material-symbols-outlined text-brand-purple text-base" style={{ fontVariationSettings: "'FILL' 1" }}>person</span>
+                {/* Contacts */}
+                {selectedBranch.contacts?.map((contact, i) => (
+                  <div key={i} className="space-y-3">
+                    <div className="bg-slate-50 rounded-2xl p-4 space-y-3">
+                      {contact.name && (
+                        <div className="flex items-center gap-3">
+                          <div className="w-9 h-9 rounded-xl bg-purple-50 flex items-center justify-center flex-shrink-0">
+                            <span className="material-symbols-outlined text-brand-purple text-base" style={{ fontVariationSettings: "'FILL' 1" }}>person</span>
+                          </div>
+                          <div>
+                            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">איש קשר</p>
+                            <p className="font-semibold text-slate-800 text-sm">{contact.name}</p>
+                          </div>
                         </div>
-                        <div>
-                          <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">איש קשר</p>
-                          <p className="font-semibold text-slate-800 text-sm">{selectedBranch.contact_name}</p>
+                      )}
+                      {contact.phone && (
+                        <div className="flex items-center gap-3">
+                          <div className="w-9 h-9 rounded-xl bg-purple-50 flex items-center justify-center flex-shrink-0">
+                            <span className="material-symbols-outlined text-brand-purple text-base" style={{ fontVariationSettings: "'FILL' 1" }}>phone</span>
+                          </div>
+                          <div>
+                            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">מספר טלפון</p>
+                            <p className="font-semibold text-slate-800 text-sm" dir="ltr">{contact.phone}</p>
+                          </div>
                         </div>
-                      </div>
-                    )}
-                    {selectedBranch.contact_phone && (
-                      <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-xl bg-purple-50 flex items-center justify-center flex-shrink-0">
-                          <span className="material-symbols-outlined text-brand-purple text-base" style={{ fontVariationSettings: "'FILL' 1" }}>phone</span>
-                        </div>
-                        <div>
-                          <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">מספר טלפון</p>
-                          <p className="font-semibold text-slate-800 text-sm" dir="ltr">{selectedBranch.contact_phone}</p>
-                        </div>
-                      </div>
+                      )}
+                    </div>
+                    {contact.phone && (
+                      <a
+                        href={whatsappLink(contact.phone)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center justify-center gap-2.5 w-full py-3.5 rounded-2xl font-bold text-white text-sm transition-opacity active:opacity-80"
+                        style={{ backgroundColor: '#25D366' }}
+                      >
+                        <WhatsAppIcon />
+                        {contact.name ? `WhatsApp — ${contact.name}` : 'שלח הודעה ב-WhatsApp'}
+                      </a>
                     )}
                   </div>
-                )}
-
-                {/* WhatsApp button */}
-                {selectedBranch.contact_phone && (
-                  <a
-                    href={whatsappLink(selectedBranch.contact_phone)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center justify-center gap-2.5 w-full py-3.5 rounded-2xl font-bold text-white text-sm transition-opacity active:opacity-80"
-                    style={{ backgroundColor: '#25D366' }}
-                  >
-                    <WhatsAppIcon />
-                    שלח הודעה ב-WhatsApp
-                  </a>
-                )}
+                ))}
 
                 {/* Echo bed badge */}
                 <div
@@ -654,7 +667,7 @@ export default function ScreeningLocationsPage() {
                   </div>
                 )}
 
-                {!selectedBranch.contact_name && !selectedBranch.contact_phone && !selectedBranch.test_types?.length && !selectedBranch.registration_url && (
+                {!selectedBranch.contacts?.length && !selectedBranch.test_types?.length && !selectedBranch.registration_url && (
                   <p className="text-sm text-slate-400 text-center py-4">אין פרטים נוספים לסניף זה</p>
                 )}
               </>)}
@@ -884,25 +897,50 @@ export default function ScreeningLocationsPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1.5">שם איש קשר</label>
-                <input
-                  className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-purple/30 text-right"
-                  placeholder="שם מלא"
-                  value={branchForm.contact_name}
-                  onChange={e => setBranchForm(p => ({ ...p, contact_name: e.target.value }))}
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1.5">מספר טלפון</label>
-                <input
-                  className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-purple/30"
-                  placeholder="050-0000000"
-                  dir="ltr"
-                  type="tel"
-                  value={branchForm.contact_phone}
-                  onChange={e => setBranchForm(p => ({ ...p, contact_phone: e.target.value }))}
-                />
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">אנשי קשר</label>
+                  <button
+                    type="button"
+                    onClick={addContact}
+                    className="flex items-center gap-1 text-xs font-bold text-brand-purple bg-purple-50 px-2.5 py-1 rounded-full hover:bg-purple-100 transition-colors"
+                  >
+                    <span className="material-symbols-outlined text-sm">add</span>
+                    הוסף
+                  </button>
+                </div>
+                {branchForm.contacts.length === 0 ? (
+                  <p className="text-xs text-slate-400 text-center py-2">אין אנשי קשר</p>
+                ) : (
+                  <div className="space-y-2">
+                    {branchForm.contacts.map((contact, i) => (
+                      <div key={i} className="flex gap-2 items-start">
+                        <div className="flex-1 space-y-1.5">
+                          <input
+                            className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-purple/30 text-right"
+                            placeholder="שם מלא"
+                            value={contact.name}
+                            onChange={e => updateContact(i, 'name', e.target.value)}
+                          />
+                          <input
+                            className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-purple/30"
+                            placeholder="050-0000000"
+                            dir="ltr"
+                            type="tel"
+                            value={contact.phone}
+                            onChange={e => updateContact(i, 'phone', e.target.value)}
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => removeContact(i)}
+                          className="mt-1 w-8 h-8 flex items-center justify-center rounded-xl text-slate-300 hover:text-red-500 hover:bg-red-50 transition-colors flex-shrink-0"
+                        >
+                          <span className="material-symbols-outlined text-sm">delete</span>
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* Echo bed toggle */}
