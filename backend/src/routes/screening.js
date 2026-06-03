@@ -55,9 +55,11 @@ router.post('/companies', adminAuth, upload.fields([{ name: 'logo' }, { name: 'b
   const logo_url = logoFile ? await uploadLogo(logoFile) : null;
   const brochure_url = brochureFile ? await uploadBrochure(brochureFile) : null;
 
+  const requires_vouchers = req.body.requires_vouchers === 'true' || req.body.requires_vouchers === true;
+
   const { data, error } = await supabase
     .from('screening_companies')
-    .insert({ name: name.trim(), logo_url, brochure_url })
+    .insert({ name: name.trim(), logo_url, brochure_url, requires_vouchers })
     .select()
     .single();
   if (error) return res.status(500).json({ error: error.message });
@@ -81,6 +83,7 @@ router.put('/companies/:id', adminAuth, upload.fields([{ name: 'logo' }, { name:
     const brochure_url = await uploadBrochure(brochureFile);
     if (brochure_url) updates.brochure_url = brochure_url;
   }
+  updates.requires_vouchers = req.body.requires_vouchers === 'true' || req.body.requires_vouchers === true;
 
   const { data, error } = await supabase
     .from('screening_companies')
@@ -173,6 +176,118 @@ router.delete('/branches/:id', adminAuth, async (req, res) => {
     .from('screening_branches')
     .delete()
     .eq('id', req.params.id);
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ success: true });
+});
+
+// ── Vouchers ───────────────────────────────────────────────────────────────
+
+async function uploadVoucherFile(file, branchId, workDate, userId) {
+  const ext = file.originalname.split('.').pop() || 'jpg';
+  const filePath = `${branchId}/${workDate}/${userId}/${Date.now()}.${ext}`;
+  const { error } = await supabase.storage
+    .from('screening-vouchers')
+    .upload(filePath, file.buffer, { contentType: file.mimetype, upsert: false });
+  if (error) return null;
+  return filePath;
+}
+
+async function voucherSignedUrl(filePath) {
+  const { data } = await supabase.storage
+    .from('screening-vouchers')
+    .createSignedUrl(filePath, 604800);
+  return data?.signedUrl ?? null;
+}
+
+// GET /api/screening/branches/:id/vouchers?date=YYYY-MM-DD
+router.get('/branches/:id/vouchers', async (req, res) => {
+  const { date } = req.query;
+  if (!date) return res.status(400).json({ error: 'date query param required' });
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('is_admin')
+    .eq('id', req.userId)
+    .single();
+  const isAdmin = !!profile?.is_admin;
+
+  let query = supabase
+    .from('screening_vouchers')
+    .select('*, profiles(first_name, last_name, username)')
+    .eq('branch_id', req.params.id)
+    .eq('work_date', date)
+    .order('created_at', { ascending: false });
+
+  if (!isAdmin) query = query.eq('user_id', req.userId);
+
+  const { data, error } = await query;
+  if (error) return res.status(500).json({ error: error.message });
+
+  const rows = await Promise.all((data || []).map(async v => {
+    const signed_url = await voucherSignedUrl(v.file_url);
+    const p = v.profiles;
+    return {
+      id: v.id,
+      file_name: v.file_name,
+      file_url: v.file_url,
+      signed_url,
+      created_at: v.created_at,
+      user_id: v.user_id,
+      ...(isAdmin && p ? { user_label: `${p.first_name || ''} ${p.last_name || ''}`.trim() || p.username } : {}),
+    };
+  }));
+
+  res.json(rows);
+});
+
+// POST /api/screening/branches/:id/vouchers
+router.post('/branches/:id/vouchers', upload.single('voucher'), async (req, res) => {
+  const { work_date } = req.body;
+  if (!work_date) return res.status(400).json({ error: 'work_date is required' });
+  if (!req.file) return res.status(400).json({ error: 'voucher file is required' });
+
+  const filePath = await uploadVoucherFile(req.file, req.params.id, work_date, req.userId);
+  if (!filePath) return res.status(500).json({ error: 'File upload failed' });
+
+  const { data, error } = await supabase
+    .from('screening_vouchers')
+    .insert({
+      branch_id: req.params.id,
+      user_id: req.userId,
+      work_date,
+      file_url: filePath,
+      file_name: req.file.originalname,
+    })
+    .select()
+    .single();
+  if (error) return res.status(500).json({ error: error.message });
+
+  const signed_url = await voucherSignedUrl(filePath);
+  res.status(201).json({ ...data, signed_url });
+});
+
+// DELETE /api/screening/vouchers/:id
+router.delete('/vouchers/:id', async (req, res) => {
+  const { data: voucher, error: fetchErr } = await supabase
+    .from('screening_vouchers')
+    .select('*')
+    .eq('id', req.params.id)
+    .single();
+  if (fetchErr || !voucher) return res.status(404).json({ error: 'Voucher not found' });
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('is_admin')
+    .eq('id', req.userId)
+    .single();
+  const isAdmin = !!profile?.is_admin;
+
+  if (voucher.user_id !== req.userId && !isAdmin) {
+    return res.status(403).json({ error: 'Not authorised' });
+  }
+
+  await supabase.storage.from('screening-vouchers').remove([voucher.file_url]);
+  const { error } = await supabase.from('screening_vouchers').delete().eq('id', req.params.id);
   if (error) return res.status(500).json({ error: error.message });
   res.json({ success: true });
 });

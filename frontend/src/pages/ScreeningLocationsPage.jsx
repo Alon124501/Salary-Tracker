@@ -13,7 +13,7 @@ const TEST_COLORS = {
   fit_wellness: 'bg-sky-50 text-sky-600',
 };
 
-const EMPTY_COMPANY_FORM = { name: '' };
+const EMPTY_COMPANY_FORM = { name: '', requires_vouchers: false };
 const EMPTY_BRANCH_FORM = {
   name: '', contacts: [],
   requires_echo_bed: false, test_types: [], registration_url: '',
@@ -92,6 +92,12 @@ export default function ScreeningLocationsPage() {
   const [branchSubmitting, setBranchSubmitting] = useState(false);
   const [branchFormError, setBranchFormError] = useState('');
 
+  // Vouchers
+  const [voucherDate, setVoucherDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [vouchers, setVouchers] = useState([]);
+  const [vouchersLoading, setVouchersLoading] = useState(false);
+  const [voucherUploading, setVoucherUploading] = useState(false);
+
   useEffect(() => {
     const viewport = document.querySelector('meta[name=viewport]');
     if (!viewport) return;
@@ -116,6 +122,13 @@ export default function ScreeningLocationsPage() {
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    if (activeTab === 'vouchers' && selectedBranch) {
+      loadVouchers(selectedBranch.id, voucherDate);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, selectedBranch?.id]);
 
   const loadBranches = useCallback(async (companyId) => {
     setBranchesLoading(true);
@@ -156,7 +169,7 @@ export default function ScreeningLocationsPage() {
 
   function openEditCompany(company) {
     setEditingCompany(company);
-    setCompanyForm({ name: company.name });
+    setCompanyForm({ name: company.name, requires_vouchers: !!company.requires_vouchers });
     setCompanyLogoFile(null);
     setCompanyLogoPreview(company.logo_url || null);
     setCompanyBrochureFile(null);
@@ -186,6 +199,7 @@ export default function ScreeningLocationsPage() {
     try {
       const formData = new FormData();
       formData.append('name', companyForm.name.trim());
+      formData.append('requires_vouchers', companyForm.requires_vouchers ? 'true' : 'false');
       if (companyLogoFile) formData.append('logo', companyLogoFile);
       if (companyBrochureFile) formData.append('brochure', companyBrochureFile);
 
@@ -325,6 +339,47 @@ export default function ScreeningLocationsPage() {
       await api.delete(`/screening/branches/${branch.id}`);
       setBranches(prev => prev.filter(b => b.id !== branch.id));
       if (selectedBranch?.id === branch.id) setSelectedBranch(null);
+    } catch (err) {
+      alert(err.response?.data?.error || 'שגיאה במחיקה');
+    }
+  }
+
+  // ── Vouchers ───────────────────────────────────────────────────────────
+
+  async function loadVouchers(branchId, date) {
+    setVouchersLoading(true);
+    try {
+      const { data } = await api.get(`/screening/branches/${branchId}/vouchers?date=${date}`);
+      setVouchers(data);
+    } catch {
+      setVouchers([]);
+    } finally {
+      setVouchersLoading(false);
+    }
+  }
+
+  async function uploadVoucher(file) {
+    setVoucherUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append('work_date', voucherDate);
+      fd.append('voucher', file);
+      const { data } = await api.post(`/screening/branches/${selectedBranch.id}/vouchers`, fd, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      setVouchers(prev => [data, ...prev]);
+    } catch {
+      alert('שגיאה בהעלאת השובר');
+    } finally {
+      setVoucherUploading(false);
+    }
+  }
+
+  async function deleteVoucher(id) {
+    if (!confirm('למחוק שובר זה?')) return;
+    try {
+      await api.delete(`/screening/vouchers/${id}`);
+      setVouchers(prev => prev.filter(v => v.id !== id));
     } catch (err) {
       alert(err.response?.data?.error || 'שגיאה במחיקה');
     }
@@ -471,7 +526,7 @@ export default function ScreeningLocationsPage() {
                   <div
                     key={branch.id}
                     className="flex items-center gap-3 px-5 py-4 border-b border-slate-50 hover:bg-slate-50 transition-colors cursor-pointer group"
-                    onClick={() => { setSelectedBranch(branch); setActiveTab('details'); setSmsPhone(''); }}
+                    onClick={() => { setSelectedBranch(branch); setActiveTab('details'); setSmsPhone(''); setVouchers([]); setVoucherDate(new Date().toISOString().slice(0, 10)); }}
                   >
                     <div className="w-9 h-9 rounded-xl bg-purple-50 flex items-center justify-center flex-shrink-0">
                       <span className="material-symbols-outlined text-brand-purple text-base">location_on</span>
@@ -543,7 +598,11 @@ export default function ScreeningLocationsPage() {
 
             {/* Tabs */}
             <div className="flex border-b border-slate-100">
-              {[{ key: 'details', label: 'פרטים' }, { key: 'brochures', label: 'חוברות' }].map(tab => (
+              {[
+                { key: 'details', label: 'פרטים' },
+                { key: 'brochures', label: 'חוברות' },
+                ...(selectedCompany?.requires_vouchers ? [{ key: 'vouchers', label: 'שוברים' }] : []),
+              ].map(tab => (
                 <button
                   key={tab.key}
                   onClick={() => setActiveTab(tab.key)}
@@ -736,6 +795,100 @@ export default function ScreeningLocationsPage() {
                 )}
               </>)}
 
+              {activeTab === 'vouchers' && (<>
+                {/* Date navigation */}
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => {
+                      const d = new Date(voucherDate); d.setDate(d.getDate() - 1);
+                      const next = d.toISOString().slice(0, 10);
+                      setVoucherDate(next);
+                      loadVouchers(selectedBranch.id, next);
+                    }}
+                    className="w-9 h-9 flex items-center justify-center rounded-xl bg-slate-100 hover:bg-slate-200 transition-colors flex-shrink-0"
+                  >
+                    <span className="material-symbols-outlined text-slate-500 text-base">chevron_right</span>
+                  </button>
+                  <input
+                    type="date"
+                    value={voucherDate}
+                    onChange={e => { setVoucherDate(e.target.value); loadVouchers(selectedBranch.id, e.target.value); }}
+                    className="flex-1 px-3 py-2.5 border border-slate-200 rounded-xl text-sm text-center focus:outline-none focus:ring-2 focus:ring-brand-purple/30"
+                  />
+                  <button
+                    onClick={() => {
+                      const d = new Date(voucherDate); d.setDate(d.getDate() + 1);
+                      const next = d.toISOString().slice(0, 10);
+                      setVoucherDate(next);
+                      loadVouchers(selectedBranch.id, next);
+                    }}
+                    className="w-9 h-9 flex items-center justify-center rounded-xl bg-slate-100 hover:bg-slate-200 transition-colors flex-shrink-0"
+                  >
+                    <span className="material-symbols-outlined text-slate-500 text-base">chevron_left</span>
+                  </button>
+                </div>
+
+                {/* Voucher list */}
+                {vouchersLoading ? (
+                  <div className="flex justify-center py-8">
+                    <span className="material-symbols-outlined text-brand-purple animate-spin text-3xl">progress_activity</span>
+                  </div>
+                ) : vouchers.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-8 gap-2 text-slate-300">
+                    <span className="material-symbols-outlined text-5xl">receipt_long</span>
+                    <p className="text-sm text-slate-400">אין שוברים לתאריך זה</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {vouchers.map(v => (
+                      <div key={v.id} className="flex items-center gap-3 bg-slate-50 rounded-2xl p-3">
+                        <div className="w-10 h-10 rounded-xl bg-purple-50 flex items-center justify-center flex-shrink-0">
+                          <span className="material-symbols-outlined text-brand-purple text-base">
+                            {v.file_name?.toLowerCase().endsWith('.pdf') ? 'picture_as_pdf' : 'image'}
+                          </span>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          {v.user_label && (
+                            <p className="text-[10px] font-bold text-brand-purple truncate">{v.user_label}</p>
+                          )}
+                          <p className="text-sm font-semibold text-slate-800 truncate">{v.file_name}</p>
+                          <p className="text-xs text-slate-400">{new Date(v.created_at).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })}</p>
+                        </div>
+                        <a
+                          href={v.signed_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="w-8 h-8 flex items-center justify-center rounded-xl text-slate-400 hover:text-brand-purple hover:bg-purple-50 transition-colors flex-shrink-0"
+                        >
+                          <span className="material-symbols-outlined text-base">open_in_new</span>
+                        </a>
+                        <button
+                          onClick={() => deleteVoucher(v.id)}
+                          className="w-8 h-8 flex items-center justify-center rounded-xl text-slate-300 hover:text-red-500 hover:bg-red-50 transition-colors flex-shrink-0"
+                        >
+                          <span className="material-symbols-outlined text-base">delete</span>
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Upload button */}
+                <label className="flex items-center justify-center gap-2 w-full py-3 brand-gradient text-white text-sm font-bold rounded-2xl cursor-pointer active:scale-95 transition-transform">
+                  {voucherUploading
+                    ? <><span className="material-symbols-outlined text-base animate-spin">progress_activity</span> מעלה...</>
+                    : <><span className="material-symbols-outlined text-base">upload</span> העלה שובר</>
+                  }
+                  <input
+                    type="file"
+                    accept="image/*,application/pdf,.pdf"
+                    className="hidden"
+                    onChange={e => { const f = e.target.files?.[0]; if (f) uploadVoucher(f); e.target.value = ''; }}
+                    disabled={voucherUploading}
+                  />
+                </label>
+              </>)}
+
             </div>
           </div>
         </div>
@@ -835,6 +988,19 @@ export default function ScreeningLocationsPage() {
                   <input type="file" accept="image/*,application/pdf,.pdf" className="hidden" onChange={handleBrochureChange} />
                 </label>
               </div>
+
+              <label className="flex items-center gap-3 p-4 bg-slate-50 rounded-2xl cursor-pointer select-none">
+                <div
+                  className={`w-12 h-6 rounded-full transition-colors flex items-center px-0.5 ${companyForm.requires_vouchers ? 'bg-brand-purple' : 'bg-slate-200'}`}
+                  onClick={() => setCompanyForm(p => ({ ...p, requires_vouchers: !p.requires_vouchers }))}
+                >
+                  <div className={`w-5 h-5 rounded-full bg-white shadow transition-transform ${companyForm.requires_vouchers ? 'translate-x-6' : 'translate-x-0'}`} />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-slate-800">העלאת שוברים</p>
+                  <p className="text-xs text-slate-400">עובדים מעלים שובר לכל מטופל</p>
+                </div>
+              </label>
             </div>
 
             {companyFormError && (

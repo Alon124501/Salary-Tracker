@@ -89,6 +89,7 @@ CREATE TABLE IF NOT EXISTS screening_companies (
   name TEXT NOT NULL,
   logo_url TEXT,
   brochure_url TEXT,
+  requires_vouchers BOOLEAN DEFAULT FALSE,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -115,3 +116,22 @@ CREATE POLICY "Authenticated users can view branches"
   ON screening_branches FOR SELECT TO authenticated USING (true);
 
 CREATE INDEX IF NOT EXISTS screening_branches_company_idx ON screening_branches(company_id);
+
+-- Vouchers per patient (for companies with requires_vouchers = true)
+CREATE TABLE IF NOT EXISTS screening_vouchers (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  branch_id UUID NOT NULL REFERENCES screening_branches(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  work_date DATE NOT NULL,
+  file_url TEXT NOT NULL,
+  file_name TEXT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS screening_vouchers_branch_date_idx
+  ON screening_vouchers(branch_id, work_date);
+
+ALTER TABLE screening_vouchers ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Authenticated users can view own vouchers"
+  ON screening_vouchers FOR SELECT TO authenticated
+  USING (user_id = auth.uid());
