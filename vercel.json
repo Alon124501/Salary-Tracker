@@ -11,6 +11,7 @@
     { "source": "/api/(.*)", "destination": "/api/index" }
   ],
   "crons": [
-    { "path": "/api/cron/monthly-receipts", "schedule": "0 2 1 * *" }
+    { "path": "/api/cron/monthly-receipts",      "schedule": "0 2 1 * *" },
+    { "path": "/api/cron/process-notifications", "schedule": "0 8 * * *" }
   ]
 }

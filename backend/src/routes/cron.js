@@ -98,4 +98,75 @@ router.get('/monthly-receipts', async (req, res) => {
   res.json({ success: true, receiptsCount: entries.length, month: monthStr });
 });
 
+// Runs every hour. Activates pending notifications whose scheduled_for has passed.
+// For recurring ones, inserts the next occurrence after activation.
+router.get('/process-notifications', async (req, res) => {
+  const secret = process.env.CRON_SECRET;
+  if (secret && req.headers.authorization !== `Bearer ${secret}`) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  const now = new Date().toISOString();
+
+  const { data: due, error: dueErr } = await supabase
+    .from('notifications')
+    .select('*')
+    .eq('is_active', false)
+    .not('scheduled_for', 'is', null)
+    .lte('scheduled_for', now);
+
+  if (dueErr) return res.status(500).json({ error: dueErr.message });
+  if (!due?.length) return res.json({ success: true, activated: 0 });
+
+  const dueIds = due.map(n => n.id);
+  await supabase.from('notifications').update({ is_active: true }).in('id', dueIds);
+
+  const IST_OFFSET_MS = 2 * 60 * 60 * 1000;
+  function computeNext(days, timeLocal) {
+    const [h, m] = timeLocal.split(':').map(Number);
+    const nowDate = new Date();
+    for (let off = 0; off <= 7; off++) {
+      const base    = new Date(nowDate.getTime() + off * 86400000);
+      const istDate = new Date(base.getTime() + IST_OFFSET_MS);
+      if (!days.includes(istDate.getUTCDay())) continue;
+      istDate.setUTCHours(h, m, 0, 0);
+      const utc = new Date(istDate.getTime() - IST_OFFSET_MS);
+      if (utc > nowDate) return utc.toISOString();
+    }
+    return null;
+  }
+
+  for (const n of due) {
+    if (!n.recurrence_days?.length || !n.recurrence_time) continue;
+
+    // Prevent duplicate: skip if a pending recurring with same config already exists
+    const { data: existing } = await supabase
+      .from('notifications')
+      .select('id')
+      .eq('is_active', false)
+      .eq('recurrence_time', n.recurrence_time)
+      .contains('recurrence_days', n.recurrence_days)
+      .limit(1);
+
+    if (existing?.length) continue;
+
+    const nextTime = computeNext(n.recurrence_days, n.recurrence_time);
+    if (!nextTime) continue;
+
+    await supabase.from('notifications').insert({
+      title:             n.title,
+      content:           n.content,
+      type:              n.type,
+      requires_approval: n.requires_approval,
+      created_by:        n.created_by,
+      is_active:         false,
+      scheduled_for:     nextTime,
+      recurrence_days:   n.recurrence_days,
+      recurrence_time:   n.recurrence_time,
+    });
+  }
+
+  res.json({ success: true, activated: dueIds.length });
+});
+
 module.exports = router;

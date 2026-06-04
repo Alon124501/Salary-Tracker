@@ -157,9 +157,7 @@ function monthRange(month) {
 // GET /api/admin/users
 router.get('/users', async (req, res) => {
   const [{ data: profiles, error }, { data: equipment, error: eqErr }] = await Promise.all([
-    supabase.from('profiles')
-      .select('id, first_name, last_name, username, email, district, profession, profession_document_url, phone, shifts_per_week, shift_preference, clothing_size, uniform_sets, echo_certified, mileage_rate, is_admin, address, vehicle_type_color, vehicle_number')
-      .order('first_name'),
+    supabase.rpc('get_all_profiles'),
     supabase.from('user_equipment').select('user_id, equipment_type'),
   ]);
   if (error)  return res.status(500).json({ error: error.message });
