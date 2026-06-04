@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import api from '../api.js';
 
 const EQUIPMENT_TYPES = ['bone_density', 'tonometer', 'echocardiogram', 'tanita', 'ge'];
@@ -21,8 +21,9 @@ const TABS = [
   { id: 'directory',    label: 'Directory',    icon: 'people' },
   { id: 'equipment',    label: 'Equipment',    icon: 'medical_services' },
   { id: 'compensation', label: 'Compensation', icon: 'payments' },
-  { id: 'reports',      label: 'Reports',      icon: 'assignment' },
-  { id: 'faq',          label: 'Portal',       icon: 'hub' },
+  { id: 'reports',       label: 'Reports',       icon: 'assignment' },
+  { id: 'notifications', label: 'Notifications', icon: 'notifications' },
+  { id: 'faq',           label: 'Portal',        icon: 'hub' },
 ];
 
 const FAQ_CATEGORIES = [
@@ -93,6 +94,27 @@ export default function AdminDashboard() {
   const [approvingId, setApprovingId] = useState(null);
   const [approveMsgs, setApproveMsgs] = useState({});
 
+  // Notifications tab state
+  const [notifList, setNotifList] = useState([]);
+  const [notifLoading, setNotifLoading] = useState(false);
+  const [notifForm, setNotifForm] = useState({
+    title: '',
+    content: '',
+    requires_approval: false,
+    sendMode: 'now',         // 'now' | 'schedule'
+    scheduled_for: '',        // datetime-local string
+    isRecurring: false,
+    recurrence_days: [],      // int[] e.g. [0, 2]
+    recurrence_time: '12:00', // "HH:MM" Israel time
+    documentMode: 'none',    // 'none' | 'upload' | 'link'
+    documentFile: null,       // File object
+    documentExternalUrl: '',
+    force_view_document: false,
+  });
+  const docFileInputRef = useRef(null);
+  const [notifSubmitting, setNotifSubmitting] = useState(false);
+  const [complianceModal, setComplianceModal] = useState(null);
+
   // Inline edit state for compensation tab
   const [edits, setEdits] = useState({});
 
@@ -137,6 +159,15 @@ export default function AdminDashboard() {
     finally { setAppCredsLoading(false); }
   }, []);
 
+  const loadNotifications = useCallback(async () => {
+    setNotifLoading(true);
+    try {
+      const { data } = await api.get('/notifications/admin/all');
+      setNotifList(data);
+    } catch { /* silent */ }
+    finally { setNotifLoading(false); }
+  }, []);
+
   useEffect(() => {
     if (activeTab === 'faq') { loadFaq(); loadAppCreds(); }
   }, [activeTab, loadFaq, loadAppCreds]);
@@ -159,6 +190,10 @@ export default function AdminDashboard() {
       setApproveMsgs({});
     }
   }, [activeTab, reportMonth, loadReportSummary]);
+
+  useEffect(() => {
+    if (activeTab === 'notifications') loadNotifications();
+  }, [activeTab, loadNotifications]);
 
   // ── Equipment toggle ───────────────────────────────────────────────────
   async function toggleEquipment(userId, type, hasIt) {
@@ -202,6 +237,68 @@ export default function AdminDashboard() {
       await api.patch(`/admin/users/${userId}`, { [field]: parsed });
       setUsers(prev => prev.map(u => u.id === userId ? { ...u, [field]: parsed } : u));
     } catch { /* silent */ }
+  }
+
+  // ── Notifications ─────────────────────────────────────────────────────
+  async function submitNotification() {
+    const { title, content, requires_approval, sendMode, scheduled_for,
+            isRecurring, recurrence_days, recurrence_time,
+            documentMode, documentFile, documentExternalUrl, force_view_document } = notifForm;
+
+    if (!title.trim() || !content.trim()) return;
+    if (isRecurring && !recurrence_days.length) return;
+    if (sendMode === 'schedule' && !isRecurring && !scheduled_for) return;
+
+    setNotifSubmitting(true);
+    try {
+      const fd = new FormData();
+      fd.append('title', title.trim());
+      fd.append('content', content.trim());
+      fd.append('requires_approval', String(requires_approval));
+      fd.append('type', isRecurring ? 'recurring' : 'manual');
+      fd.append('force_view_document', String(force_view_document));
+
+      if (isRecurring) {
+        fd.append('recurrence_days', JSON.stringify(recurrence_days));
+        fd.append('recurrence_time', recurrence_time);
+      } else if (sendMode === 'schedule' && scheduled_for) {
+        fd.append('scheduled_for', new Date(scheduled_for).toISOString());
+      }
+
+      if (documentMode === 'upload' && documentFile) {
+        fd.append('document', documentFile);
+      } else if (documentMode === 'link' && documentExternalUrl.trim()) {
+        fd.append('document_external_url', documentExternalUrl.trim());
+      }
+
+      await api.post('/notifications', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+      setNotifForm({
+        title: '', content: '', requires_approval: false,
+        sendMode: 'now', scheduled_for: '', isRecurring: false,
+        recurrence_days: [], recurrence_time: '12:00',
+        documentMode: 'none', documentFile: null, documentExternalUrl: '', force_view_document: false,
+      });
+      if (docFileInputRef.current) docFileInputRef.current.value = '';
+      loadNotifications();
+    } catch { /* silent */ }
+    finally { setNotifSubmitting(false); }
+  }
+
+  async function deactivateNotification(id) {
+    try {
+      await api.delete(`/notifications/${id}`);
+      setNotifList(prev => prev.map(n => n.id === id ? { ...n, is_active: false } : n));
+    } catch { /* silent */ }
+  }
+
+  async function openCompliance(notifId) {
+    setComplianceModal({ loading: true });
+    try {
+      const { data } = await api.get(`/notifications/admin/${notifId}/compliance`);
+      setComplianceModal(data);
+    } catch {
+      setComplianceModal(null);
+    }
   }
 
   // ── Download Excel for a single user ──────────────────────────────────
@@ -923,6 +1020,362 @@ export default function AdminDashboard() {
           )}
           </div>
           )}
+        </div>
+      )}
+
+      {/* ── Tab: Notifications ────────────────────────────────────────── */}
+      {activeTab === 'notifications' && (
+        <div className="px-4 space-y-6">
+
+          {/* Create notification form */}
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-card p-5 space-y-4">
+            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">New Notification</p>
+            <div>
+              <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Title</label>
+              <input
+                value={notifForm.title}
+                onChange={e => setNotifForm(p => ({ ...p, title: e.target.value }))}
+                placeholder="Notification title"
+                className="w-full px-3 py-2.5 text-sm rounded-xl border border-slate-200 focus:border-brand-purple/50 focus:outline-none bg-white"
+              />
+            </div>
+            <div>
+              <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Content</label>
+              <textarea
+                value={notifForm.content}
+                onChange={e => setNotifForm(p => ({ ...p, content: e.target.value }))}
+                rows={4}
+                placeholder="Notification body..."
+                className="w-full px-3 py-2.5 text-sm rounded-xl border border-slate-200 focus:border-brand-purple/50 focus:outline-none bg-white resize-none"
+              />
+            </div>
+            {/* Send timing */}
+            <div>
+              <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-2">When to Send</label>
+              <div className="flex gap-2">
+                {[['now', 'Send Now'], ['schedule', 'Schedule']].map(([mode, label]) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => setNotifForm(p => ({ ...p, sendMode: mode }))}
+                    className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all active:scale-95 ${
+                      notifForm.sendMode === mode ? 'brand-gradient text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                    }`}
+                  >{label}</button>
+                ))}
+              </div>
+              {notifForm.sendMode === 'schedule' && !notifForm.isRecurring && (
+                <input
+                  type="datetime-local"
+                  value={notifForm.scheduled_for}
+                  onChange={e => setNotifForm(p => ({ ...p, scheduled_for: e.target.value }))}
+                  min={new Date().toISOString().slice(0, 16)}
+                  className="mt-2 w-full px-3 py-2.5 text-sm rounded-xl border border-slate-200 focus:border-brand-purple/50 focus:outline-none bg-white"
+                />
+              )}
+            </div>
+
+            {/* Repeat weekly toggle */}
+            <label className="flex items-center gap-3 cursor-pointer select-none">
+              <div className="relative flex-shrink-0">
+                <input
+                  type="checkbox"
+                  checked={notifForm.isRecurring}
+                  onChange={e => setNotifForm(p => ({ ...p, isRecurring: e.target.checked }))}
+                  className="sr-only"
+                />
+                <div className={`w-10 h-6 rounded-full transition-colors ${notifForm.isRecurring ? 'brand-gradient' : 'bg-slate-200'}`} />
+                <div className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-transform ${notifForm.isRecurring ? 'translate-x-5' : 'translate-x-1'}`} />
+              </div>
+              <span className="text-sm font-semibold text-slate-700">Repeat Weekly</span>
+            </label>
+
+            {notifForm.isRecurring && (
+              <div className="space-y-3 pl-4 border-l-2 border-brand-purple/20">
+                <div>
+                  <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-2">Repeat on</label>
+                  <div className="flex gap-1.5 flex-wrap">
+                    {['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map((day, i) => {
+                      const active = notifForm.recurrence_days.includes(i);
+                      return (
+                        <button
+                          key={i}
+                          type="button"
+                          onClick={() => setNotifForm(p => ({
+                            ...p,
+                            recurrence_days: active
+                              ? p.recurrence_days.filter(d => d !== i)
+                              : [...p.recurrence_days, i],
+                          }))}
+                          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all active:scale-95 ${
+                            active ? 'brand-gradient text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                          }`}
+                        >{day}</button>
+                      );
+                    })}
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Time (Israel)</label>
+                  <input
+                    type="time"
+                    value={notifForm.recurrence_time}
+                    onChange={e => setNotifForm(p => ({ ...p, recurrence_time: e.target.value }))}
+                    className="px-3 py-2.5 text-sm rounded-xl border border-slate-200 focus:border-brand-purple/50 focus:outline-none bg-white"
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Requires approval toggle */}
+            <label className="flex items-center gap-3 cursor-pointer select-none">
+              <div className="relative flex-shrink-0">
+                <input
+                  type="checkbox"
+                  checked={notifForm.requires_approval}
+                  onChange={e => setNotifForm(p => ({ ...p, requires_approval: e.target.checked }))}
+                  className="sr-only"
+                />
+                <div className={`w-10 h-6 rounded-full transition-colors ${notifForm.requires_approval ? 'brand-gradient' : 'bg-slate-200'}`} />
+                <div className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-transform ${notifForm.requires_approval ? 'translate-x-5' : 'translate-x-1'}`} />
+              </div>
+              <span className="text-sm font-semibold text-slate-700">Requires Tester Approval</span>
+            </label>
+
+            {/* Document Attachment */}
+            <div>
+              <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-2">Document Attachment <span className="normal-case font-normal">(optional)</span></label>
+              <div className="flex gap-2">
+                {[['none', 'None'], ['upload', 'Upload File'], ['link', 'Paste Link']].map(([mode, label]) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => setNotifForm(p => ({ ...p, documentMode: mode, documentFile: null, documentExternalUrl: '', force_view_document: false }))}
+                    className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all active:scale-95 ${
+                      notifForm.documentMode === mode ? 'brand-gradient text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                    }`}
+                  >{label}</button>
+                ))}
+              </div>
+
+              {notifForm.documentMode === 'upload' && (
+                <div className="mt-2">
+                  <input
+                    ref={docFileInputRef}
+                    type="file"
+                    accept=".pdf,.doc,.docx"
+                    className="sr-only"
+                    onChange={e => setNotifForm(p => ({ ...p, documentFile: e.target.files[0] || null }))}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => docFileInputRef.current?.click()}
+                    className="w-full flex items-center gap-3 px-3 py-3 rounded-xl border-2 border-dashed border-slate-200 hover:border-brand-purple/40 transition-colors text-left"
+                  >
+                    <span className="material-symbols-outlined text-slate-400 text-lg">upload_file</span>
+                    <span className={`text-sm ${notifForm.documentFile ? 'text-slate-700 font-semibold' : 'text-slate-400'}`}>
+                      {notifForm.documentFile ? notifForm.documentFile.name : 'Choose PDF or Word document'}
+                    </span>
+                  </button>
+                </div>
+              )}
+
+              {notifForm.documentMode === 'link' && (
+                <div className="mt-2 flex items-center gap-2 px-3 py-2.5 rounded-xl border border-slate-200 focus-within:border-brand-purple/50 bg-white">
+                  <span className="material-symbols-outlined text-slate-400 text-base flex-shrink-0">link</span>
+                  <input
+                    type="url"
+                    value={notifForm.documentExternalUrl}
+                    onChange={e => setNotifForm(p => ({ ...p, documentExternalUrl: e.target.value }))}
+                    placeholder="https://..."
+                    className="flex-1 text-sm bg-transparent focus:outline-none"
+                  />
+                </div>
+              )}
+
+              {notifForm.documentMode !== 'none' && (
+                <label className="flex items-center gap-3 cursor-pointer select-none mt-3">
+                  <div className="relative flex-shrink-0">
+                    <input
+                      type="checkbox"
+                      checked={notifForm.force_view_document}
+                      onChange={e => setNotifForm(p => ({ ...p, force_view_document: e.target.checked }))}
+                      className="sr-only"
+                    />
+                    <div className={`w-10 h-6 rounded-full transition-colors ${notifForm.force_view_document ? 'brand-gradient' : 'bg-slate-200'}`} />
+                    <div className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-transform ${notifForm.force_view_document ? 'translate-x-5' : 'translate-x-1'}`} />
+                  </div>
+                  <span className="text-sm font-semibold text-slate-700">Force user to open document before approving</span>
+                </label>
+              )}
+            </div>
+
+            <button
+              onClick={submitNotification}
+              disabled={notifSubmitting || !notifForm.title.trim() || !notifForm.content.trim()}
+              className="w-full py-3 rounded-xl text-sm font-bold text-white brand-gradient active:scale-95 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+              style={{ boxShadow: '0 4px 14px rgba(139,53,217,0.25)' }}
+            >
+              {notifSubmitting
+                ? <><span className="material-symbols-outlined text-sm animate-spin">progress_activity</span> Sending...</>
+                : <><span className="material-symbols-outlined text-sm">send</span> Send Notification</>
+              }
+            </button>
+          </div>
+
+          {/* Notifications list */}
+          <div>
+            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Sent Notifications</p>
+            {notifLoading ? (
+              <div className="flex justify-center py-10">
+                <span className="material-symbols-outlined text-3xl text-slate-300 animate-spin">progress_activity</span>
+              </div>
+            ) : notifList.length === 0 ? (
+              <div className="bg-white rounded-2xl border border-slate-100 py-10 flex flex-col items-center gap-2 text-slate-400">
+                <span className="material-symbols-outlined text-4xl opacity-30">notifications_off</span>
+                <p className="text-sm font-medium">No notifications yet</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {notifList.map(n => (
+                  <div key={n.id} className="bg-white rounded-2xl border border-slate-100 shadow-card p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap mb-1">
+                          <p className="font-bold text-slate-800 text-sm">{n.title}</p>
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${n.type === 'recurring' ? 'bg-amber-100 text-amber-700' : 'bg-sky-100 text-sky-700'}`}>
+                            {n.type}
+                          </span>
+                          {n.requires_approval && (
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-violet-100 text-violet-700">approval required</span>
+                          )}
+                          {(n.document_file_name || n.document_external_url) && (
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 flex items-center gap-0.5">
+                              <span className="material-symbols-outlined text-xs">attach_file</span>
+                              {n.document_file_name || 'link'}
+                            </span>
+                          )}
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${n.is_active ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-400'}`}>
+                            {n.is_active ? 'active' : 'inactive'}
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-400 line-clamp-2">{n.content}</p>
+                        <div className="flex flex-col gap-0.5 mt-1.5">
+                          <p className="text-[10px] text-slate-300">Created {new Date(n.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</p>
+                          {n.scheduled_for && !n.is_active && (
+                            <p className="text-[10px] text-amber-500 font-semibold">
+                              Sends {new Date(n.scheduled_for).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                            </p>
+                          )}
+                          {n.recurrence_days?.length > 0 && n.recurrence_time && (
+                            <p className="text-[10px] text-violet-500 font-semibold">
+                              Repeats {['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].filter((_, i) => n.recurrence_days.includes(i)).join(', ')} at {n.recurrence_time}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex gap-2 flex-shrink-0">
+                        {n.requires_approval && (
+                          <button
+                            onClick={() => openCompliance(n.id)}
+                            className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-xl border border-slate-200 bg-white text-slate-600 hover:border-brand-purple/40 active:scale-95 transition-all"
+                          >
+                            <span className="material-symbols-outlined text-sm">bar_chart</span>
+                            Compliance
+                          </button>
+                        )}
+                        {n.is_active && (
+                          <button
+                            onClick={() => deactivateNotification(n.id)}
+                            className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-xl border border-red-100 bg-red-50 text-red-500 hover:bg-red-100 active:scale-95 transition-all"
+                          >
+                            <span className="material-symbols-outlined text-sm">visibility_off</span>
+                            Deactivate
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Compliance Modal ──────────────────────────────────────────────── */}
+      {complianceModal && (
+        <div className="fixed inset-0 z-40 bg-black/40 flex items-center justify-center p-4" onClick={e => { if (e.target === e.currentTarget) setComplianceModal(null); }}>
+          <div className="relative z-50 bg-white rounded-3xl flex flex-col w-full max-w-lg shadow-2xl" style={{ maxHeight: '85vh' }}>
+            <div className="px-5 py-4 flex items-center justify-between flex-shrink-0 border-b border-slate-100">
+              <div className="min-w-0 flex-1">
+                <h2 className="text-base font-extrabold text-slate-900 truncate">
+                  {complianceModal.loading ? 'Loading...' : complianceModal.notification?.title}
+                </h2>
+                <p className="text-xs text-slate-400 mt-0.5">Tester approval status</p>
+              </div>
+              <button onClick={() => setComplianceModal(null)} className="w-8 h-8 flex items-center justify-center rounded-xl bg-slate-100 text-slate-500 ml-3 flex-shrink-0">
+                <span className="material-symbols-outlined text-base">close</span>
+              </button>
+            </div>
+            {complianceModal.loading ? (
+              <div className="flex justify-center py-10">
+                <span className="material-symbols-outlined text-3xl text-slate-300 animate-spin">progress_activity</span>
+              </div>
+            ) : (
+              <div className="overflow-y-auto flex-1">
+                {(complianceModal.compliance || []).length === 0 ? (
+                  <div className="flex flex-col items-center gap-2 py-10 text-slate-400">
+                    <span className="material-symbols-outlined text-4xl opacity-30">group</span>
+                    <p className="text-sm font-medium">No testers found</p>
+                  </div>
+                ) : (
+                  <div>
+                    {(() => {
+                      const hasDocument = !!(complianceModal.notification?.document_storage_path || complianceModal.notification?.document_external_url);
+                      return (complianceModal.compliance || []).map(t => {
+                        const name = `${t.first_name || ''} ${t.last_name || ''}`.trim() || t.username;
+                        return (
+                          <div key={t.user_id} className="px-5 py-3.5 flex items-center justify-between gap-3 border-b border-slate-50 last:border-0">
+                            <div className="min-w-0">
+                              <p className="text-sm font-semibold text-slate-800 truncate">{name}</p>
+                              <p className="text-[11px] text-slate-400">{t.username}</p>
+                            </div>
+                            <div className="flex flex-col gap-1 items-end flex-shrink-0">
+                              {t.approved_at ? (
+                                <span className="flex items-center gap-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1.5 rounded-xl border border-emerald-100 whitespace-nowrap">
+                                  <span className="material-symbols-outlined text-sm" style={{ fontVariationSettings: "'FILL' 1" }}>check_circle</span>
+                                  {new Date(t.approved_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                                </span>
+                              ) : (
+                                <span className="flex items-center gap-1.5 text-xs font-bold text-slate-400 bg-slate-100 px-2.5 py-1.5 rounded-xl whitespace-nowrap">
+                                  <span className="material-symbols-outlined text-sm">schedule</span>
+                                  Pending
+                                </span>
+                              )}
+                              {hasDocument && (
+                                t.document_opened_at ? (
+                                  <span className="flex items-center gap-1 text-xs font-bold text-blue-700 bg-blue-50 px-2.5 py-1.5 rounded-xl border border-blue-100 whitespace-nowrap">
+                                    <span className="material-symbols-outlined text-sm" style={{ fontVariationSettings: "'FILL' 1" }}>visibility</span>
+                                    Opened {new Date(t.document_opened_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                                  </span>
+                                ) : (
+                                  <span className="flex items-center gap-1 text-xs font-bold text-slate-400 bg-slate-100 px-2.5 py-1.5 rounded-xl whitespace-nowrap">
+                                    <span className="material-symbols-outlined text-sm">visibility_off</span>
+                                    Not opened
+                                  </span>
+                                )
+                              )}
+                            </div>
+                          </div>
+                        );
+                      });
+                    })()}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       )}
 

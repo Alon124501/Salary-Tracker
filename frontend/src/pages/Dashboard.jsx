@@ -33,8 +33,13 @@ export default function Dashboard() {
   const [parkingFiles, setParkingFiles] = useState([]);
   const [toast, setToast] = useState('');
   const [submitted, setSubmitted] = useState(false);
+  const [notifications, setNotifications] = useState([]);
 
   useEffect(() => { loadData(); checkSubmission(); }, [month]);
+
+  useEffect(() => {
+    api.get('/notifications').then(r => setNotifications(r.data)).catch(() => {});
+  }, []);
 
   async function loadData() {
     try {
@@ -99,6 +104,25 @@ export default function Dashboard() {
     }
   }
 
+  async function approveNotification(id) {
+    try {
+      await api.post(`/notifications/${id}/approve`);
+      setNotifications(prev => prev.filter(n => n.id !== id));
+    } catch { /* silent */ }
+  }
+
+  async function openDocument(notif) {
+    window.open(notif.document_url, '_blank', 'noopener,noreferrer');
+    try {
+      await api.post(`/notifications/${notif.id}/open-document`);
+      setNotifications(prev => prev.map(n =>
+        n.id === notif.id
+          ? { ...n, document_opened_at: n.document_opened_at || new Date().toISOString() }
+          : n
+      ));
+    } catch { /* silent */ }
+  }
+
   async function deleteEntry(id) {
     if (!confirm('Delete this entry?')) return;
     await api.delete(`/entries/${id}`);
@@ -146,6 +170,56 @@ export default function Dashboard() {
           )}
         </div>
       </div>
+
+      {/* Notification Feed */}
+      {notifications.length > 0 && (
+        <div className="space-y-3">
+          {notifications.map(n => (
+            <div key={n.id} className="bg-white rounded-2xl border border-slate-100 shadow-card p-4">
+              <div className="flex items-start gap-3">
+                <div className="w-8 h-8 rounded-xl bg-violet-50 flex items-center justify-center flex-shrink-0 mt-0.5">
+                  <span className="material-symbols-outlined text-brand-purple text-base" style={{ fontVariationSettings: "'FILL' 1" }}>notifications</span>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-bold text-slate-800 text-sm">{n.title}</p>
+                  <p className="text-sm text-slate-500 mt-1 whitespace-pre-wrap">{n.content}</p>
+                  {n.document_url && (
+                    <div className="mt-3 flex items-center gap-3 p-3 bg-slate-50 rounded-xl border border-slate-100">
+                      <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center flex-shrink-0">
+                        <span className="material-symbols-outlined text-blue-500 text-base" style={{ fontVariationSettings: "'FILL' 1" }}>description</span>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-semibold text-slate-700 truncate">{n.document_file_name || 'Attached Document'}</p>
+                        <p className="text-[10px] text-slate-400">{n.document_opened_at ? 'Opened' : 'Not yet opened'}</p>
+                      </div>
+                      <button
+                        onClick={() => openDocument(n)}
+                        className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-xl bg-blue-500 text-white active:scale-95 transition-all flex-shrink-0"
+                      >
+                        <span className="material-symbols-outlined text-sm">open_in_new</span>
+                        View
+                      </button>
+                    </div>
+                  )}
+                  {n.requires_approval && (
+                    <button
+                      onClick={() => approveNotification(n.id)}
+                      disabled={n.force_view_document && !!n.document_url && !n.document_opened_at}
+                      className="mt-3 w-full brand-gradient text-white text-sm font-semibold rounded-xl py-2.5 active:scale-95 transition-transform flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
+                      style={{ boxShadow: '0 4px 14px rgba(139,53,217,0.2)' }}
+                    >
+                      <span className="material-symbols-outlined text-sm" style={{ fontVariationSettings: "'FILL' 1" }}>check_circle</span>
+                      {n.force_view_document && !!n.document_url && !n.document_opened_at
+                        ? 'Open document first to approve'
+                        : 'I have read and approved this document'}
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Monthly Summary */}
       <section>
