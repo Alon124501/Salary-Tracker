@@ -1,0 +1,69 @@
+const express = require('express');
+const supabase = require('../supabase');
+const auth = require('../middleware/auth');
+const adminAuth = require('../middleware/adminAuth');
+
+const router = express.Router();
+
+// GET /api/contacts — authenticated
+router.get('/', auth, async (req, res) => {
+  const { data, error } = await supabase
+    .from('contacts')
+    .select('id, name, title, phone, sort_order')
+    .order('sort_order', { ascending: true });
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data || []);
+});
+
+// POST /api/contacts — admin
+router.post('/', auth, adminAuth, async (req, res) => {
+  const { name, title, phone, sort_order } = req.body;
+  if (!name?.trim() || !phone?.trim())
+    return res.status(400).json({ error: 'name and phone are required' });
+
+  const { data, error } = await supabase
+    .from('contacts')
+    .insert({ name: name.trim(), title: title?.trim() || null, phone: phone.trim(), sort_order: sort_order ?? 0 })
+    .select().single();
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data);
+});
+
+// POST /api/contacts/reorder — admin
+router.post('/reorder', auth, adminAuth, async (req, res) => {
+  const { items } = req.body;
+  if (!Array.isArray(items) || items.length === 0)
+    return res.status(400).json({ error: 'items array is required' });
+
+  const { error } = await supabase
+    .from('contacts')
+    .upsert(items.map(({ id, sort_order }) => ({ id, sort_order })), { onConflict: 'id' });
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ success: true });
+});
+
+// PATCH /api/contacts/:id — admin
+router.patch('/:id', auth, adminAuth, async (req, res) => {
+  const { name, title, phone } = req.body;
+  const updates = {};
+  if (name  !== undefined) updates.name  = name.trim();
+  if (title !== undefined) updates.title = title?.trim() || null;
+  if (phone !== undefined) updates.phone = phone.trim();
+
+  const { data, error } = await supabase
+    .from('contacts')
+    .update(updates)
+    .eq('id', req.params.id)
+    .select().single();
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data);
+});
+
+// DELETE /api/contacts/:id — admin
+router.delete('/:id', auth, adminAuth, async (req, res) => {
+  const { error } = await supabase.from('contacts').delete().eq('id', req.params.id);
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ success: true });
+});
+
+module.exports = router;

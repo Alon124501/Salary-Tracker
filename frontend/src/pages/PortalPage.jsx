@@ -59,16 +59,18 @@ function CopyButton({ value }) {
 export default function PortalPage() {
   const [creds, setCreds] = useState([]);
   const [faqItems, setFaqItems] = useState({ insurance: [], screening: [] });
+  const [contacts, setContacts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(null);
   const [tab, setTab] = useState('apps');
 
   useEffect(() => {
     let settled = 0;
-    const done = () => { if (++settled === 2) setLoading(false); };
+    const done = () => { if (++settled === 3) setLoading(false); };
 
     api.get('/portal/credentials').then(r => setCreds(r.data)).catch(() => {}).finally(done);
     api.get('/faq').then(r => setFaqItems(r.data)).catch(() => {}).finally(done);
+    api.get('/contacts').then(r => setContacts(r.data)).catch(() => {}).finally(done);
   }, []);
 
   function toggle(key) {
@@ -86,7 +88,7 @@ export default function PortalPage() {
 
         {/* Tab toggle */}
         <div className="flex gap-2 mb-6">
-          {[{ id: 'apps', label: 'Apps', icon: 'apps' }, { id: 'faq', label: 'FAQ', icon: 'quiz' }].map(t => (
+          {[{ id: 'apps', label: 'Apps', icon: 'apps' }, { id: 'faq', label: 'FAQ', icon: 'quiz' }, { id: 'contacts', label: 'Contacts', icon: 'call' }].map(t => (
             <button
               key={t.id}
               onClick={() => setTab(t.id)}
@@ -158,6 +160,45 @@ export default function PortalPage() {
                 </div>
               )}
             </div>}
+
+            {/* ── Contacts ── */}
+            {tab === 'contacts' && (
+              <div className="mb-8">
+                <h2 className="text-base font-extrabold text-slate-700 mb-3 px-1 flex items-center gap-2">
+                  <span className="material-symbols-outlined text-brand-purple text-lg" style={{ fontVariationSettings: "'FILL' 1" }}>call</span>
+                  Important Contacts
+                </h2>
+                {contacts.length === 0 ? (
+                  <div className="bg-white rounded-2xl border border-slate-100 py-8 flex flex-col items-center gap-2 text-slate-400"
+                    style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
+                    <span className="material-symbols-outlined text-3xl opacity-30">call</span>
+                    <p className="text-sm">No contacts added yet</p>
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-3">
+                    {contacts.map(c => (
+                      <div key={c.id} className="bg-white rounded-2xl border border-slate-100 px-4 py-3.5 flex items-center gap-3"
+                        style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
+                        <div className="w-10 h-10 rounded-full brand-gradient flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
+                          {(c.name[0] || '?').toUpperCase()}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-bold text-slate-800 text-sm">{c.name}</p>
+                          {c.title && <p className="text-xs text-slate-400 mt-0.5">{c.title}</p>}
+                          <p className="text-xs text-slate-500 mt-0.5">{c.phone}</p>
+                        </div>
+                        <a href={`tel:${c.phone}`}
+                          className="flex items-center gap-1.5 text-sm font-bold text-white brand-gradient px-4 py-2 rounded-xl active:scale-95 transition-all flex-shrink-0"
+                          style={{ boxShadow: '0 2px 8px rgba(139,53,217,0.25)' }}>
+                          <span className="material-symbols-outlined text-base" style={{ fontVariationSettings: "'FILL' 1" }}>call</span>
+                          Call
+                        </a>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* ── FAQ ── */}
             {tab === 'faq' && CATEGORIES.map(cat => (

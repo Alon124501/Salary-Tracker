@@ -86,6 +86,15 @@ export default function AdminDashboard() {
   const [editAppImage, setEditAppImage] = useState(null);
   const [appSaving, setAppSaving] = useState(false);
 
+  // Contacts sub-tab
+  const [contacts, setContacts] = useState([]);
+  const [contactsLoading, setContactsLoading] = useState(false);
+  const [addingContact, setAddingContact] = useState(false);
+  const [newContact, setNewContact] = useState({ name: '', title: '', phone: '' });
+  const [editingContactId, setEditingContactId] = useState(null);
+  const [editContact, setEditContact] = useState({ name: '', title: '', phone: '' });
+  const [contactSaving, setContactSaving] = useState(false);
+
   // Reports state
   const [reportMonth, setReportMonth] = useState(nowMonth);
   const [reportSummary, setReportSummary] = useState(null);
@@ -159,6 +168,15 @@ export default function AdminDashboard() {
     finally { setAppCredsLoading(false); }
   }, []);
 
+  const loadContacts = useCallback(async () => {
+    setContactsLoading(true);
+    try {
+      const { data } = await api.get('/contacts');
+      setContacts(data);
+    } catch { /* silent */ }
+    finally { setContactsLoading(false); }
+  }, []);
+
   const loadNotifications = useCallback(async () => {
     setNotifLoading(true);
     try {
@@ -169,8 +187,8 @@ export default function AdminDashboard() {
   }, []);
 
   useEffect(() => {
-    if (activeTab === 'faq') { loadFaq(); loadAppCreds(); }
-  }, [activeTab, loadFaq, loadAppCreds]);
+    if (activeTab === 'faq') { loadFaq(); loadAppCreds(); loadContacts(); }
+  }, [activeTab, loadFaq, loadAppCreds, loadContacts]);
 
   const loadReportSummary = useCallback(async (month) => {
     setSummaryLoading(true);
@@ -422,6 +440,62 @@ export default function AdminDashboard() {
         items: reordered.map(({ id: xid, sort_order }) => ({ id: xid, sort_order })),
       });
     } catch { setAppCreds(appCreds); }
+  }
+
+  // ── Contacts ──────────────────────────────────────────────────────────
+  async function moveContact(id, direction) {
+    const idx = contacts.findIndex(x => x.id === id);
+    if (direction === 'up' && idx === 0) return;
+    if (direction === 'down' && idx === contacts.length - 1) return;
+    const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
+    const newItems = [...contacts];
+    [newItems[idx], newItems[swapIdx]] = [newItems[swapIdx], newItems[idx]];
+    const reordered = newItems.map((item, i) => ({ ...item, sort_order: i }));
+    setContacts(reordered);
+    try {
+      await api.post('/contacts/reorder', {
+        items: reordered.map(({ id: xid, sort_order }) => ({ id: xid, sort_order })),
+      });
+    } catch { setContacts(contacts); }
+  }
+
+  async function saveContact() {
+    if (!newContact.name.trim() || !newContact.phone.trim()) return;
+    setContactSaving(true);
+    try {
+      const { data } = await api.post('/contacts', {
+        name: newContact.name.trim(),
+        title: newContact.title.trim() || null,
+        phone: newContact.phone.trim(),
+        sort_order: contacts.length,
+      });
+      setContacts(prev => [...prev, data]);
+      setNewContact({ name: '', title: '', phone: '' });
+      setAddingContact(false);
+    } catch { /* silent */ }
+    finally { setContactSaving(false); }
+  }
+
+  async function updateContact(id) {
+    if (!editContact.name.trim() || !editContact.phone.trim()) return;
+    setContactSaving(true);
+    try {
+      const { data } = await api.patch(`/contacts/${id}`, {
+        name: editContact.name.trim(),
+        title: editContact.title.trim() || null,
+        phone: editContact.phone.trim(),
+      });
+      setContacts(prev => prev.map(x => x.id === id ? data : x));
+      setEditingContactId(null);
+    } catch { /* silent */ }
+    finally { setContactSaving(false); }
+  }
+
+  async function deleteContact(id) {
+    const backup = contacts;
+    setContacts(prev => prev.filter(x => x.id !== id));
+    try { await api.delete(`/contacts/${id}`); }
+    catch { setContacts(backup); }
   }
 
   // ── Approve + email one user's report ─────────────────────────────────
@@ -735,10 +809,10 @@ export default function AdminDashboard() {
         <div className="px-4 space-y-4">
           {/* Sub-tab toggle */}
           <div className="flex gap-2">
-            {[{ id: 'faq', label: 'FAQ', icon: 'quiz' }, { id: 'apps', label: 'Apps', icon: 'apps' }].map(st => {
+            {[{ id: 'faq', label: 'FAQ', icon: 'quiz' }, { id: 'apps', label: 'Apps', icon: 'apps' }, { id: 'contacts', label: 'Contacts', icon: 'call' }].map(st => {
               const active = portalSubTab === st.id;
               return (
-                <button key={st.id} onClick={() => { setPortalSubTab(st.id); setAddingFaq(false); setEditingFaqId(null); setAddingApp(false); setEditingAppId(null); }}
+                <button key={st.id} onClick={() => { setPortalSubTab(st.id); setAddingFaq(false); setEditingFaqId(null); setAddingApp(false); setEditingAppId(null); setAddingContact(false); setEditingContactId(null); }}
                   className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-2xl text-sm font-bold transition-all active:scale-95 ${active ? 'brand-gradient text-white' : 'bg-white text-slate-500 border border-slate-200'}`}
                   style={active ? { boxShadow: '0 4px 14px rgba(139,53,217,0.3)' } : {}}>
                   <span className="material-symbols-outlined text-base" style={{ fontVariationSettings: active ? "'FILL' 1" : "'FILL' 0" }}>{st.icon}</span>
@@ -1019,6 +1093,97 @@ export default function AdminDashboard() {
             </>
           )}
           </div>
+          )}
+
+          {/* Contacts sub-tab */}
+          {portalSubTab === 'contacts' && (
+            <div className="space-y-3">
+              {contactsLoading ? (
+                <div className="flex justify-center py-10"><span className="material-symbols-outlined text-3xl text-slate-300 animate-spin">progress_activity</span></div>
+              ) : (
+                <>
+                  {contacts.length === 0 && !addingContact && (
+                    <div className="bg-white rounded-2xl border border-slate-100 py-10 flex flex-col items-center gap-2 text-slate-400">
+                      <span className="material-symbols-outlined text-4xl opacity-30">call</span>
+                      <p className="text-sm font-medium">No contacts yet</p>
+                    </div>
+                  )}
+                  {contacts.map((c, i) => {
+                    const isEditing = editingContactId === c.id;
+                    return (
+                      <div key={c.id} className="bg-white rounded-2xl border border-slate-100 p-4 space-y-3">
+                        {isEditing ? (
+                          <>
+                            <Field label="Name" value={editContact.name} onChange={v => setEditContact(p => ({ ...p, name: v }))} />
+                            <Field label="Role / Title" value={editContact.title} onChange={v => setEditContact(p => ({ ...p, title: v }))} placeholder="e.g. HR Manager" />
+                            <Field label="Phone" value={editContact.phone} onChange={v => setEditContact(p => ({ ...p, phone: v }))} type="tel" />
+                            <div className="flex gap-2">
+                              <button onClick={() => updateContact(c.id)} disabled={contactSaving || !editContact.name.trim() || !editContact.phone.trim()}
+                                className="flex-1 py-2 rounded-xl text-sm font-bold text-white brand-gradient active:scale-95 transition-all disabled:opacity-50">Save</button>
+                              <button onClick={() => setEditingContactId(null)}
+                                className="flex-1 py-2 rounded-xl text-sm font-bold text-slate-600 bg-slate-100 active:scale-95 transition-all">Cancel</button>
+                            </div>
+                          </>
+                        ) : (
+                          <div className="flex items-center gap-3">
+                            <div className="flex flex-col gap-1 flex-shrink-0">
+                              <button onClick={() => moveContact(c.id, 'up')} disabled={i === 0}
+                                className="w-8 h-8 flex items-center justify-center rounded-lg bg-slate-50 text-slate-400 hover:bg-slate-100 active:scale-95 transition-all disabled:opacity-20">
+                                <span className="material-symbols-outlined text-base">arrow_upward</span>
+                              </button>
+                              <button onClick={() => moveContact(c.id, 'down')} disabled={i === contacts.length - 1}
+                                className="w-8 h-8 flex items-center justify-center rounded-lg bg-slate-50 text-slate-400 hover:bg-slate-100 active:scale-95 transition-all disabled:opacity-20">
+                                <span className="material-symbols-outlined text-base">arrow_downward</span>
+                              </button>
+                            </div>
+                            <div className="w-10 h-10 rounded-full brand-gradient flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
+                              {(c.name[0] || '?').toUpperCase()}
+                            </div>
+                            <div className="flex-1 min-w-0 cursor-pointer" onClick={() => { setEditingContactId(c.id); setEditContact({ name: c.name, title: c.title || '', phone: c.phone }); }}>
+                              <p className="text-sm font-bold text-slate-800">{c.name}</p>
+                              {c.title && <p className="text-xs text-slate-400 mt-0.5">{c.title}</p>}
+                              <p className="text-xs text-slate-500 mt-0.5">{c.phone}</p>
+                              <p className="text-[10px] text-brand-purple mt-1 font-medium">Tap to edit</p>
+                            </div>
+                            <a href={`tel:${c.phone}`}
+                              className="flex items-center gap-1.5 text-xs font-bold text-white brand-gradient px-3 py-1.5 rounded-xl active:scale-95 transition-all flex-shrink-0"
+                              style={{ boxShadow: '0 2px 8px rgba(139,53,217,0.25)' }}>
+                              <span className="material-symbols-outlined text-sm" style={{ fontVariationSettings: "'FILL' 1" }}>call</span>
+                              Call
+                            </a>
+                            <button onClick={() => deleteContact(c.id)}
+                              className="flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-lg bg-red-50 text-red-400 hover:bg-red-100 active:scale-95 transition-all">
+                              <span className="material-symbols-outlined text-base">delete</span>
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                  {addingContact ? (
+                    <div className="bg-white rounded-2xl border border-brand-purple/20 p-4 space-y-3">
+                      <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">New Contact</p>
+                      <Field label="Name" value={newContact.name} onChange={v => setNewContact(p => ({ ...p, name: v }))} />
+                      <Field label="Role / Title" value={newContact.title} onChange={v => setNewContact(p => ({ ...p, title: v }))} placeholder="e.g. HR Manager" />
+                      <Field label="Phone" value={newContact.phone} onChange={v => setNewContact(p => ({ ...p, phone: v }))} type="tel" />
+                      <div className="flex gap-2">
+                        <button onClick={saveContact} disabled={contactSaving || !newContact.name.trim() || !newContact.phone.trim()}
+                          className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white brand-gradient active:scale-95 transition-all disabled:opacity-50">
+                          {contactSaving ? 'Saving...' : 'Save'}
+                        </button>
+                        <button onClick={() => { setAddingContact(false); setNewContact({ name: '', title: '', phone: '' }); }}
+                          className="flex-1 py-2.5 rounded-xl text-sm font-bold text-slate-600 bg-slate-100 active:scale-95 transition-all">Cancel</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button onClick={() => { setAddingContact(true); setEditingContactId(null); }}
+                      className="w-full py-3 rounded-2xl text-sm font-bold text-brand-purple border-2 border-dashed border-brand-purple/30 hover:border-brand-purple/50 bg-white active:scale-95 transition-all flex items-center justify-center gap-2">
+                      <span className="material-symbols-outlined text-base">add</span>Add Contact
+                    </button>
+                  )}
+                </>
+              )}
+            </div>
           )}
         </div>
       )}

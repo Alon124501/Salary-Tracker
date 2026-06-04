@@ -14,6 +14,7 @@ app.use('/api/admin', require('./routes/admin'));
 app.use('/api/faq',           require('./routes/faq'));
 app.use('/api/portal',        require('./routes/portal'));
 app.use('/api/notifications', require('./routes/notifications'));
+app.use('/api/contacts',     require('./routes/contacts'));
 app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
 
 module.exports = app;
