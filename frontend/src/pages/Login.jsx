@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api.js';
 
@@ -108,6 +108,9 @@ export default function Login() {
   const [forgotStatus, setForgotStatus] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  // Wake up the backend while the user reads/types the login form
+  useEffect(() => { api.get('/health').catch(() => {}); }, []);
 
   function handleNext() {
     setError('');
