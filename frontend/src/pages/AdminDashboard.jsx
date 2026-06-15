@@ -163,6 +163,7 @@ export default function AdminDashboard() {
   const [currentUserId, setCurrentUserId] = useState(null);
   const [deleteConfirmUser, setDeleteConfirmUser] = useState(null);
   const [deletingUser, setDeletingUser] = useState(false);
+  const [drawerTab, setDrawerTab] = useState('details');
 
   // Bonus state (employee drawer)
   const [bonuses, setBonuses] = useState([]);
@@ -587,6 +588,7 @@ export default function AdminDashboard() {
   // ── Directory drawer ───────────────────────────────────────────────────
   function openDrawer(user) {
     setSelectedUser(user);
+    setDrawerTab('details');
     setBonusForm({ date: '', amount: '', note: '' });
     setShowBonusForm(false);
     setDrawerEdits({
@@ -1791,7 +1793,18 @@ export default function AdminDashboard() {
                 <span className="material-symbols-outlined text-base">close</span>
               </button>
             </div>
+            <div className="flex gap-2 px-5 pt-3 pb-2 border-b border-slate-100 flex-shrink-0">
+              {[{ id: 'details', label: 'Details' }, { id: 'bonuses', label: 'Bonuses' }].map(t => (
+                <button key={t.id} onClick={() => setDrawerTab(t.id)}
+                  className={`px-4 py-1.5 rounded-xl text-sm font-semibold transition-all ${
+                    drawerTab === t.id ? 'brand-gradient text-white' : 'text-slate-400 hover:bg-slate-100'
+                  }`}>
+                  {t.label}
+                </button>
+              ))}
+            </div>
             <div className="overflow-y-auto flex-1 px-5 py-4 space-y-5">
+              {drawerTab === 'details' && <>
               <section>
                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-3">Personal</p>
                 <div className="space-y-3">
@@ -1871,8 +1884,9 @@ export default function AdminDashboard() {
                   </span>
                 </div>
               </section>
+              </>}
 
-              <section>
+              {drawerTab === 'bonuses' && <section>
                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-3">Compensation Bonuses</p>
                 <div className="rounded-2xl bg-slate-50 p-3">
                   <div className="flex items-center justify-between mb-3">
@@ -1938,7 +1952,7 @@ export default function AdminDashboard() {
                     </button>
                   )}
                 </div>
-              </section>
+              </section>}
             </div>
             <div className="px-5 py-4 border-t border-slate-100 flex-shrink-0 flex items-center gap-3">
               {selectedUser?.id !== currentUserId && (
@@ -1950,6 +1964,7 @@ export default function AdminDashboard() {
                   Delete
                 </button>
               )}
+              {drawerTab === 'details' && (
               <button
                 onClick={saveDrawer}
                 disabled={drawerSaving}
@@ -1958,6 +1973,7 @@ export default function AdminDashboard() {
               >
                 {drawerSaving ? 'Saving...' : 'Save Changes'}
               </button>
+              )}
             </div>
           </div>
           </div>
