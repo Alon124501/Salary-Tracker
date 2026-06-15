@@ -114,6 +114,18 @@ router.get('/summary', asyncHandler(async (req, res) => {
   res.json(totals);
 }));
 
+// GET /api/entries/bonuses?month=YYYY-MM  — employee's own bonuses for a month
+router.get('/bonuses', asyncHandler(async (req, res) => {
+  const { month } = req.query;
+  if (!month) return res.status(400).json({ error: 'month param required (YYYY-MM)' });
+  const { start, end } = monthRange(month);
+  const { data, error } = await supabase.from('admin_bonuses')
+    .select('*').eq('user_id', req.userId)
+    .gte('date', start).lte('date', end).order('date');
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data);
+}));
+
 // GET /api/entries/backup
 router.get('/backup', asyncHandler(async (req, res) => {
   const { data: rows, error } = await supabase.from('entries').select('*')

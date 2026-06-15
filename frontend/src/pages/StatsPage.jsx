@@ -17,13 +17,18 @@ export default function StatsPage() {
   const [month, setMonth] = useState(currentMonth());
   const [entries, setEntries] = useState([]);
   const [stats, setStats] = useState(null);
+  const [bonuses, setBonuses] = useState([]);
 
   useEffect(() => { loadStats(); }, [month]);
 
   async function loadStats() {
     try {
-      const { data } = await api.get(`/entries?month=${month}`);
+      const [{ data }, { data: bonusData }] = await Promise.all([
+        api.get(`/entries?month=${month}`),
+        api.get(`/entries/bonuses?month=${month}`),
+      ]);
       setEntries(data);
+      setBonuses(bonusData || []);
 
       const s = {
         insurance_tests: 0, screening_tests: 0,
@@ -145,6 +150,30 @@ export default function StatsPage() {
           })}
         </div>
       </section>
+
+      {/* Bonuses */}
+      {bonuses.length > 0 && (
+        <section className="space-y-3">
+          <h3 className="text-[11px] font-bold text-cupertino-label uppercase tracking-[0.15em] ml-1">Bonuses</h3>
+          <div className="bg-white rounded-2xl border border-slate-100 divide-y divide-slate-100">
+            {bonuses.map(b => (
+              <div key={b.id} className="flex items-center justify-between px-5 py-3">
+                <div>
+                  <p className="text-sm font-semibold text-slate-800">{b.date}</p>
+                  {b.note && <p className="text-xs text-cupertino-label mt-0.5">{b.note}</p>}
+                </div>
+                <span className="text-sm font-extrabold text-brand-purple">+₪{Number(b.amount).toLocaleString()}</span>
+              </div>
+            ))}
+            <div className="flex items-center justify-between px-5 py-3">
+              <p className="text-sm font-bold text-slate-500">Total Bonuses</p>
+              <span className="text-sm font-extrabold text-slate-900">
+                ₪{bonuses.reduce((s, b) => s + Number(b.amount), 0).toLocaleString()}
+              </span>
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* Efficiency */}
       <section className="pb-8 space-y-3">
