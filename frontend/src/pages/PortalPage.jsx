@@ -1,5 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import api from '../api.js';
+import { useFetch } from '../hooks/useFetch.js';
+import { useToast } from '../context/ToastContext.jsx';
 
 const CATEGORIES = [
   { id: 'insurance', label: 'בדיקות ביטוח' },
@@ -57,21 +59,36 @@ function CopyButton({ value }) {
 }
 
 export default function PortalPage() {
-  const [creds, setCreds] = useState([]);
-  const [faqItems, setFaqItems] = useState({ insurance: [], screening: [] });
-  const [contacts, setContacts] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const showToast = useToast();
   const [open, setOpen] = useState(null);
   const [tab, setTab] = useState('apps');
 
-  useEffect(() => {
-    let settled = 0;
-    const done = () => { if (++settled === 3) setLoading(false); };
+  const { data: creds = [],                                    loading: credsLoading  } = useFetch('/portal/credentials');
+  const { data: faqItems = { insurance: [], screening: [] },   loading: faqLoading    } = useFetch('/faq');
+  const { data: contacts = [],                                  loading: contactsLoading } = useFetch('/contacts');
+  const loading = credsLoading || faqLoading || contactsLoading;
 
-    api.get('/portal/credentials').then(r => setCreds(r.data)).catch(() => {}).finally(done);
-    api.get('/faq').then(r => setFaqItems(r.data)).catch(() => {}).finally(done);
-    api.get('/contacts').then(r => setContacts(r.data)).catch(() => {}).finally(done);
-  }, []);
+  // Equipment order state
+  const { data: eqCatalog = [], loading: eqCatalogLoading } =
+    useFetch('/equipment/catalog', { enabled: tab === 'equipment' });
+  const [eqQty, setEqQty] = useState({});
+  const [eqSubmitting, setEqSubmitting] = useState(false);
+  const [eqSuccess, setEqSuccess] = useState(false);
+
+  async function submitOrder() {
+    const items = eqCatalog
+      .filter(item => (eqQty[item.id] || 0) > 0)
+      .map(item => ({ catalog_id: item.id, name: item.name, quantity: eqQty[item.id] }));
+    if (items.length === 0) return;
+    setEqSubmitting(true);
+    try {
+      await api.post('/equipment/orders', { items });
+      setEqQty({});
+      setEqSuccess(true);
+      setTimeout(() => setEqSuccess(false), 3000);
+    } catch (err) { showToast(err?.response?.data?.error || 'Failed to submit order'); }
+    finally { setEqSubmitting(false); }
+  }
 
   function toggle(key) {
     setOpen(prev => (prev === key ? null : key));
@@ -87,8 +104,8 @@ export default function PortalPage() {
         </div>
 
         {/* Tab toggle */}
-        <div className="flex gap-2 mb-6">
-          {[{ id: 'apps', label: 'Apps', icon: 'apps' }, { id: 'faq', label: 'FAQ', icon: 'quiz' }, { id: 'contacts', label: 'Contacts', icon: 'call' }].map(t => (
+        <div className="flex gap-2 mb-6 flex-wrap">
+          {[{ id: 'apps', label: 'Apps', icon: 'apps' }, { id: 'faq', label: 'FAQ', icon: 'quiz' }, { id: 'contacts', label: 'Contacts', icon: 'call' }, { id: 'equipment', label: 'Equipment', icon: 'inventory' }].map(t => (
             <button
               key={t.id}
               onClick={() => setTab(t.id)}
@@ -196,6 +213,63 @@ export default function PortalPage() {
                       </div>
                     ))}
                   </div>
+                )}
+              </div>
+            )}
+
+            {/* ── Equipment Order ── */}
+            {tab === 'equipment' && (
+              <div className="mb-8">
+                <h2 className="text-base font-extrabold text-slate-700 mb-3 px-1 flex items-center gap-2">
+                  <span className="material-symbols-outlined text-brand-purple text-lg" style={{ fontVariationSettings: "'FILL' 1" }}>inventory</span>
+                  Order Equipment
+                </h2>
+                {eqSuccess && (
+                  <div className="mb-4 flex items-center gap-2 bg-emerald-50 border border-emerald-200 text-emerald-700 text-sm font-semibold px-4 py-3 rounded-2xl">
+                    <span className="material-symbols-outlined text-lg" style={{ fontVariationSettings: "'FILL' 1" }}>check_circle</span>
+                    Order submitted successfully!
+                  </div>
+                )}
+                {eqCatalogLoading ? (
+                  <div className="flex justify-center py-10">
+                    <span className="material-symbols-outlined text-3xl text-slate-300 animate-spin">progress_activity</span>
+                  </div>
+                ) : eqCatalog.length === 0 ? (
+                  <div className="bg-white rounded-2xl border border-slate-100 py-10 flex flex-col items-center gap-2 text-slate-400"
+                    style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
+                    <span className="material-symbols-outlined text-3xl opacity-30">inventory</span>
+                    <p className="text-sm">No items available</p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex flex-col gap-3 mb-5">
+                      {eqCatalog.map(item => (
+                        <div key={item.id} className="bg-white rounded-2xl border border-slate-100 px-4 py-3.5 flex items-center justify-between"
+                          style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
+                          <p className="text-sm font-semibold text-slate-800">{item.name}</p>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => setEqQty(q => ({ ...q, [item.id]: Math.max(0, (q[item.id] || 0) - 1) }))}
+                              className="w-8 h-8 flex items-center justify-center rounded-xl bg-slate-100 text-slate-600 font-bold active:scale-95 transition-all"
+                            >−</button>
+                            <span className="w-8 text-center text-sm font-bold text-slate-800">{eqQty[item.id] || 0}</span>
+                            <button
+                              onClick={() => setEqQty(q => ({ ...q, [item.id]: (q[item.id] || 0) + 1 }))}
+                              className="w-8 h-8 flex items-center justify-center rounded-xl bg-slate-100 text-slate-600 font-bold active:scale-95 transition-all"
+                            >+</button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <button
+                      onClick={submitOrder}
+                      disabled={eqSubmitting || Object.values(eqQty).every(v => !v)}
+                      className="w-full py-3 rounded-2xl text-sm font-bold text-white brand-gradient active:scale-[0.98] transition-all disabled:opacity-40"
+                      style={{ boxShadow: '0 4px 14px rgba(139,53,217,0.3)' }}
+                    >
+                      {eqSubmitting ? 'Submitting...' : 'Submit Order'}
+                    </button>
+                  </>
                 )}
               </div>
             )}

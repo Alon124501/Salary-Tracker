@@ -273,30 +273,29 @@ router.get('/branches/:id/vouchers/download', async (req, res) => {
   ];
   sheet.getRow(1).font = { bold: true };
 
-  for (let i = 0; i < vouchers.length; i++) {
-    const v = vouchers[i];
+  const downloadResults = await Promise.all(vouchers.map((v, i) => {
     const p = v.profiles;
     const employeeName = (p ? `${p.first_name || ''} ${p.last_name || ''}`.trim() || p.username : 'unknown')
       .replace(/\s+/g, '_');
     const safeFileName = `${i + 1}_${employeeName}_${v.file_name}`;
     const ext = v.file_name.split('.').pop().toLowerCase();
     const isImage = IMAGE_EXTS.has(ext);
-
-    const { data: fileData, error: dlErr } = await supabase.storage
-      .from('screening-vouchers').download(v.file_url);
-    if (dlErr || !fileData) { continue; }
-
-    const arrayBuf = await fileData.arrayBuffer();
-    const buf = Buffer.from(arrayBuf);
-
-    archive.append(buf, { name: safeFileName });
-
-    const rawText = isImage ? await ocrImage(buf) : null;
-    const { idNumbers, voucherNumber } = extractFields(rawText);
     const employeeDisplay = p
       ? `${p.first_name || ''} ${p.last_name || ''}`.trim() || p.username
       : 'unknown';
+    return supabase.storage.from('screening-vouchers').download(v.file_url).then(async ({ data: fileData, error: dlErr }) => {
+      if (dlErr || !fileData) return null;
+      const buf = Buffer.from(await fileData.arrayBuffer());
+      const rawText = isImage ? await ocrImage(buf) : null;
+      const { idNumbers, voucherNumber } = extractFields(rawText);
+      return { i, buf, safeFileName, isImage, employeeDisplay, idNumbers, voucherNumber };
+    });
+  }));
 
+  for (const result of downloadResults) {
+    if (!result) continue;
+    const { i, buf, safeFileName, isImage, employeeDisplay, idNumbers, voucherNumber } = result;
+    archive.append(buf, { name: safeFileName });
     sheet.addRow({
       num: i + 1,
       employee: employeeDisplay,

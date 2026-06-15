@@ -1,12 +1,28 @@
 const express = require('express');
-const multer = require('multer');
+const multer  = require('multer');
+const { z }   = require('zod');
 const supabase = require('../supabase');
-const auth = require('../middleware/auth');
+const auth     = require('../middleware/auth');
+const asyncHandler = require('../middleware/asyncHandler');
 
 const router = express.Router();
 router.use(auth);
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
+
+const NumericField = z.coerce.number().min(0).optional().default(0);
+
+const EntryBodySchema = z.object({
+  date:                  z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'date must be YYYY-MM-DD').optional(),
+  insurance_tests:       NumericField,
+  screening_tests:       NumericField,
+  mixed_screening_tests: NumericField,
+  partial_tests:         NumericField,
+  kilometers:            NumericField,
+  office_hours:          NumericField,
+  food_expense:          NumericField,
+  parking_expense:       NumericField,
+});
 
 function calcDaily(e, mileageRate = 2) {
   const totalTests = (e.insurance_tests || 0) + (e.screening_tests || 0) +
@@ -33,16 +49,15 @@ async function getUserMileageRate(userId) {
   return data?.mileage_rate ?? 2;
 }
 
-// Returns { start, end } as 'YYYY-MM-DD' strings for a given 'YYYY-MM' month
 function monthRange(month) {
   const [year, mon] = month.split('-').map(Number);
   const start = `${month}-01`;
-  const end = new Date(year, mon, 0).toISOString().slice(0, 10); // last day of month
+  const end = new Date(year, mon, 0).toISOString().slice(0, 10);
   return { start, end };
 }
 
 // GET /api/entries?month=YYYY-MM
-router.get('/', async (req, res) => {
+router.get('/', asyncHandler(async (req, res) => {
   const { month } = req.query;
   let query = supabase.from('entries').select('*').eq('user_id', req.userId).order('date', { ascending: false });
   if (month) {
@@ -52,10 +67,10 @@ router.get('/', async (req, res) => {
   const [{ data: rows, error }, mileageRate] = await Promise.all([query, getUserMileageRate(req.userId)]);
   if (error) return res.status(500).json({ error: error.message });
   res.json(rows.map(e => ({ ...e, calc: calcDaily(e, mileageRate) })));
-});
+}));
 
 // GET /api/entries/summary?month=YYYY-MM
-router.get('/summary', async (req, res) => {
+router.get('/summary', asyncHandler(async (req, res) => {
   const { month } = req.query;
   if (!month) return res.status(400).json({ error: 'month param required (YYYY-MM)' });
 
@@ -83,43 +98,37 @@ router.get('/summary', async (req, res) => {
     totals.total += c.total;
   }
   res.json(totals);
-});
+}));
 
 // GET /api/entries/backup
-router.get('/backup', async (req, res) => {
+router.get('/backup', asyncHandler(async (req, res) => {
   const { data: rows, error } = await supabase.from('entries').select('*')
     .eq('user_id', req.userId).order('date', { ascending: true });
   if (error) return res.status(500).json({ error: error.message });
   const entries = rows.map(({ user_id, id, ...e }) => e);
   res.json({ exported_at: new Date().toISOString(), entries });
-});
+}));
 
 // POST /api/entries  (upsert by date)
-router.post('/', async (req, res) => {
-  const { date, insurance_tests, screening_tests, mixed_screening_tests,
-          partial_tests, kilometers, office_hours, food_expense, parking_expense } = req.body;
+router.post('/', asyncHandler(async (req, res) => {
+  const parsed = EntryBodySchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
+  const { date, ...fields } = parsed.data;
   if (!date) return res.status(400).json({ error: 'date is required' });
 
   const { data: entry, error } = await supabase.from('entries').upsert({
     user_id: req.userId,
     date,
-    insurance_tests: insurance_tests || 0,
-    screening_tests: screening_tests || 0,
-    mixed_screening_tests: mixed_screening_tests || 0,
-    partial_tests: partial_tests || 0,
-    kilometers: kilometers || 0,
-    office_hours: office_hours || 0,
-    food_expense: food_expense || 0,
-    parking_expense: parking_expense || 0,
+    ...fields,
   }, { onConflict: 'user_id,date' }).select().single();
 
   if (error) return res.status(500).json({ error: error.message });
   const mileageRate = await getUserMileageRate(req.userId);
   res.status(201).json({ ...entry, calc: calcDaily(entry, mileageRate) });
-});
+}));
 
 // PUT /api/entries/:id/receipt
-router.put('/:id/receipt', upload.single('receipt'), async (req, res) => {
+router.put('/:id/receipt', upload.single('receipt'), asyncHandler(async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
 
   const { data: entry, error: fetchErr } = await supabase.from('entries')
@@ -144,10 +153,10 @@ router.put('/:id/receipt', upload.single('receipt'), async (req, res) => {
   if (updateErr) return res.status(500).json({ error: updateErr.message });
 
   res.json({ success: true, receipt_url: filePath });
-});
+}));
 
 // POST /api/entries/:id/food-receipt
-router.post('/:id/food-receipt', upload.single('food_receipt'), async (req, res) => {
+router.post('/:id/food-receipt', upload.single('food_receipt'), asyncHandler(async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
 
   const { data: entry, error: fetchErr } = await supabase.from('entries')
@@ -174,10 +183,10 @@ router.post('/:id/food-receipt', upload.single('food_receipt'), async (req, res)
     .from('receipts').createSignedUrl(filePath, 604800);
 
   res.json({ path: filePath, signedUrl: signedData?.signedUrl });
-});
+}));
 
 // GET /api/entries/:id/food-receipts
-router.get('/:id/food-receipts', async (req, res) => {
+router.get('/:id/food-receipts', asyncHandler(async (req, res) => {
   const { data: entry, error: fetchErr } = await supabase.from('entries')
     .select('food_receipt_urls')
     .eq('id', req.params.id).eq('user_id', req.userId).single();
@@ -190,10 +199,10 @@ router.get('/:id/food-receipts', async (req, res) => {
     return { path, signedUrl: urlData?.signedUrl ?? null };
   }));
   res.json(receipts);
-});
+}));
 
 // DELETE /api/entries/:id/food-receipt
-router.delete('/:id/food-receipt', async (req, res) => {
+router.delete('/:id/food-receipt', asyncHandler(async (req, res) => {
   const path = req.query.path;
   if (!path) return res.status(400).json({ error: 'path is required' });
 
@@ -213,10 +222,10 @@ router.delete('/:id/food-receipt', async (req, res) => {
   if (updateErr) return res.status(500).json({ error: updateErr.message });
 
   res.json({ success: true });
-});
+}));
 
 // POST /api/entries/:id/parking-receipt
-router.post('/:id/parking-receipt', upload.single('parking_receipt'), async (req, res) => {
+router.post('/:id/parking-receipt', upload.single('parking_receipt'), asyncHandler(async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
 
   const { data: entry, error: fetchErr } = await supabase.from('entries')
@@ -243,10 +252,10 @@ router.post('/:id/parking-receipt', upload.single('parking_receipt'), async (req
     .from('receipts').createSignedUrl(filePath, 604800);
 
   res.json({ path: filePath, signedUrl: signedData?.signedUrl });
-});
+}));
 
 // GET /api/entries/:id/parking-receipts
-router.get('/:id/parking-receipts', async (req, res) => {
+router.get('/:id/parking-receipts', asyncHandler(async (req, res) => {
   const { data: entry, error: fetchErr } = await supabase.from('entries')
     .select('parking_receipt_urls')
     .eq('id', req.params.id).eq('user_id', req.userId).single();
@@ -259,10 +268,10 @@ router.get('/:id/parking-receipts', async (req, res) => {
     return { path, signedUrl: urlData?.signedUrl ?? null };
   }));
   res.json(receipts);
-});
+}));
 
 // DELETE /api/entries/:id/parking-receipt
-router.delete('/:id/parking-receipt', async (req, res) => {
+router.delete('/:id/parking-receipt', asyncHandler(async (req, res) => {
   const path = req.query.path;
   if (!path) return res.status(400).json({ error: 'path is required' });
 
@@ -282,36 +291,39 @@ router.delete('/:id/parking-receipt', async (req, res) => {
   if (updateErr) return res.status(500).json({ error: updateErr.message });
 
   res.json({ success: true });
-});
+}));
 
 // PUT /api/entries/:id
-router.put('/:id', async (req, res) => {
-  // Verify ownership
+router.put('/:id', asyncHandler(async (req, res) => {
   const { data: entry, error: fetchErr } = await supabase.from('entries').select('*')
     .eq('id', req.params.id).eq('user_id', req.userId).single();
   if (fetchErr || !entry) return res.status(404).json({ error: 'Entry not found' });
 
-  const { insurance_tests, screening_tests, mixed_screening_tests,
-          partial_tests, kilometers, office_hours, food_expense, parking_expense } = req.body;
+  const parsed = EntryBodySchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
 
-  const { data: updated, error: updateErr } = await supabase.from('entries').update({
-    insurance_tests: insurance_tests ?? entry.insurance_tests,
-    screening_tests: screening_tests ?? entry.screening_tests,
-    mixed_screening_tests: mixed_screening_tests ?? entry.mixed_screening_tests,
-    partial_tests: partial_tests ?? entry.partial_tests,
-    kilometers: kilometers ?? entry.kilometers,
-    office_hours: office_hours ?? entry.office_hours,
-    food_expense: food_expense ?? entry.food_expense,
-    parking_expense: parking_expense ?? entry.parking_expense,
-  }).eq('id', entry.id).select().single();
+  const { date: _date, ...fields } = parsed.data;
+  const updates = {
+    insurance_tests:       fields.insurance_tests       ?? entry.insurance_tests,
+    screening_tests:       fields.screening_tests       ?? entry.screening_tests,
+    mixed_screening_tests: fields.mixed_screening_tests ?? entry.mixed_screening_tests,
+    partial_tests:         fields.partial_tests         ?? entry.partial_tests,
+    kilometers:            fields.kilometers            ?? entry.kilometers,
+    office_hours:          fields.office_hours          ?? entry.office_hours,
+    food_expense:          fields.food_expense          ?? entry.food_expense,
+    parking_expense:       fields.parking_expense       ?? entry.parking_expense,
+  };
 
+  const { data: updated, error: updateErr } = await supabase.from('entries')
+    .update(updates).eq('id', entry.id).select().single();
   if (updateErr) return res.status(500).json({ error: updateErr.message });
+
   const mileageRate = await getUserMileageRate(req.userId);
   res.json({ ...updated, calc: calcDaily(updated, mileageRate) });
-});
+}));
 
 // DELETE /api/entries/:id
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', asyncHandler(async (req, res) => {
   const { data: entry, error: fetchErr } = await supabase.from('entries').select('id')
     .eq('id', req.params.id).eq('user_id', req.userId).single();
   if (fetchErr || !entry) return res.status(404).json({ error: 'Entry not found' });
@@ -319,29 +331,29 @@ router.delete('/:id', async (req, res) => {
   const { error } = await supabase.from('entries').delete().eq('id', entry.id);
   if (error) return res.status(500).json({ error: error.message });
   res.json({ success: true });
-});
+}));
 
 // POST /api/entries/restore
-router.post('/restore', async (req, res) => {
+router.post('/restore', asyncHandler(async (req, res) => {
   const { entries } = req.body;
   if (!Array.isArray(entries)) return res.status(400).json({ error: 'entries array required' });
 
   const rows = entries.filter(e => e.date).map(e => ({
     user_id: req.userId,
     date: e.date,
-    insurance_tests: e.insurance_tests || 0,
-    screening_tests: e.screening_tests || 0,
-    mixed_screening_tests: e.mixed_screening_tests || 0,
-    partial_tests: e.partial_tests || 0,
-    kilometers: e.kilometers || 0,
-    office_hours: e.office_hours || 0,
-    food_expense: e.food_expense || 0,
-    parking_expense: e.parking_expense || 0,
+    insurance_tests: Math.max(0, Number(e.insurance_tests) || 0),
+    screening_tests: Math.max(0, Number(e.screening_tests) || 0),
+    mixed_screening_tests: Math.max(0, Number(e.mixed_screening_tests) || 0),
+    partial_tests: Math.max(0, Number(e.partial_tests) || 0),
+    kilometers: Math.max(0, Number(e.kilometers) || 0),
+    office_hours: Math.max(0, Number(e.office_hours) || 0),
+    food_expense: Math.max(0, Number(e.food_expense) || 0),
+    parking_expense: Math.max(0, Number(e.parking_expense) || 0),
   }));
 
   const { error } = await supabase.from('entries').upsert(rows, { onConflict: 'user_id,date' });
   if (error) return res.status(500).json({ error: error.message });
   res.json({ success: true, imported: rows.length });
-});
+}));
 
 module.exports = router;

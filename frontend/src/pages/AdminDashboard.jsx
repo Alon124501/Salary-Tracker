@@ -1,5 +1,7 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import api from '../api.js';
+import { useFetch } from '../hooks/useFetch.js';
+import { useToast } from '../context/ToastContext.jsx';
 
 const EQUIPMENT_TYPES = ['bone_density', 'tonometer', 'echocardiogram', 'tanita', 'ge'];
 const EQUIPMENT_LABELS = {
@@ -24,6 +26,7 @@ const TABS = [
   { id: 'reports',       label: 'Reports',       icon: 'assignment' },
   { id: 'notifications', label: 'Notifications', icon: 'notifications' },
   { id: 'faq',           label: 'Portal',        icon: 'hub' },
+  { id: 'eq_orders',     label: 'Orders',        icon: 'inventory' },
 ];
 
 const FAQ_CATEGORIES = [
@@ -33,6 +36,18 @@ const FAQ_CATEGORIES = [
 
 function nowMonth() {
   return new Date().toISOString().slice(0, 7);
+}
+
+function bonusMonthOptions() {
+  const opts = [];
+  const now = new Date();
+  for (let i = -1; i <= 6; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    const label = d.toLocaleString('en-US', { month: 'long', year: 'numeric' });
+    opts.push({ value, label });
+  }
+  return opts;
 }
 
 function Field({ label, value, onChange, type = 'text', dir, placeholder, step }) {
@@ -53,16 +68,18 @@ function Field({ label, value, onChange, type = 'text', dir, placeholder, step }
 }
 
 export default function AdminDashboard() {
+  const showToast = useToast();
   const [activeTab, setActiveTab] = useState('directory');
-  const [users, setUsers] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError]   = useState(null);
+
+  const { data: users = [], setData: setUsers, loading, error, reload: loadUsers } =
+    useFetch('/admin/users');
 
   // Portal tab state
   const [portalSubTab, setPortalSubTab] = useState('faq');
   // FAQ sub-tab
-  const [faqItems, setFaqItems] = useState({ insurance: [], screening: [] });
-  const [faqLoading, setFaqLoading] = useState(false);
+  const { data: faqItems = { insurance: [], screening: [] }, setData: setFaqItems,
+          loading: faqLoading, reload: loadFaq } =
+    useFetch('/faq', { enabled: activeTab === 'faq' });
   const [faqCategory, setFaqCategory] = useState('insurance');
   const [addingFaq, setAddingFaq] = useState(false);
   const [newFaqQ, setNewFaqQ] = useState('');
@@ -72,8 +89,8 @@ export default function AdminDashboard() {
   const [editFaqA, setEditFaqA] = useState('');
   const [faqSaving, setFaqSaving] = useState(false);
   // Apps sub-tab
-  const [appCreds, setAppCreds] = useState([]);
-  const [appCredsLoading, setAppCredsLoading] = useState(false);
+  const { data: appCreds = [], setData: setAppCreds, loading: appCredsLoading, reload: loadAppCreds } =
+    useFetch('/portal/credentials', { enabled: activeTab === 'faq' });
   const [addingApp, setAddingApp] = useState(false);
   const [newAppName, setNewAppName] = useState('');
   const [newAppUser, setNewAppUser] = useState('');
@@ -87,8 +104,8 @@ export default function AdminDashboard() {
   const [appSaving, setAppSaving] = useState(false);
 
   // Contacts sub-tab
-  const [contacts, setContacts] = useState([]);
-  const [contactsLoading, setContactsLoading] = useState(false);
+  const { data: contacts = [], setData: setContacts, loading: contactsLoading, reload: loadContacts } =
+    useFetch('/contacts', { enabled: activeTab === 'faq' });
   const [addingContact, setAddingContact] = useState(false);
   const [newContact, setNewContact] = useState({ name: '', title: '', phone: '' });
   const [editingContactId, setEditingContactId] = useState(null);
@@ -104,8 +121,8 @@ export default function AdminDashboard() {
   const [approveMsgs, setApproveMsgs] = useState({});
 
   // Notifications tab state
-  const [notifList, setNotifList] = useState([]);
-  const [notifLoading, setNotifLoading] = useState(false);
+  const { data: notifList = [], setData: setNotifList, loading: notifLoading, reload: loadNotifications } =
+    useFetch('/notifications/admin/all', { enabled: activeTab === 'notifications' });
   const [notifForm, setNotifForm] = useState({
     title: '',
     content: '',
@@ -122,7 +139,19 @@ export default function AdminDashboard() {
   });
   const docFileInputRef = useRef(null);
   const [notifSubmitting, setNotifSubmitting] = useState(false);
+  const [notifError, setNotifError] = useState('');
   const [complianceModal, setComplianceModal] = useState(null);
+
+  // Equipment Orders tab state
+  const { data: eqCatalog = [], setData: setEqCatalog, loading: eqCatalogLoading, reload: loadEqCatalog } =
+    useFetch('/equipment/catalog', { enabled: activeTab === 'eq_orders' });
+  const { data: eqOrders = [], setData: setEqOrders, loading: eqOrdersLoading, reload: loadEqOrders } =
+    useFetch('/equipment/orders');
+  const pendingOrdersCount = eqOrders.filter(o => o.status === 'pending').length;
+  const [newItemName, setNewItemName] = useState('');
+  const [eqSubTab, setEqSubTab] = useState('catalog');
+  const [eqOrderModal, setEqOrderModal] = useState(null);
+  const [completingOrderId, setCompletingOrderId] = useState(null);
 
   // Inline edit state for compensation tab
   const [edits, setEdits] = useState({});
@@ -132,63 +161,29 @@ export default function AdminDashboard() {
   const [drawerEdits, setDrawerEdits] = useState({});
   const [drawerSaving, setDrawerSaving] = useState(false);
   const [currentUserId, setCurrentUserId] = useState(null);
+  const [deleteConfirmUser, setDeleteConfirmUser] = useState(null);
+  const [deletingUser, setDeletingUser] = useState(false);
 
-  const loadUsers = useCallback(async () => {
-    try {
-      setLoading(true);
-      const { data } = await api.get('/admin/users');
-      setUsers(data);
-    } catch {
-      setError('Failed to load users');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  // Bonus state (employee drawer)
+  const [bonuses, setBonuses] = useState([]);
+  const [bonusMonth, setBonusMonth] = useState(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  });
+  const [bonusForm, setBonusForm] = useState({ date: '', amount: '', note: '' });
+  const [addingBonus, setAddingBonus] = useState(false);
+  const [showBonusForm, setShowBonusForm] = useState(false);
 
   useEffect(() => {
-    loadUsers();
     api.get('/auth/me').then(r => setCurrentUserId(r.data.id)).catch(() => {});
-  }, [loadUsers]);
-
-  const loadFaq = useCallback(async () => {
-    setFaqLoading(true);
-    try {
-      const { data } = await api.get('/faq');
-      setFaqItems(data);
-    } catch { /* silent */ }
-    finally { setFaqLoading(false); }
-  }, []);
-
-  const loadAppCreds = useCallback(async () => {
-    setAppCredsLoading(true);
-    try {
-      const { data } = await api.get('/portal/credentials');
-      setAppCreds(data);
-    } catch { /* silent */ }
-    finally { setAppCredsLoading(false); }
-  }, []);
-
-  const loadContacts = useCallback(async () => {
-    setContactsLoading(true);
-    try {
-      const { data } = await api.get('/contacts');
-      setContacts(data);
-    } catch { /* silent */ }
-    finally { setContactsLoading(false); }
-  }, []);
-
-  const loadNotifications = useCallback(async () => {
-    setNotifLoading(true);
-    try {
-      const { data } = await api.get('/notifications/admin/all');
-      setNotifList(data);
-    } catch { /* silent */ }
-    finally { setNotifLoading(false); }
   }, []);
 
   useEffect(() => {
-    if (activeTab === 'faq') { loadFaq(); loadAppCreds(); loadContacts(); }
-  }, [activeTab, loadFaq, loadAppCreds, loadContacts]);
+    if (!selectedUser) { setBonuses([]); return; }
+    api.get(`/admin/users/${selectedUser.id}/bonuses?month=${bonusMonth}`)
+      .then(r => setBonuses(r.data))
+      .catch(() => setBonuses([]));
+  }, [selectedUser, bonusMonth]);
 
   const loadReportSummary = useCallback(async (month) => {
     setSummaryLoading(true);
@@ -209,9 +204,73 @@ export default function AdminDashboard() {
     }
   }, [activeTab, reportMonth, loadReportSummary]);
 
-  useEffect(() => {
-    if (activeTab === 'notifications') loadNotifications();
-  }, [activeTab, loadNotifications]);
+
+  // ── Equipment Orders actions ───────────────────────────────────────────
+  async function addCatalogItem() {
+    if (!newItemName.trim()) return;
+    try {
+      await api.post('/equipment/catalog', { name: newItemName.trim() });
+      setNewItemName('');
+      loadEqCatalog();
+    } catch (err) { showToast(err?.response?.data?.error || 'Failed to add item'); }
+  }
+
+  async function deleteCatalogItem(id) {
+    try {
+      await api.delete(`/equipment/catalog/${id}`);
+      loadEqCatalog();
+    } catch (err) { showToast(err?.response?.data?.error || 'Failed to delete item'); }
+  }
+
+  async function deleteEmployee(user) {
+    setDeletingUser(true);
+    try {
+      await api.delete(`/admin/users/${user.id}`);
+      setUsers(prev => prev.filter(u => u.id !== user.id));
+      setSelectedUser(null);
+      setDeleteConfirmUser(null);
+      showToast(`${user.first_name || ''} ${user.last_name || ''}`.trim() + ' has been deleted');
+    } catch (err) {
+      showToast(err?.response?.data?.error || 'Failed to delete employee');
+    } finally {
+      setDeletingUser(false);
+    }
+  }
+
+  async function addBonus() {
+    if (!bonusForm.date || !bonusForm.amount) return;
+    setAddingBonus(true);
+    try {
+      const { data } = await api.post(`/admin/users/${selectedUser.id}/bonuses`, bonusForm);
+      setBonuses(prev => [...prev, data].sort((a, b) => a.date.localeCompare(b.date)));
+      setBonusForm({ date: '', amount: '', note: '' });
+      setShowBonusForm(false);
+    } catch (err) {
+      showToast(err?.response?.data?.error || 'Failed to add bonus');
+    } finally {
+      setAddingBonus(false);
+    }
+  }
+
+  async function deleteBonus(id) {
+    try {
+      await api.delete(`/admin/users/${selectedUser.id}/bonuses/${id}`);
+      setBonuses(prev => prev.filter(b => b.id !== id));
+    } catch (err) {
+      showToast(err?.response?.data?.error || 'Failed to delete bonus');
+    }
+  }
+
+  async function completeOrder(id) {
+    setCompletingOrderId(id);
+    try {
+      await api.delete(`/equipment/orders/${id}`);
+      setEqOrders(prev => prev.filter(o => o.id !== id));
+      setEqOrderModal(null);
+      showToast('Order marked as complete');
+    } catch (err) { showToast(err?.response?.data?.error || 'Failed to complete order'); }
+    finally { setCompletingOrderId(null); }
+  }
 
   // ── Equipment toggle ───────────────────────────────────────────────────
   async function toggleEquipment(userId, type, hasIt) {
@@ -226,7 +285,7 @@ export default function AdminDashboard() {
         const eq = hasIt ? u.equipment.filter(e => e !== type) : [...u.equipment, type];
         return { ...u, equipment: eq };
       }));
-    } catch { /* silent */ }
+    } catch (err) { showToast(err?.response?.data?.error || 'Failed to update equipment'); }
   }
 
   // ── Echo certified toggle ──────────────────────────────────────────────
@@ -234,7 +293,7 @@ export default function AdminDashboard() {
     try {
       await api.patch(`/admin/users/${userId}`, { echo_certified: !current });
       setUsers(prev => prev.map(u => u.id === userId ? { ...u, echo_certified: !current } : u));
-    } catch { /* silent */ }
+    } catch (err) { showToast(err?.response?.data?.error || 'Failed to update echo certification'); }
   }
 
   // ── Inline PATCH on blur ───────────────────────────────────────────────
@@ -254,7 +313,7 @@ export default function AdminDashboard() {
     try {
       await api.patch(`/admin/users/${userId}`, { [field]: parsed });
       setUsers(prev => prev.map(u => u.id === userId ? { ...u, [field]: parsed } : u));
-    } catch { /* silent */ }
+    } catch (err) { showToast(err?.response?.data?.error || 'Failed to save'); }
   }
 
   // ── Notifications ─────────────────────────────────────────────────────
@@ -268,6 +327,7 @@ export default function AdminDashboard() {
     if (sendMode === 'schedule' && !isRecurring && !scheduled_for) return;
 
     setNotifSubmitting(true);
+    setNotifError('');
     try {
       const fd = new FormData();
       fd.append('title', title.trim());
@@ -298,7 +358,9 @@ export default function AdminDashboard() {
       });
       if (docFileInputRef.current) docFileInputRef.current.value = '';
       loadNotifications();
-    } catch { /* silent */ }
+    } catch (err) {
+      setNotifError(err?.response?.data?.error || 'Failed to send notification. Please try again.');
+    }
     finally { setNotifSubmitting(false); }
   }
 
@@ -332,7 +394,7 @@ export default function AdminDashboard() {
       a.download = `${userName} - ${monthLabel} ${yr}.xlsx`;
       a.click();
       URL.revokeObjectURL(url);
-    } catch { /* silent */ }
+    } catch (err) { showToast(err?.response?.data?.error || 'Failed to download report'); }
     finally { setDownloadingId(null); }
   }
 
@@ -345,7 +407,7 @@ export default function AdminDashboard() {
       const { data } = await api.post('/faq', { category: faqCategory, question: newFaqQ.trim(), answer: newFaqA.trim(), sort_order });
       setFaqItems(prev => ({ ...prev, [faqCategory]: [...prev[faqCategory], data] }));
       setNewFaqQ(''); setNewFaqA(''); setAddingFaq(false);
-    } catch { /* silent */ }
+    } catch (err) { showToast(err?.response?.data?.error || 'Failed to save question'); }
     finally { setFaqSaving(false); }
   }
 
@@ -359,7 +421,7 @@ export default function AdminDashboard() {
         [faqCategory]: prev[faqCategory].map(x => x.id === id ? { ...x, question: editFaqQ.trim(), answer: editFaqA.trim() } : x),
       }));
       setEditingFaqId(null);
-    } catch { /* silent */ }
+    } catch (err) { showToast(err?.response?.data?.error || 'Failed to update question'); }
     finally { setFaqSaving(false); }
   }
 
@@ -399,7 +461,7 @@ export default function AdminDashboard() {
       const { data } = await api.post('/portal/credentials', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
       setAppCreds(prev => [...prev, data]);
       setNewAppName(''); setNewAppUser(''); setNewAppPass(''); setNewAppImage(null); setAddingApp(false);
-    } catch { /* silent */ }
+    } catch (err) { showToast(err?.response?.data?.error || 'Failed to save app'); }
     finally { setAppSaving(false); }
   }
 
@@ -415,7 +477,7 @@ export default function AdminDashboard() {
       const { data } = await api.patch(`/portal/credentials/${id}`, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
       setAppCreds(prev => prev.map(x => x.id === id ? data : x));
       setEditingAppId(null); setEditAppImage(null);
-    } catch { /* silent */ }
+    } catch (err) { showToast(err?.response?.data?.error || 'Failed to update app'); }
     finally { setAppSaving(false); }
   }
 
@@ -472,7 +534,7 @@ export default function AdminDashboard() {
       setContacts(prev => [...prev, data]);
       setNewContact({ name: '', title: '', phone: '' });
       setAddingContact(false);
-    } catch { /* silent */ }
+    } catch (err) { showToast(err?.response?.data?.error || 'Failed to save contact'); }
     finally { setContactSaving(false); }
   }
 
@@ -487,7 +549,7 @@ export default function AdminDashboard() {
       });
       setContacts(prev => prev.map(x => x.id === id ? data : x));
       setEditingContactId(null);
-    } catch { /* silent */ }
+    } catch (err) { showToast(err?.response?.data?.error || 'Failed to update contact'); }
     finally { setContactSaving(false); }
   }
 
@@ -525,6 +587,8 @@ export default function AdminDashboard() {
   // ── Directory drawer ───────────────────────────────────────────────────
   function openDrawer(user) {
     setSelectedUser(user);
+    setBonusForm({ date: '', amount: '', note: '' });
+    setShowBonusForm(false);
     setDrawerEdits({
       first_name: user.first_name || '',
       last_name: user.last_name || '',
@@ -553,7 +617,7 @@ export default function AdminDashboard() {
       await api.patch(`/admin/users/${selectedUser.id}`, updates);
       setUsers(prev => prev.map(u => u.id === selectedUser.id ? { ...u, ...updates } : u));
       setSelectedUser(null);
-    } catch { /* silent */ }
+    } catch (err) { showToast(err?.response?.data?.error || 'Failed to save changes'); }
     finally { setDrawerSaving(false); }
   }
 
@@ -597,6 +661,11 @@ export default function AdminDashboard() {
               >
                 <span className="material-symbols-outlined text-base" style={{ fontVariationSettings: active ? "'FILL' 1" : "'FILL' 0" }}>{tab.icon}</span>
                 {tab.label}
+                {tab.id === 'eq_orders' && pendingOrdersCount > 0 && (
+                  <span className="bg-blue-500 text-white text-[10px] font-bold min-w-[17px] h-[17px] px-1 rounded-full flex items-center justify-center leading-none">
+                    {pendingOrdersCount}
+                  </span>
+                )}
               </button>
             );
           })}
@@ -1386,6 +1455,9 @@ export default function AdminDashboard() {
                 : <><span className="material-symbols-outlined text-sm">send</span> Send Notification</>
               }
             </button>
+            {notifError && (
+              <p className="text-xs text-red-500 text-center mt-1">{notifError}</p>
+            )}
           </div>
 
           {/* Notifications list */}
@@ -1544,6 +1616,161 @@ export default function AdminDashboard() {
         </div>
       )}
 
+      {/* ── Tab: Equipment Orders ──────────────────────────────────────── */}
+      {activeTab === 'eq_orders' && (
+        <div className="px-4 space-y-4">
+          {/* Sub-tab toggle */}
+          <div className="flex gap-2">
+            {[{ id: 'catalog', label: 'Catalog', icon: 'list' }, { id: 'orders', label: 'Orders', icon: 'inventory' }].map(st => (
+              <button
+                key={st.id}
+                onClick={() => setEqSubTab(st.id)}
+                className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold transition-all active:scale-95 ${
+                  eqSubTab === st.id ? 'brand-gradient text-white' : 'bg-white border border-slate-200 text-slate-500'
+                }`}
+                style={eqSubTab === st.id ? { boxShadow: '0 4px 14px rgba(139,53,217,0.25)' } : {}}
+              >
+                <span className="material-symbols-outlined text-base" style={{ fontVariationSettings: eqSubTab === st.id ? "'FILL' 1" : "'FILL' 0" }}>{st.icon}</span>
+                {st.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Catalog sub-tab */}
+          {eqSubTab === 'catalog' && (
+            <div>
+              <div className="flex gap-2 mb-4">
+                <input
+                  type="text"
+                  value={newItemName}
+                  onChange={e => setNewItemName(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && addCatalogItem()}
+                  placeholder="Item name..."
+                  className="flex-1 px-3 py-2.5 text-sm rounded-xl border border-slate-200 focus:border-brand-purple/50 focus:outline-none bg-white"
+                />
+                <button
+                  onClick={addCatalogItem}
+                  className="px-4 py-2.5 rounded-xl text-sm font-bold text-white brand-gradient active:scale-95 transition-all"
+                  style={{ boxShadow: '0 4px 14px rgba(139,53,217,0.25)' }}
+                >
+                  Add
+                </button>
+              </div>
+              {eqCatalogLoading ? (
+                <div className="flex justify-center py-10">
+                  <span className="material-symbols-outlined text-3xl text-slate-300 animate-spin">progress_activity</span>
+                </div>
+              ) : eqCatalog.length === 0 ? (
+                <div className="bg-white rounded-2xl border border-slate-100 py-10 flex flex-col items-center gap-2 text-slate-400"
+                  style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
+                  <span className="material-symbols-outlined text-3xl opacity-30">list</span>
+                  <p className="text-sm">No items in catalog yet</p>
+                </div>
+              ) : (
+                <div className="flex flex-col gap-2">
+                  {eqCatalog.map(item => (
+                    <div key={item.id} className="bg-white rounded-2xl border border-slate-100 px-4 py-3.5 flex items-center justify-between"
+                      style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
+                      <p className="text-sm font-semibold text-slate-800">{item.name}</p>
+                      <button
+                        onClick={() => deleteCatalogItem(item.id)}
+                        className="w-8 h-8 flex items-center justify-center rounded-xl text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all"
+                      >
+                        <span className="material-symbols-outlined text-base">delete</span>
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Orders sub-tab */}
+          {eqSubTab === 'orders' && (
+            <div>
+              {eqOrdersLoading ? (
+                <div className="flex justify-center py-10">
+                  <span className="material-symbols-outlined text-3xl text-slate-300 animate-spin">progress_activity</span>
+                </div>
+              ) : eqOrders.length === 0 ? (
+                <div className="bg-white rounded-2xl border border-slate-100 py-10 flex flex-col items-center gap-2 text-slate-400"
+                  style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
+                  <span className="material-symbols-outlined text-3xl opacity-30">inventory</span>
+                  <p className="text-sm">No orders yet</p>
+                </div>
+              ) : (
+                <div className="flex flex-col gap-2">
+                  {eqOrders.map(order => {
+                    const profile = order.profiles;
+                    const name = profile ? `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || profile.username : '—';
+                    const itemCount = Array.isArray(order.items) ? order.items.length : 0;
+                    return (
+                      <button
+                        key={order.id}
+                        onClick={() => setEqOrderModal(order)}
+                        className="bg-white rounded-2xl border border-slate-100 px-4 py-3.5 flex items-center justify-between text-left w-full active:scale-[0.99] transition-all"
+                        style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}
+                      >
+                        <div>
+                          <p className="text-sm font-bold text-slate-800">{name}</p>
+                          <p className="text-xs text-slate-400 mt-0.5">
+                            {itemCount} item{itemCount !== 1 ? 's' : ''} · {new Date(order.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                          </p>
+                        </div>
+                        <span className={`text-xs font-bold px-2.5 py-1 rounded-xl ${order.status === 'completed' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
+                          {order.status === 'completed' ? 'Completed' : 'Pending'}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Equipment Order Modal ──────────────────────────────────────── */}
+      {eqOrderModal && (
+        <div className="fixed inset-0 z-40 bg-black/40 flex items-center justify-center p-4" onClick={e => { if (e.target === e.currentTarget) setEqOrderModal(null); }}>
+          <div className="relative z-50 bg-white rounded-3xl w-full max-w-md shadow-2xl" style={{ maxHeight: '80vh', display: 'flex', flexDirection: 'column' }}>
+            <div className="px-5 py-4 flex items-center justify-between border-b border-slate-100 flex-shrink-0">
+              <div>
+                {(() => {
+                  const p = eqOrderModal.profiles;
+                  const name = p ? `${p.first_name || ''} ${p.last_name || ''}`.trim() || p.username : '—';
+                  return <h2 className="text-base font-extrabold text-slate-900">{name}</h2>;
+                })()}
+                <p className="text-xs text-slate-400 mt-0.5">
+                  {new Date(eqOrderModal.created_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+                </p>
+              </div>
+              <button onClick={() => setEqOrderModal(null)} className="w-8 h-8 flex items-center justify-center rounded-xl bg-slate-100 text-slate-500">
+                <span className="material-symbols-outlined text-base">close</span>
+              </button>
+            </div>
+            <div className="overflow-y-auto flex-1 px-5 py-4 space-y-2">
+              {(eqOrderModal.items || []).map((item, i) => (
+                <div key={i} className="flex items-center justify-between py-2.5 border-b border-slate-50 last:border-0">
+                  <p className="text-sm text-slate-700">{item.name}</p>
+                  <span className="text-sm font-bold text-slate-900 bg-slate-100 px-2.5 py-1 rounded-lg">×{item.quantity}</span>
+                </div>
+              ))}
+            </div>
+            <div className="px-5 py-4 border-t border-slate-100 flex-shrink-0">
+              <button
+                onClick={() => completeOrder(eqOrderModal.id)}
+                disabled={completingOrderId === eqOrderModal.id}
+                className="w-full py-3 rounded-2xl text-sm font-bold text-white brand-gradient active:scale-[0.98] transition-all disabled:opacity-50"
+                style={{ boxShadow: '0 4px 14px rgba(139,53,217,0.3)' }}
+              >
+                {completingOrderId === eqOrderModal.id ? 'Saving...' : 'Mark as Complete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── User Detail Drawer ─────────────────────────────────────────── */}
       {selectedUser && (
         <>
@@ -1644,12 +1871,89 @@ export default function AdminDashboard() {
                   </span>
                 </div>
               </section>
+
+              <section>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-3">Compensation Bonuses</p>
+                <div className="rounded-2xl bg-slate-50 p-3">
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Month</span>
+                    <select
+                      value={bonusMonth}
+                      onChange={e => setBonusMonth(e.target.value)}
+                      className="text-xs font-semibold text-slate-600 bg-white border border-slate-200 rounded-xl px-2 py-1 focus:outline-none"
+                    >
+                      {bonusMonthOptions().map(o => (
+                        <option key={o.value} value={o.value}>{o.label}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {bonuses.length === 0 && !showBonusForm && (
+                    <p className="text-xs text-slate-400 text-center py-2">No bonuses for this month</p>
+                  )}
+
+                  {bonuses.map(b => (
+                    <div key={b.id} className="flex items-center gap-2 py-2 border-b border-slate-100 last:border-0">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-semibold text-slate-700">{b.date} · ₪{b.amount}</p>
+                        {b.note && <p className="text-[11px] text-slate-400 truncate">{b.note}</p>}
+                      </div>
+                      <button onClick={() => deleteBonus(b.id)} className="text-slate-300 hover:text-red-500 transition-colors flex-shrink-0">
+                        <span className="material-symbols-outlined text-base">delete</span>
+                      </button>
+                    </div>
+                  ))}
+
+                  {showBonusForm ? (
+                    <div className="pt-2 space-y-2">
+                      <input type="date" value={bonusForm.date} onChange={e => setBonusForm(p => ({...p, date: e.target.value}))}
+                        className="w-full px-3 py-2 text-sm rounded-xl border border-slate-200 focus:border-brand-purple/50 focus:outline-none bg-white" />
+                      <input type="number" min="1" step="any" placeholder="Amount (₪)" value={bonusForm.amount} onChange={e => setBonusForm(p => ({...p, amount: e.target.value}))}
+                        className="w-full px-3 py-2 text-sm rounded-xl border border-slate-200 focus:border-brand-purple/50 focus:outline-none bg-white" />
+                      <input type="text" placeholder="Note (optional, e.g. Urgent test – Haifa)" value={bonusForm.note} onChange={e => setBonusForm(p => ({...p, note: e.target.value}))}
+                        className="w-full px-3 py-2 text-sm rounded-xl border border-slate-200 focus:border-brand-purple/50 focus:outline-none bg-white" />
+                      <div className="flex gap-2 pt-1">
+                        <button
+                          onClick={() => { setShowBonusForm(false); setBonusForm({ date: '', amount: '', note: '' }); }}
+                          className="flex-1 py-2 rounded-xl text-xs font-bold bg-slate-100 text-slate-600 hover:bg-slate-200 transition-all"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          onClick={addBonus}
+                          disabled={addingBonus || !bonusForm.date || !bonusForm.amount}
+                          className="flex-1 py-2 rounded-xl text-xs font-bold text-white brand-gradient transition-all disabled:opacity-50"
+                        >
+                          {addingBonus ? 'Saving…' : 'Save'}
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setShowBonusForm(true)}
+                      className="mt-2 w-full flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-bold text-brand-purple bg-purple-50 hover:bg-purple-100 transition-all"
+                    >
+                      <span className="material-symbols-outlined text-sm">add</span>
+                      Add Bonus
+                    </button>
+                  )}
+                </div>
+              </section>
             </div>
-            <div className="px-5 py-4 border-t border-slate-100 flex-shrink-0">
+            <div className="px-5 py-4 border-t border-slate-100 flex-shrink-0 flex items-center gap-3">
+              {selectedUser?.id !== currentUserId && (
+                <button
+                  onClick={() => setDeleteConfirmUser(selectedUser)}
+                  className="flex items-center gap-1.5 px-4 py-3 rounded-2xl text-sm font-bold text-red-600 bg-red-50 hover:bg-red-100 active:scale-[0.98] transition-all"
+                >
+                  <span className="material-symbols-outlined text-base">delete</span>
+                  Delete
+                </button>
+              )}
               <button
                 onClick={saveDrawer}
                 disabled={drawerSaving}
-                className="w-full py-3 rounded-2xl text-sm font-bold text-white brand-gradient active:scale-[0.98] transition-all disabled:opacity-50"
+                className="flex-1 py-3 rounded-2xl text-sm font-bold text-white brand-gradient active:scale-[0.98] transition-all disabled:opacity-50"
                 style={{ boxShadow: '0 4px 14px rgba(139,53,217,0.3)' }}
               >
                 {drawerSaving ? 'Saving...' : 'Save Changes'}
@@ -1658,6 +1962,41 @@ export default function AdminDashboard() {
           </div>
           </div>
         </>
+      )}
+
+      {/* ── Delete Employee Confirmation Modal ────────────────────────────── */}
+      {deleteConfirmUser && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl w-full max-w-sm p-6 shadow-2xl">
+            <div className="w-12 h-12 bg-red-100 rounded-2xl flex items-center justify-center mb-4">
+              <span className="material-symbols-outlined text-red-600" style={{ fontVariationSettings: "'FILL' 1" }}>warning</span>
+            </div>
+            <h3 className="text-lg font-bold text-slate-800 mb-1">Delete Employee</h3>
+            <p className="text-sm text-slate-500 mb-6">
+              This will permanently delete{' '}
+              <span className="font-bold text-slate-700">
+                {`${deleteConfirmUser.first_name || ''} ${deleteConfirmUser.last_name || ''}`.trim() || deleteConfirmUser.username}
+              </span>{' '}
+              and all their data. This cannot be undone.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setDeleteConfirmUser(null)}
+                disabled={deletingUser}
+                className="flex-1 px-4 py-2.5 rounded-2xl text-sm font-bold bg-slate-100 text-slate-600 hover:bg-slate-200 transition-all disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => deleteEmployee(deleteConfirmUser)}
+                disabled={deletingUser}
+                className="flex-1 px-4 py-2.5 rounded-2xl text-sm font-bold bg-red-500 text-white hover:bg-red-600 transition-all disabled:opacity-50"
+              >
+                {deletingUser ? 'Deleting…' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

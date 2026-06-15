@@ -24,7 +24,7 @@ function calcDaily(e, mileageRate = 2) {
   const partial = (e.partial_tests || 0) * 50;
   const rawTestsPay = insurance + screening + mixed + partial;
   const MIN_TESTS_PAY = 240;
-  const testsPay = totalTests > 0 && totalTests < 3 ? Math.max(rawTestsPay, MIN_TESTS_PAY) : rawTestsPay;
+  const testsPay = totalTests > 0 ? Math.max(rawTestsPay, MIN_TESTS_PAY) : rawTestsPay;
   const minBonus = testsPay - rawTestsPay;
 
   const km = (e.kilometers || 0) * mileageRate + ((e.kilometers || 0) >= 100 ? 100 : 0);
@@ -41,7 +41,7 @@ function monthRange(month) {
   return { start, end };
 }
 
-function buildSheet(sheet, entries, mileageRate = 2, title = '') {
+function buildSheet(sheet, entries, mileageRate = 2, title = '', bonuses = []) {
   const headerFill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4F46E5' } };
   const headerFont = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
   const centerAlign = { horizontal: 'center', vertical: 'middle' };
@@ -148,9 +148,37 @@ function buildSheet(sheet, entries, mileageRate = 2, title = '') {
     cell.alignment = centerAlign;
   }
 
+  // Bonus section
+  let bonusTotal = 0;
+  if (bonuses.length > 0) {
+    sheet.addRow({});
+    const bonusHeaderRow = sheet.addRow({ date: 'ADDITIONAL COMPENSATION' });
+    for (let col = 1; col <= numCols; col++) {
+      const cell = bonusHeaderRow.getCell(col);
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEDE9FE' } };
+      cell.font = { bold: true, color: { argb: 'FF6D28D9' }, size: 10 };
+      cell.alignment = centerAlign;
+    }
+    bonusHeaderRow.height = 20;
+    for (let i = 0; i < bonuses.length; i++) {
+      const b = bonuses[i];
+      const bonusRow = sheet.addRow({ date: b.date, ins: b.note || '', min_bonus: `₪${b.amount}` });
+      if (i % 2 === 0) {
+        for (let col = 1; col <= numCols; col++) bonusRow.getCell(col).fill = stripeFill;
+      }
+      bonusTotal += Number(b.amount);
+    }
+    const bonusTotRow = sheet.addRow({ date: 'Total Bonuses', min_bonus: `₪${bonusTotal}` });
+    bonusTotRow.eachCell(cell => {
+      cell.font = { bold: true, color: { argb: 'FF6D28D9' } };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEDE9FE' } };
+      cell.alignment = centerAlign;
+    });
+  }
+
   // Grand total row
   sheet.addRow({});
-  const grandTotalRow = sheet.addRow({ date: 'TOTAL EARNINGS', min_bonus: `₪${grandTotal}` });
+  const grandTotalRow = sheet.addRow({ date: 'TOTAL EARNINGS', min_bonus: `₪${grandTotal + bonusTotal}` });
   grandTotalRow.height = 26;
   for (let col = 1; col <= numCols; col++) {
     const cell = grandTotalRow.getCell(col);
@@ -181,8 +209,12 @@ router.get('/excel', async (req, res) => {
   if (userErr) return res.status(500).json({ error: userErr.message });
 
   const { start, end } = monthRange(month);
-  const { data: entries, error: entriesErr } = await supabase.from('entries').select('*')
-    .eq('user_id', req.userId).gte('date', start).lte('date', end).order('date', { ascending: true });
+  const [{ data: entries, error: entriesErr }, { data: bonuses }] = await Promise.all([
+    supabase.from('entries').select('*')
+      .eq('user_id', req.userId).gte('date', start).lte('date', end).order('date', { ascending: true }),
+    supabase.from('admin_bonuses').select('*')
+      .eq('user_id', req.userId).gte('date', start).lte('date', end).order('date'),
+  ]);
   if (entriesErr) return res.status(500).json({ error: entriesErr.message });
 
   const [year, monthNum] = month.split('-').map(Number);
@@ -194,7 +226,7 @@ router.get('/excel', async (req, res) => {
   try {
     const workbook = new ExcelJS.Workbook();
     const sheet = workbook.addWorksheet('Salary Report');
-    buildSheet(sheet, entries || [], user.mileage_rate ?? 2, title);
+    buildSheet(sheet, entries || [], user.mileage_rate ?? 2, title, bonuses || []);
 
     const buffer = await workbook.xlsx.writeBuffer();
     res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(filename)}"`);

@@ -2,6 +2,7 @@ const express = require('express');
 const archiver = require('archiver');
 const nodemailer = require('nodemailer');
 const supabase = require('../supabase');
+const { computeNextOccurrence } = require('../utils/scheduling');
 
 const router = express.Router();
 
@@ -119,38 +120,25 @@ router.get('/process-notifications', async (req, res) => {
   if (!due?.length) return res.json({ success: true, activated: 0 });
 
   const dueIds = due.map(n => n.id);
-  await supabase.from('notifications').update({ is_active: true }).in('id', dueIds);
-
-  const IST_OFFSET_MS = 2 * 60 * 60 * 1000;
-  function computeNext(days, timeLocal) {
-    const [h, m] = timeLocal.split(':').map(Number);
-    const nowDate = new Date();
-    for (let off = 0; off <= 7; off++) {
-      const base    = new Date(nowDate.getTime() + off * 86400000);
-      const istDate = new Date(base.getTime() + IST_OFFSET_MS);
-      if (!days.includes(istDate.getUTCDay())) continue;
-      istDate.setUTCHours(h, m, 0, 0);
-      const utc = new Date(istDate.getTime() - IST_OFFSET_MS);
-      if (utc > nowDate) return utc.toISOString();
-    }
-    return null;
-  }
+  // eq('is_active', false) makes this idempotent against concurrent cron/lazy-activation races
+  await supabase.from('notifications').update({ is_active: true }).in('id', dueIds).eq('is_active', false);
 
   for (const n of due) {
     if (!n.recurrence_days?.length || !n.recurrence_time) continue;
 
-    // Prevent duplicate: skip if a pending recurring with same config already exists
+    // Use both contains + containedBy for exact array equality (not a superset check)
     const { data: existing } = await supabase
       .from('notifications')
       .select('id')
       .eq('is_active', false)
       .eq('recurrence_time', n.recurrence_time)
       .contains('recurrence_days', n.recurrence_days)
+      .containedBy('recurrence_days', n.recurrence_days)
       .limit(1);
 
     if (existing?.length) continue;
 
-    const nextTime = computeNext(n.recurrence_days, n.recurrence_time);
+    const nextTime = computeNextOccurrence(n.recurrence_days, n.recurrence_time);
     if (!nextTime) continue;
 
     await supabase.from('notifications').insert({

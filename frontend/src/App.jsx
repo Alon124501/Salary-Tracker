@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { ToastProvider } from './context/ToastContext.jsx';
 
 function ScrollToTop() {
   const { pathname } = useLocation();
@@ -41,6 +42,7 @@ function AppLayout({ children }) {
 
 export default function App() {
   return (
+    <ToastProvider>
     <BrowserRouter>
       <ScrollToTop />
       <Routes>
@@ -57,5 +59,6 @@ export default function App() {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
+    </ToastProvider>
   );
 }

@@ -159,7 +159,8 @@ export default function Login() {
       localStorage.setItem('username', data.username);
       navigate('/');
     } catch (err) {
-      setError(err.response?.data?.error || 'Something went wrong');
+      const raw = err.response?.data?.error;
+      setError(typeof raw === 'string' ? raw : raw?.message || 'Something went wrong');
     } finally {
       setLoading(false);
     }

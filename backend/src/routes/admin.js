@@ -31,7 +31,7 @@ function calcDaily(e, mileageRate = 2) {
            total: testsPay + km + office + expenses };
 }
 
-function buildSheet(sheet, entries, mileageRate = 2, title = '') {
+function buildSheet(sheet, entries, mileageRate = 2, title = '', bonuses = []) {
   const headerFill   = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4F46E5' } };
   const headerFont   = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
   const centerAlign  = { horizontal: 'center', vertical: 'middle' };
@@ -122,8 +122,35 @@ function buildSheet(sheet, entries, mileageRate = 2, title = '') {
     cell.fill = totalFill; cell.alignment = centerAlign;
   }
 
+  let bonusTotal = 0;
+  if (bonuses.length > 0) {
+    sheet.addRow({});
+    const bonusHeaderRow = sheet.addRow({ date: 'ADDITIONAL COMPENSATION' });
+    for (let col = 1; col <= numCols; col++) {
+      const cell = bonusHeaderRow.getCell(col);
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEDE9FE' } };
+      cell.font = { bold: true, color: { argb: 'FF6D28D9' }, size: 10 };
+      cell.alignment = centerAlign;
+    }
+    bonusHeaderRow.height = 20;
+    for (let i = 0; i < bonuses.length; i++) {
+      const b = bonuses[i];
+      const bonusRow = sheet.addRow({ date: b.date, ins: b.note || '', min_bonus: `₪${b.amount}` });
+      if (i % 2 === 0) {
+        for (let col = 1; col <= numCols; col++) bonusRow.getCell(col).fill = stripeFill;
+      }
+      bonusTotal += Number(b.amount);
+    }
+    const bonusTotRow = sheet.addRow({ date: 'Total Bonuses', min_bonus: `₪${bonusTotal}` });
+    bonusTotRow.eachCell(cell => {
+      cell.font = { bold: true, color: { argb: 'FF6D28D9' } };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEDE9FE' } };
+      cell.alignment = centerAlign;
+    });
+  }
+
   sheet.addRow({});
-  const grandTotalRow = sheet.addRow({ date: 'TOTAL EARNINGS', min_bonus: `₪${grandTotal}` });
+  const grandTotalRow = sheet.addRow({ date: 'TOTAL EARNINGS', min_bonus: `₪${grandTotal + bonusTotal}` });
   grandTotalRow.height = 26;
   for (let col = 1; col <= numCols; col++) {
     const cell = grandTotalRow.getCell(col);
@@ -227,6 +254,56 @@ router.delete('/users/:id/equipment/:type', async (req, res) => {
   res.json({ success: true });
 });
 
+// DELETE /api/admin/users/:id — permanently delete an employee
+router.delete('/users/:id', async (req, res) => {
+  const { id } = req.params;
+  if (id === req.userId) return res.status(400).json({ error: 'Cannot delete your own account' });
+  const { error } = await supabase.auth.admin.deleteUser(id);
+  if (error) return res.status(500).json({ error: error.message });
+  await supabase.storage.from('profession-docs').remove([id]).catch(() => {});
+  res.json({ success: true });
+});
+
+// ── Bonuses ────────────────────────────────────────────────────────────────
+
+function nextMonth(month) {
+  const [year, mon] = month.split('-').map(Number);
+  if (mon === 12) return `${year + 1}-01-01`;
+  return `${year}-${String(mon + 1).padStart(2, '0')}-01`;
+}
+
+// GET /api/admin/users/:userId/bonuses?month=YYYY-MM
+router.get('/users/:userId/bonuses', async (req, res) => {
+  const { userId } = req.params;
+  const { month } = req.query;
+  let q = supabase.from('admin_bonuses').select('*').eq('user_id', userId).order('date');
+  if (month) q = q.gte('date', `${month}-01`).lt('date', nextMonth(month));
+  const { data, error } = await q;
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data);
+});
+
+// POST /api/admin/users/:userId/bonuses  — { date, amount, note }
+router.post('/users/:userId/bonuses', async (req, res) => {
+  const { userId } = req.params;
+  const { date, amount, note } = req.body;
+  if (!date || !amount) return res.status(400).json({ error: 'date and amount are required' });
+  const { data, error } = await supabase
+    .from('admin_bonuses')
+    .insert({ user_id: userId, date, amount: Number(amount), note: note || null })
+    .select().single();
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data);
+});
+
+// DELETE /api/admin/users/:userId/bonuses/:bonusId
+router.delete('/users/:userId/bonuses/:bonusId', async (req, res) => {
+  const { bonusId } = req.params;
+  const { error } = await supabase.from('admin_bonuses').delete().eq('id', bonusId);
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ success: true });
+});
+
 // ── Reports ────────────────────────────────────────────────────────────────
 
 // GET /api/admin/reports?month=YYYY-MM
@@ -300,9 +377,11 @@ router.post('/reports/approve', async (req, res) => {
   const [
     { data: profiles, error: pErr },
     { data: allEntries, error: eErr },
+    { data: allBonuses },
   ] = await Promise.all([
     supabase.from('profiles').select('id, first_name, last_name, username, mileage_rate').order('first_name'),
     supabase.from('entries').select('*').gte('date', start).lte('date', end).order('date', { ascending: true }),
+    supabase.from('admin_bonuses').select('*').gte('date', start).lte('date', end).order('date'),
   ]);
   if (pErr) return res.status(500).json({ error: pErr.message });
   if (eErr) return res.status(500).json({ error: eErr.message });
@@ -311,6 +390,11 @@ router.post('/reports/approve', async (req, res) => {
   for (const e of allEntries || []) {
     if (!entriesByUser[e.user_id]) entriesByUser[e.user_id] = [];
     entriesByUser[e.user_id].push(e);
+  }
+  const bonusesByUser = {};
+  for (const b of allBonuses || []) {
+    if (!bonusesByUser[b.user_id]) bonusesByUser[b.user_id] = [];
+    bonusesByUser[b.user_id].push(b);
   }
 
   // Build ZIP of one Excel per user
@@ -329,7 +413,7 @@ router.post('/reports/approve', async (req, res) => {
         const name = `${p.first_name || ''} ${p.last_name || ''}`.trim() || p.username;
 
         const workbook = new ExcelJS.Workbook();
-        buildSheet(workbook.addWorksheet('Salary Report'), entries, mileageRate, `${name} — ${monthName} ${year}`);
+        buildSheet(workbook.addWorksheet('Salary Report'), entries, mileageRate, `${name} — ${monthName} ${year}`, bonusesByUser[p.id] || []);
         const buf = await workbook.xlsx.writeBuffer();
         archive.append(Buffer.from(buf), { name: `${name} - ${monthName} ${year}.xlsx` });
       }
@@ -367,16 +451,17 @@ router.get('/users/:userId/report/excel', async (req, res) => {
   const [year, mon] = month.split('-').map(Number);
   const monthName = new Date(year, mon - 1).toLocaleString('en-US', { month: 'long' });
 
-  const [{ data: profile }, { data: entries }] = await Promise.all([
+  const [{ data: profile }, { data: entries }, { data: bonuses }] = await Promise.all([
     supabase.from('profiles').select('first_name, last_name, username, mileage_rate').eq('id', userId).single(),
     supabase.from('entries').select('*').eq('user_id', userId).gte('date', start).lte('date', end).order('date', { ascending: true }),
+    supabase.from('admin_bonuses').select('*').eq('user_id', userId).gte('date', start).lte('date', end).order('date'),
   ]);
   if (!profile) return res.status(404).json({ error: 'User not found' });
   if (!entries || entries.length === 0) return res.status(404).json({ error: 'No entries for this month' });
 
   const name = `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || profile.username;
   const workbook = new ExcelJS.Workbook();
-  buildSheet(workbook.addWorksheet('Salary Report'), entries, profile.mileage_rate ?? 2, `${name} — ${monthName} ${year}`);
+  buildSheet(workbook.addWorksheet('Salary Report'), entries, profile.mileage_rate ?? 2, `${name} — ${monthName} ${year}`, bonuses || []);
   const buf = await workbook.xlsx.writeBuffer();
 
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
@@ -399,16 +484,17 @@ router.post('/users/:userId/report/approve', async (req, res) => {
     const [year, mon] = month.split('-').map(Number);
     const monthName = new Date(year, mon - 1).toLocaleString('en-US', { month: 'long' });
 
-    const [{ data: profile }, { data: entries }] = await Promise.all([
+    const [{ data: profile }, { data: entries }, { data: bonuses }] = await Promise.all([
       supabase.from('profiles').select('first_name, last_name, username, mileage_rate').eq('id', userId).single(),
       supabase.from('entries').select('*').eq('user_id', userId).gte('date', start).lte('date', end).order('date', { ascending: true }),
+      supabase.from('admin_bonuses').select('*').eq('user_id', userId).gte('date', start).lte('date', end).order('date'),
     ]);
     if (!profile) return res.status(404).json({ error: 'User not found' });
     if (!entries || entries.length === 0) return res.status(404).json({ error: 'No entries for this month' });
 
     const name = `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || profile.username;
     const workbook = new ExcelJS.Workbook();
-    buildSheet(workbook.addWorksheet('Salary Report'), entries, profile.mileage_rate ?? 2, `${name} — ${monthName} ${year}`);
+    buildSheet(workbook.addWorksheet('Salary Report'), entries, profile.mileage_rate ?? 2, `${name} — ${monthName} ${year}`, bonuses || []);
     const buf = await workbook.xlsx.writeBuffer();
 
     const gmailUser = process.env.GMAIL_USER;
@@ -508,9 +594,10 @@ router.post('/submissions/:submissionId/send', async (req, res) => {
   const monthName = new Date(year, mon - 1).toLocaleString('en-US', { month: 'long' });
 
   // Load user profile and entries
-  const [{ data: profile, error: pErr }, { data: entries, error: eErr }] = await Promise.all([
+  const [{ data: profile, error: pErr }, { data: entries, error: eErr }, { data: bonuses }] = await Promise.all([
     supabase.from('profiles').select('first_name, last_name, username, mileage_rate').eq('id', submission.user_id).single(),
     supabase.from('entries').select('*').eq('user_id', submission.user_id).gte('date', start).lte('date', end).order('date', { ascending: true }),
+    supabase.from('admin_bonuses').select('*').eq('user_id', submission.user_id).gte('date', start).lte('date', end).order('date'),
   ]);
   if (pErr) return res.status(500).json({ error: pErr.message });
   if (eErr) return res.status(500).json({ error: eErr.message });
@@ -520,7 +607,7 @@ router.post('/submissions/:submissionId/send', async (req, res) => {
 
   // Build Excel
   const workbook = new ExcelJS.Workbook();
-  buildSheet(workbook.addWorksheet('Salary Report'), entries || [], mileageRate, `${name} — ${monthName} ${year}`);
+  buildSheet(workbook.addWorksheet('Salary Report'), entries || [], mileageRate, `${name} — ${monthName} ${year}`, bonuses || []);
   const excelBuffer = await workbook.xlsx.writeBuffer();
 
   // Download receipt files from storage

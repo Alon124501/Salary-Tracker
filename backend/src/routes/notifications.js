@@ -3,31 +3,10 @@ const multer  = require('multer');
 const auth      = require('../middleware/auth');
 const adminAuth = require('../middleware/adminAuth');
 const supabase  = require('../supabase');
+const { computeNextOccurrence } = require('../utils/scheduling');
 
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
-
-// Returns ISO UTC string of next occurrence given weekdays (0=Sun..6=Sat)
-// and a local time string "HH:MM" in Israel Standard Time (UTC+2 approximation).
-function computeNextOccurrence(recurrenceDays, recurrenceTimeLocal) {
-  const [h, m] = recurrenceTimeLocal.split(':').map(Number);
-  const IST_OFFSET_MS = 2 * 60 * 60 * 1000;
-  const now = new Date();
-
-  for (let dayOffset = 0; dayOffset <= 7; dayOffset++) {
-    const base    = new Date(now.getTime() + dayOffset * 86400000);
-    const istDate = new Date(base.getTime() + IST_OFFSET_MS);
-    const dow     = istDate.getUTCDay();
-
-    if (!recurrenceDays.includes(dow)) continue;
-
-    istDate.setUTCHours(h, m, 0, 0);
-    const utcCandidate = new Date(istDate.getTime() - IST_OFFSET_MS);
-
-    if (utcCandidate > now) return utcCandidate.toISOString();
-  }
-  return null;
-}
 
 // GET /api/notifications — active notifications for the current tester
 // Returns only notifications the user still needs to see:
@@ -48,16 +27,19 @@ router.get('/', auth, async (req, res) => {
 
     if (due?.length) {
       const dueIds = due.map(n => n.id);
-      await supabase.from('notifications').update({ is_active: true }).in('id', dueIds);
+      // eq('is_active', false) makes this idempotent against concurrent activations
+      await supabase.from('notifications').update({ is_active: true }).in('id', dueIds).eq('is_active', false);
 
       for (const n of due) {
         if (!n.recurrence_days?.length || !n.recurrence_time) continue;
+        // Use both contains + containedBy to get exact array equality (not a superset check)
         const { data: existing } = await supabase
           .from('notifications')
           .select('id')
           .eq('is_active', false)
           .eq('recurrence_time', n.recurrence_time)
           .contains('recurrence_days', n.recurrence_days)
+          .containedBy('recurrence_days', n.recurrence_days)
           .limit(1);
         if (existing?.length) continue;
         const nextTime = computeNextOccurrence(n.recurrence_days, n.recurrence_time);
@@ -162,7 +144,9 @@ router.post('/', auth, adminAuth, upload.single('document'), async (req, res) =>
       if (!scheduledFor) return res.status(400).json({ error: 'Could not compute next occurrence' });
       isActive = false;
     } else if (scheduled_for) {
-      scheduledFor = new Date(scheduled_for).toISOString();
+      const d = new Date(scheduled_for);
+      if (isNaN(d.getTime())) return res.status(400).json({ error: 'Invalid scheduled_for date' });
+      scheduledFor = d.toISOString();
       isActive = false;
     }
 
@@ -185,7 +169,9 @@ router.post('/', auth, adminAuth, upload.single('document'), async (req, res) =>
 
     if (error) return res.status(500).json({ error: error.message });
 
-    // Upload document file if provided, then patch the row with the storage path
+    // Upload document file if provided, then patch the row with the storage path.
+    // On upload failure we delete the just-created row to avoid a notification
+    // with force_view_document=true but no reachable document.
     if (req.file) {
       const ext      = req.file.originalname.split('.').pop();
       const filePath = `${data.id}/${Date.now()}.${ext}`;
@@ -193,14 +179,17 @@ router.post('/', auth, adminAuth, upload.single('document'), async (req, res) =>
         .from('notification-documents')
         .upload(filePath, req.file.buffer, { contentType: req.file.mimetype });
 
-      if (!uploadErr) {
-        await supabase
-          .from('notifications')
-          .update({ document_storage_path: filePath, document_file_name: req.file.originalname })
-          .eq('id', data.id);
-        data.document_storage_path = filePath;
-        data.document_file_name    = req.file.originalname;
+      if (uploadErr) {
+        await supabase.from('notifications').delete().eq('id', data.id);
+        return res.status(500).json({ error: 'Failed to upload document; notification not created.' });
       }
+
+      await supabase
+        .from('notifications')
+        .update({ document_storage_path: filePath, document_file_name: req.file.originalname })
+        .eq('id', data.id);
+      data.document_storage_path = filePath;
+      data.document_file_name    = req.file.originalname;
     } else if (document_external_url) {
       let displayName = document_external_url;
       try { displayName = new URL(document_external_url).hostname; } catch { /* keep full URL */ }
