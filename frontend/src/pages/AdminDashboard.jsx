@@ -146,7 +146,7 @@ export default function AdminDashboard() {
   const { data: eqCatalog = [], setData: setEqCatalog, loading: eqCatalogLoading, reload: loadEqCatalog } =
     useFetch('/equipment/catalog', { enabled: activeTab === 'eq_orders' });
   const { data: eqOrders = [], setData: setEqOrders, loading: eqOrdersLoading, reload: loadEqOrders } =
-    useFetch('/equipment/orders');
+    useFetch('/equipment/orders', { enabled: activeTab === 'eq_orders' });
   const pendingOrdersCount = eqOrders.filter(o => o.status === 'pending').length;
   const [newItemName, setNewItemName] = useState('');
   const [eqSubTab, setEqSubTab] = useState('catalog');
