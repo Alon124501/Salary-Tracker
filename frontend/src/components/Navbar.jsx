@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import api from '../api.js';
+import { clearCache } from '../hooks/useFetch.js';
 
 const navItems = [
   { path: '/', icon: 'home', label: 'Home' },
@@ -28,6 +29,7 @@ export default function Navbar() {
   }, []);
 
   function logout() {
+    clearCache();
     localStorage.removeItem('token');
     localStorage.removeItem('username');
     window.location.href = '/login';

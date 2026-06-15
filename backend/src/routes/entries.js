@@ -24,6 +24,20 @@ const EntryBodySchema = z.object({
   parking_expense:       NumericField,
 });
 
+// PUT uses optional fields WITHOUT defaults so omitted fields stay undefined
+// and the ?? fallback to the existing DB value works correctly.
+const PutNumericField = z.coerce.number().min(0).optional();
+const PutBodySchema = z.object({
+  insurance_tests:       PutNumericField,
+  screening_tests:       PutNumericField,
+  mixed_screening_tests: PutNumericField,
+  partial_tests:         PutNumericField,
+  kilometers:            PutNumericField,
+  office_hours:          PutNumericField,
+  food_expense:          PutNumericField,
+  parking_expense:       PutNumericField,
+});
+
 function calcDaily(e, mileageRate = 2) {
   const totalTests = (e.insurance_tests || 0) + (e.screening_tests || 0) +
                      (e.mixed_screening_tests || 0) + (e.partial_tests || 0);
@@ -299,7 +313,7 @@ router.put('/:id', asyncHandler(async (req, res) => {
     .eq('id', req.params.id).eq('user_id', req.userId).single();
   if (fetchErr || !entry) return res.status(404).json({ error: 'Entry not found' });
 
-  const parsed = EntryBodySchema.safeParse(req.body);
+  const parsed = PutBodySchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
 
   const { date: _date, ...fields } = parsed.data;

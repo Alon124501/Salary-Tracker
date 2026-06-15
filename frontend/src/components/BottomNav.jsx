@@ -1,4 +1,5 @@
 import { useNavigate, useLocation } from 'react-router-dom';
+import { clearCache } from '../hooks/useFetch.js';
 
 const items = [
   { path: '/', icon: 'home', label: 'Home' },
@@ -13,6 +14,7 @@ export default function BottomNav() {
   const location = useLocation();
 
   function logout() {
+    clearCache();
     localStorage.removeItem('token');
     localStorage.removeItem('username');
     window.location.href = '/login';

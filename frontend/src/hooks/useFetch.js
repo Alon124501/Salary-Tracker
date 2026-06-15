@@ -4,6 +4,8 @@ import api from '../api.js';
 const cache = new Map(); // url -> { data, ts }
 const TTL = 30_000;      // 30 seconds
 
+export function clearCache() { cache.clear(); }
+
 export function useFetch(url, { enabled = true, initialData = undefined } = {}) {
   const cached = url && cache.get(url);
   const [data, setData]       = useState(cached ? cached.data : initialData);

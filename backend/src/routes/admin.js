@@ -5,6 +5,7 @@ const nodemailer = require('nodemailer');
 const supabase = require('../supabase');
 const auth = require('../middleware/auth');
 const adminAuth = require('../middleware/adminAuth');
+const asyncHandler = require('../middleware/asyncHandler');
 
 const router = express.Router();
 router.use(auth);
@@ -182,7 +183,7 @@ function monthRange(month) {
 // ── Users ──────────────────────────────────────────────────────────────────
 
 // GET /api/admin/users
-router.get('/users', async (req, res) => {
+router.get('/users', asyncHandler(async (req, res) => {
   const [{ data: profiles, error }, { data: equipment, error: eqErr }] = await Promise.all([
     supabase.rpc('get_all_profiles'),
     supabase.from('user_equipment').select('user_id, equipment_type'),
@@ -209,10 +210,10 @@ router.get('/users', async (req, res) => {
   }));
 
   res.json(withUrls);
-});
+}));
 
 // PATCH /api/admin/users/:id
-router.patch('/users/:id', async (req, res) => {
+router.patch('/users/:id', asyncHandler(async (req, res) => {
   const allowed = [
     'first_name', 'last_name', 'email', 'phone', 'profession', 'district', 'address',
     'vehicle_type_color', 'vehicle_number', 'shifts_per_week', 'shift_preference',
@@ -233,10 +234,10 @@ router.patch('/users/:id', async (req, res) => {
   const { data, error } = await supabase.from('profiles').update(updates).eq('id', req.params.id).select().single();
   if (error) return res.status(500).json({ error: error.message });
   res.json(data);
-});
+}));
 
 // POST /api/admin/users/:id/equipment
-router.post('/users/:id/equipment', async (req, res) => {
+router.post('/users/:id/equipment', asyncHandler(async (req, res) => {
   const { equipment_type } = req.body;
   if (!EQUIPMENT_TYPES.includes(equipment_type))
     return res.status(400).json({ error: `Invalid equipment_type. Valid: ${EQUIPMENT_TYPES.join(', ')}` });
@@ -244,25 +245,35 @@ router.post('/users/:id/equipment', async (req, res) => {
   const { error } = await supabase.from('user_equipment').insert({ user_id: req.params.id, equipment_type });
   if (error) return res.status(500).json({ error: error.message });
   res.json({ success: true });
-});
+}));
 
 // DELETE /api/admin/users/:id/equipment/:type
-router.delete('/users/:id/equipment/:type', async (req, res) => {
+router.delete('/users/:id/equipment/:type', asyncHandler(async (req, res) => {
   const { error } = await supabase.from('user_equipment')
     .delete().eq('user_id', req.params.id).eq('equipment_type', req.params.type);
   if (error) return res.status(500).json({ error: error.message });
   res.json({ success: true });
-});
+}));
 
 // DELETE /api/admin/users/:id — permanently delete an employee
-router.delete('/users/:id', async (req, res) => {
+router.delete('/users/:id', asyncHandler(async (req, res) => {
   const { id } = req.params;
   if (id === req.userId) return res.status(400).json({ error: 'Cannot delete your own account' });
+
+  // Fetch document path before deletion (profile may cascade-delete with auth user)
+  const { data: profile } = await supabase.from('profiles')
+    .select('profession_document_url').eq('id', id).maybeSingle();
+
   const { error } = await supabase.auth.admin.deleteUser(id);
   if (error) return res.status(500).json({ error: error.message });
-  await supabase.storage.from('profession-docs').remove([id]).catch(() => {});
+
+  if (profile?.profession_document_url) {
+    await supabase.storage.from('profession-documents')
+      .remove([profile.profession_document_url]).catch(() => {});
+  }
+
   res.json({ success: true });
-});
+}));
 
 // ── Bonuses ────────────────────────────────────────────────────────────────
 
@@ -273,7 +284,7 @@ function nextMonth(month) {
 }
 
 // GET /api/admin/users/:userId/bonuses?month=YYYY-MM
-router.get('/users/:userId/bonuses', async (req, res) => {
+router.get('/users/:userId/bonuses', asyncHandler(async (req, res) => {
   const { userId } = req.params;
   const { month } = req.query;
   let q = supabase.from('admin_bonuses').select('*').eq('user_id', userId).order('date');
@@ -281,10 +292,10 @@ router.get('/users/:userId/bonuses', async (req, res) => {
   const { data, error } = await q;
   if (error) return res.status(500).json({ error: error.message });
   res.json(data);
-});
+}));
 
 // POST /api/admin/users/:userId/bonuses  — { date, amount, note }
-router.post('/users/:userId/bonuses', async (req, res) => {
+router.post('/users/:userId/bonuses', asyncHandler(async (req, res) => {
   const { userId } = req.params;
   const { date, amount, note } = req.body;
   if (!date || !amount) return res.status(400).json({ error: 'date and amount are required' });
@@ -294,20 +305,21 @@ router.post('/users/:userId/bonuses', async (req, res) => {
     .select().single();
   if (error) return res.status(500).json({ error: error.message });
   res.json(data);
-});
+}));
 
 // DELETE /api/admin/users/:userId/bonuses/:bonusId
-router.delete('/users/:userId/bonuses/:bonusId', async (req, res) => {
-  const { bonusId } = req.params;
-  const { error } = await supabase.from('admin_bonuses').delete().eq('id', bonusId);
+router.delete('/users/:userId/bonuses/:bonusId', asyncHandler(async (req, res) => {
+  const { userId, bonusId } = req.params;
+  const { error } = await supabase.from('admin_bonuses')
+    .delete().eq('id', bonusId).eq('user_id', userId);
   if (error) return res.status(500).json({ error: error.message });
   res.json({ success: true });
-});
+}));
 
 // ── Reports ────────────────────────────────────────────────────────────────
 
 // GET /api/admin/reports?month=YYYY-MM
-router.get('/reports', async (req, res) => {
+router.get('/reports', asyncHandler(async (req, res) => {
   const { month } = req.query;
   if (!month) return res.status(400).json({ error: 'month param required (YYYY-MM)' });
 
@@ -360,10 +372,10 @@ router.get('/reports', async (req, res) => {
   });
 
   res.json({ month, summaries });
-});
+}));
 
 // POST /api/admin/reports/approve
-router.post('/reports/approve', async (req, res) => {
+router.post('/reports/approve', asyncHandler(async (req, res) => {
   const { month } = req.body;
   if (!month) return res.status(400).json({ error: 'month is required' });
 
@@ -439,10 +451,10 @@ router.post('/reports/approve', async (req, res) => {
   await supabase.from('monthly_report_approvals').insert({ month, approved_by: req.userId });
 
   res.json({ success: true, month });
-});
+}));
 
 // GET /api/admin/users/:userId/report/excel?month=YYYY-MM
-router.get('/users/:userId/report/excel', async (req, res) => {
+router.get('/users/:userId/report/excel', asyncHandler(async (req, res) => {
   const { userId } = req.params;
   const { month } = req.query;
   if (!month) return res.status(400).json({ error: 'month param required (YYYY-MM)' });
@@ -467,10 +479,10 @@ router.get('/users/:userId/report/excel', async (req, res) => {
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
   res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(`${name} - ${monthName} ${year}.xlsx`)}"`);
   res.send(Buffer.from(buf));
-});
+}));
 
 // POST /api/admin/users/:userId/report/approve
-router.post('/users/:userId/report/approve', async (req, res) => {
+router.post('/users/:userId/report/approve', asyncHandler(async (req, res) => {
   const { userId } = req.params;
   const { month } = req.body;
   if (!month) return res.status(400).json({ error: 'month is required' });
@@ -542,12 +554,12 @@ router.post('/users/:userId/report/approve', async (req, res) => {
     const msg = typeof err?.message === 'string' ? err.message : 'Failed to approve report';
     res.status(500).json({ error: msg });
   }
-});
+}));
 
 // ── Submissions ────────────────────────────────────────────────────────────
 
 // GET /api/admin/submissions?month=YYYY-MM
-router.get('/submissions', async (req, res) => {
+router.get('/submissions', asyncHandler(async (req, res) => {
   const { month } = req.query;
   if (!month) return res.status(400).json({ error: 'month param required (YYYY-MM)' });
 
@@ -577,10 +589,10 @@ router.get('/submissions', async (req, res) => {
   }));
 
   res.json({ month, submissions });
-});
+}));
 
 // POST /api/admin/submissions/:submissionId/send
-router.post('/submissions/:submissionId/send', async (req, res) => {
+router.post('/submissions/:submissionId/send', asyncHandler(async (req, res) => {
   const { submissionId } = req.params;
 
   const { data: submission, error: subErr } = await supabase.from('report_submissions')
@@ -656,6 +668,6 @@ router.post('/submissions/:submissionId/send', async (req, res) => {
     .eq('id', submissionId);
 
   res.json({ success: true });
-});
+}));
 
 module.exports = router;

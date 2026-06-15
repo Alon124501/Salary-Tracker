@@ -146,7 +146,7 @@ export default function AdminDashboard() {
   const { data: eqCatalog = [], setData: setEqCatalog, loading: eqCatalogLoading, reload: loadEqCatalog } =
     useFetch('/equipment/catalog', { enabled: activeTab === 'eq_orders' });
   const { data: eqOrders = [], setData: setEqOrders, loading: eqOrdersLoading, reload: loadEqOrders } =
-    useFetch('/equipment/orders', { enabled: activeTab === 'eq_orders' });
+    useFetch('/equipment/orders');
   const pendingOrdersCount = eqOrders.filter(o => o.status === 'pending').length;
   const [newItemName, setNewItemName] = useState('');
   const [eqSubTab, setEqSubTab] = useState('catalog');
@@ -229,7 +229,7 @@ export default function AdminDashboard() {
       setUsers(prev => prev.filter(u => u.id !== user.id));
       setSelectedUser(null);
       setDeleteConfirmUser(null);
-      showToast(`${user.first_name || ''} ${user.last_name || ''}`.trim() + ' has been deleted');
+      showToast(`${user.first_name || ''} ${user.last_name || ''}`.trim() + ' has been deleted', 'success');
     } catch (err) {
       showToast(err?.response?.data?.error || 'Failed to delete employee');
     } finally {

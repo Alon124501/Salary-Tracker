@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { clearCache } from './hooks/useFetch.js';
 
 const api = axios.create({ baseURL: '/api' });
 
@@ -12,6 +13,7 @@ api.interceptors.response.use(
   r => r,
   err => {
     if (err.response?.status === 401) {
+      clearCache();
       localStorage.removeItem('token');
       localStorage.removeItem('username');
       window.location.href = '/login';

@@ -36,9 +36,16 @@ router.post('/reorder', auth, adminAuth, asyncHandler(async (req, res) => {
   if (!Array.isArray(items) || items.length === 0)
     return res.status(400).json({ error: 'items array is required' });
 
+  // Validate all IDs exist before upserting to prevent inserting arbitrary rows
+  const ids = items.map(({ id }) => id);
+  const { data: existing } = await supabase.from('contacts').select('id').in('id', ids);
+  const validIds = new Set((existing || []).map(r => r.id));
+  const safeItems = items.filter(({ id }) => validIds.has(id));
+  if (safeItems.length === 0) return res.status(400).json({ error: 'No valid contact IDs' });
+
   const { error } = await supabase
     .from('contacts')
-    .upsert(items.map(({ id, sort_order }) => ({ id, sort_order })), { onConflict: 'id' });
+    .upsert(safeItems.map(({ id, sort_order }) => ({ id, sort_order })), { onConflict: 'id' });
   if (error) return res.status(500).json({ error: error.message });
   res.json({ success: true });
 }));
