@@ -267,7 +267,7 @@ export default function AdminDashboard() {
       await api.delete(`/equipment/orders/${id}`);
       setEqOrders(prev => prev.filter(o => o.id !== id));
       setEqOrderModal(null);
-      showToast('Order marked as complete');
+      showToast('Order marked as complete', 'success');
     } catch (err) { showToast(err?.response?.data?.error || 'Failed to complete order'); }
     finally { setCompletingOrderId(null); }
   }
