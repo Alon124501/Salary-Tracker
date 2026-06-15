@@ -34,6 +34,7 @@ export default function Dashboard() {
   const [toast, setToast] = useState('');
   const [submitted, setSubmitted] = useState(false);
   const [notifications, setNotifications] = useState([]);
+  const [bonuses, setBonuses] = useState([]);
 
   useEffect(() => { loadData(); checkSubmission(); }, [month]);
 
@@ -43,12 +44,14 @@ export default function Dashboard() {
 
   async function loadData() {
     try {
-      const [entriesRes, summaryRes] = await Promise.all([
+      const [entriesRes, summaryRes, bonusRes] = await Promise.all([
         api.get(`/entries?month=${month}`),
-        api.get(`/entries/summary?month=${month}`)
+        api.get(`/entries/summary?month=${month}`),
+        api.get(`/entries/bonuses?month=${month}`),
       ]);
       setEntries(entriesRes.data);
       setSummary(summaryRes.data);
+      setBonuses(bonusRes.data || []);
     } catch {}
   }
 
@@ -308,7 +311,7 @@ export default function Dashboard() {
           Daily Entries
         </h2>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-          {entries.length === 0 ? (
+          {entries.length === 0 && bonuses.length === 0 ? (
             <div className="col-span-2 flex flex-col items-center justify-center py-16 gap-3 text-slate-400">
               <span className="material-symbols-outlined text-5xl opacity-30">event_busy</span>
               <p className="text-sm font-medium">No entries for this month</p>
@@ -319,7 +322,34 @@ export default function Dashboard() {
                 Add your first entry
               </button>
             </div>
-          ) : entries.map(e => {
+          ) : [
+              ...entries.map(e => ({ type: 'entry', date: e.date, data: e })),
+              ...bonuses.map(b => ({ type: 'bonus', date: b.date, data: b })),
+            ].sort((a, b) => b.date.localeCompare(a.date)).map(item => {
+            if (item.type === 'bonus') {
+              const b = item.data;
+              const [y, m, d] = b.date.split('-');
+              const monthName = new Date(y, m - 1).toLocaleString('en-US', { month: 'short' });
+              return (
+                <div key={`bonus-${b.id}`} className="flex items-center justify-between p-4 rounded-2xl bg-amber-50 border border-amber-200 shadow-card">
+                  <div className="flex items-center gap-3.5">
+                    <div className="w-11 h-11 rounded-xl bg-amber-400 flex flex-col items-center justify-center flex-shrink-0">
+                      <span className="text-[9px] font-bold uppercase leading-none text-white/80">{monthName}</span>
+                      <span className="text-lg font-extrabold leading-none text-white font-headline">{d}</span>
+                    </div>
+                    <div>
+                      <p className="font-bold text-amber-800 text-sm flex items-center gap-1.5">
+                        <span className="material-symbols-outlined text-sm" style={{ fontVariationSettings: "'FILL' 1" }}>payments</span>
+                        Bonus
+                      </p>
+                      {b.note && <p className="text-xs text-amber-600 mt-0.5">{b.note}</p>}
+                    </div>
+                  </div>
+                  <p className="font-extrabold text-amber-700 text-base font-headline">+{Number(b.amount).toLocaleString()} <span className="text-xs font-normal text-amber-500">₪</span></p>
+                </div>
+              );
+            }
+            const e = item.data;
             const [y, m, d] = e.date.split('-');
             const monthName = new Date(y, m - 1).toLocaleString('en-US', { month: 'short' });
             const tests = totalTests(e);
