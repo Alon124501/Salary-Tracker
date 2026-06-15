@@ -133,6 +133,7 @@ export default function Dashboard() {
   }
 
   const s = summary || {};
+  const bonusTotal = bonuses.reduce((sum, b) => sum + Number(b.amount), 0);
 
   return (
     <main className="w-full max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pb-32 lg:pb-24 pt-20 flex flex-col gap-8">
@@ -237,7 +238,7 @@ export default function Dashboard() {
             <div className="flex justify-between items-start mb-5">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-widest opacity-80 mb-2">Total Earnings</p>
-                <h3 className="text-5xl font-extrabold tracking-tight font-headline leading-none">{(s.total || 0).toFixed(0)} <span className="text-2xl font-medium opacity-80">₪</span></h3>
+                <h3 className="text-5xl font-extrabold tracking-tight font-headline leading-none">{((s.total || 0) + bonusTotal).toFixed(0)} <span className="text-2xl font-medium opacity-80">₪</span></h3>
               </div>
               <div className="bg-white/20 p-2.5 rounded-xl">
                 <span className="material-symbols-outlined text-white" style={{ fontVariationSettings: "'FILL' 1" }}>payments</span>
@@ -301,6 +302,17 @@ export default function Dashboard() {
             <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">Insurance</p>
             <div className="text-2xl font-bold text-slate-900 font-headline">{(s.insurance || 0).toFixed(0)} <span className="text-sm font-normal text-slate-400">₪</span></div>
           </div>
+
+          {/* Bonuses */}
+          {bonusTotal > 0 && (
+            <div className="bg-amber-50 p-4 rounded-2xl shadow-card border border-amber-200 hover:shadow-card-hover transition-shadow duration-200">
+              <div className="w-9 h-9 rounded-xl bg-amber-100 flex items-center justify-center mb-3">
+                <span className="material-symbols-outlined text-amber-500 text-lg" style={{ fontVariationSettings: "'FILL' 1" }}>payments</span>
+              </div>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-amber-500 mb-1">Bonuses</p>
+              <div className="text-2xl font-bold text-amber-700 font-headline">{bonusTotal.toFixed(0)} <span className="text-sm font-normal text-amber-400">₪</span></div>
+            </div>
+          )}
         </div>
       </section>
 
