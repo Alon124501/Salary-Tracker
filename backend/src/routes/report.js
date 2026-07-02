@@ -1,18 +1,11 @@
 const express = require('express');
 const ExcelJS = require('exceljs');
-const multer = require('multer');
+const archiver = require('archiver');
 const supabase = require('../supabase');
 const auth = require('../middleware/auth');
 
 const router = express.Router();
 router.use(auth);
-
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
-
-function extOf(file) {
-  const map = { 'image/jpeg': '.jpg', 'image/png': '.png', 'image/heic': '.heic', 'image/webp': '.webp' };
-  return map[file.mimetype] || '.jpg';
-}
 
 function calcDaily(e, mileageRate = 2) {
   const totalTests = (e.insurance_tests || 0) + (e.screening_tests || 0) +
@@ -238,64 +231,71 @@ router.get('/excel', async (req, res) => {
   }
 });
 
-// GET /api/report/submission?month=YYYY-MM
-router.get('/submission', async (req, res) => {
+// GET /api/report/download-zip?month=YYYY-MM
+router.get('/download-zip', async (req, res) => {
   const { month } = req.query;
   if (!month) return res.status(400).json({ error: 'month param required (YYYY-MM)' });
 
-  const { data, error } = await supabase.from('report_submissions')
-    .select('id, submitted_at, sent_at')
-    .eq('user_id', req.userId)
-    .eq('month', month)
-    .maybeSingle();
-  if (error) return res.status(500).json({ error: error.message });
+  const { data: user, error: userErr } = await supabase.from('profiles')
+    .select('first_name, last_name, username, mileage_rate').eq('id', req.userId).single();
+  if (userErr) return res.status(500).json({ error: userErr.message });
 
-  res.json({ submitted: !!data, submitted_at: data?.submitted_at || null, sent: !!data?.sent_at });
-});
+  const { start, end } = monthRange(month);
+  const [{ data: entries, error: entriesErr }, { data: bonuses }] = await Promise.all([
+    supabase.from('entries').select('*')
+      .eq('user_id', req.userId).gte('date', start).lte('date', end).order('date', { ascending: true }),
+    supabase.from('admin_bonuses').select('*')
+      .eq('user_id', req.userId).gte('date', start).lte('date', end).order('date'),
+  ]);
+  if (entriesErr) return res.status(500).json({ error: entriesErr.message });
 
-// POST /api/report/submit?month=YYYY-MM
-router.post('/submit', upload.fields([{ name: 'receipts' }, { name: 'parking' }]), async (req, res) => {
-  const { month } = req.query;
-  if (!month) return res.status(400).json({ error: 'month param required (YYYY-MM)' });
+  const [year, monthNum] = month.split('-').map(Number);
+  const monthName = new Date(year, monthNum - 1).toLocaleString('en-US', { month: 'long' });
+  const name = `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.username;
+  const title = `${name} — ${monthName} ${year}`;
 
-  const receiptFiles = req.files?.receipts || [];
-  const parkingFiles = req.files?.parking || [];
+  try {
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet('Salary Report');
+    buildSheet(sheet, entries || [], user.mileage_rate ?? 2, title, bonuses || []);
+    const excelBuffer = await workbook.xlsx.writeBuffer();
 
-  // Upload files to Supabase Storage
-  const basePath = `${req.userId}/${month}`;
-  const uploadErrors = [];
+    const filename = `${name} - ${monthName} ${year}.zip`;
+    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(filename)}"`);
+    res.setHeader('Content-Type', 'application/zip');
 
-  for (let i = 0; i < receiptFiles.length; i++) {
-    const f = receiptFiles[i];
-    const path = `${basePath}/food_${i}${extOf(f)}`;
-    const { error } = await supabase.storage.from('reports').upload(path, f.buffer, {
-      contentType: f.mimetype,
-      upsert: true,
+    const archive = archiver('zip', { zlib: { level: 6 } });
+    archive.on('error', err => {
+      console.error('[report/download-zip] Archive error:', err.message);
+      res.end();
     });
-    if (error) uploadErrors.push(error.message);
+    archive.pipe(res);
+
+    archive.append(Buffer.from(excelBuffer), { name: `${name} - ${monthName} ${year}.xlsx` });
+    archive.append(Buffer.alloc(0), { name: 'Food Receipts/' });
+    archive.append(Buffer.alloc(0), { name: 'Parking Receipts/' });
+
+    for (const entry of entries || []) {
+      for (const path of entry.food_receipt_urls || []) {
+        const { data: blob, error: dlErr } = await supabase.storage.from('receipts').download(path);
+        if (dlErr || !blob) continue;
+        const arrayBuf = await blob.arrayBuffer();
+        archive.append(Buffer.from(arrayBuf), { name: `Food Receipts/${entry.date} - ${path.split('/').pop()}` });
+      }
+      for (const path of entry.parking_receipt_urls || []) {
+        const { data: blob, error: dlErr } = await supabase.storage.from('receipts').download(path);
+        if (dlErr || !blob) continue;
+        const arrayBuf = await blob.arrayBuffer();
+        archive.append(Buffer.from(arrayBuf), { name: `Parking Receipts/${entry.date} - ${path.split('/').pop()}` });
+      }
+    }
+
+    await archive.finalize();
+  } catch (err) {
+    console.error('[report/download-zip] Error:', err.message, err.stack);
+    if (!res.headersSent) return res.status(500).json({ error: err.message });
+    res.end();
   }
-
-  for (let i = 0; i < parkingFiles.length; i++) {
-    const f = parkingFiles[i];
-    const path = `${basePath}/parking_${i}.pdf`;
-    const { error } = await supabase.storage.from('reports').upload(path, f.buffer, {
-      contentType: f.mimetype,
-      upsert: true,
-    });
-    if (error) uploadErrors.push(error.message);
-  }
-
-  if (uploadErrors.length > 0) {
-    return res.status(500).json({ error: 'Failed to upload some files: ' + uploadErrors.join('; ') });
-  }
-
-  // Upsert submission record (reset sent_at if resubmitting)
-  const { error: upsertErr } = await supabase.from('report_submissions')
-    .upsert({ user_id: req.userId, month, submitted_at: new Date().toISOString(), sent_at: null, sent_by: null },
-             { onConflict: 'user_id,month' });
-  if (upsertErr) return res.status(500).json({ error: upsertErr.message });
-
-  res.json({ success: true });
 });
 
 module.exports = router;

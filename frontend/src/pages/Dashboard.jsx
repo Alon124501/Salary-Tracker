@@ -7,11 +7,6 @@ function currentMonth() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
 
-function monthLabel(month) {
-  const [y, m] = month.split('-');
-  return new Date(y, m - 1).toLocaleString('en-US', { month: 'long', year: 'numeric' });
-}
-
 function totalTests(e) {
   return (e.insurance_tests || 0) + (e.screening_tests || 0) + (e.mixed_screening_tests || 0) + (e.partial_tests || 0);
 }
@@ -27,16 +22,10 @@ export default function Dashboard() {
   const [month, setMonth] = useState(currentMonth());
   const [entries, setEntries] = useState([]);
   const [summary, setSummary] = useState(null);
-  const [sending, setSending] = useState(false);
-  const [sendMsg, setSendMsg] = useState('');
-  const [showModal, setShowModal] = useState(false);
-  const [parkingFiles, setParkingFiles] = useState([]);
-  const [toast, setToast] = useState('');
-  const [submitted, setSubmitted] = useState(false);
   const [notifications, setNotifications] = useState([]);
   const [bonuses, setBonuses] = useState([]);
 
-  useEffect(() => { loadData(); checkSubmission(); }, [month]);
+  useEffect(() => { loadData(); }, [month]);
 
   useEffect(() => {
     api.get('/notifications').then(r => setNotifications(r.data)).catch(() => {});
@@ -53,15 +42,6 @@ export default function Dashboard() {
       setSummary(summaryRes.data);
       setBonuses(bonusRes.data || []);
     } catch {}
-  }
-
-  async function checkSubmission() {
-    try {
-      const { data } = await api.get(`/report/submission?month=${month}`);
-      setSubmitted(data.submitted);
-    } catch {
-      setSubmitted(false);
-    }
   }
 
   async function downloadExcel() {
@@ -81,30 +61,21 @@ export default function Dashboard() {
     URL.revokeObjectURL(url);
   }
 
-  function openModal() {
-    setParkingFiles([]);
-    setSendMsg('');
-    setShowModal(true);
-  }
-
-  async function submitReport() {
-    setSending(true);
-    setSendMsg('');
-    try {
-      const formData = new FormData();
-      parkingFiles.forEach(f => formData.append('parking', f));
-      await api.post(`/report/submit?month=${month}`, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
-      setShowModal(false);
-      setSubmitted(true);
-      setToast('Report submitted to admin for review.');
-      setTimeout(() => setToast(''), 4000);
-    } catch (err) {
-      setSendMsg('Failed: ' + (err.response?.data?.error || err.message));
-    } finally {
-      setSending(false);
-    }
+  async function downloadZip() {
+    const token = localStorage.getItem('token');
+    const res = await fetch(`/api/report/download-zip?month=${month}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) return;
+    const cd = res.headers.get('Content-Disposition');
+    const match = cd && cd.match(/filename="([^"]+)"/);
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = match ? decodeURIComponent(match[1]) : `${month}.zip`;
+    a.click();
+    URL.revokeObjectURL(url);
   }
 
   async function approveNotification(id) {
@@ -157,21 +128,13 @@ export default function Dashboard() {
             <span className="material-symbols-outlined text-sm">download</span>
             Export Excel
           </button>
-          {submitted ? (
-            <span className="flex items-center gap-1.5 text-xs font-semibold text-slate-400 bg-slate-100 px-3 py-1.5 rounded-full">
-              <span className="material-symbols-outlined text-sm" style={{ fontVariationSettings: "'FILL' 1" }}>check_circle</span>
-              Submitted
-            </span>
-          ) : (
-            <button
-              onClick={openModal}
-              disabled={sending}
-              className="flex items-center gap-1.5 text-xs font-semibold text-action-blue bg-blue-50 px-3 py-1.5 rounded-full disabled:opacity-50"
-            >
-              <span className="material-symbols-outlined text-sm">upload</span>
-              Submit to Admin
-            </button>
-          )}
+          <button
+            onClick={downloadZip}
+            className="flex items-center gap-1.5 text-xs font-semibold text-action-blue bg-blue-50 px-3 py-1.5 rounded-full hover:bg-blue-100 transition-colors"
+          >
+            <span className="material-symbols-outlined text-sm">download</span>
+            Download Report
+          </button>
         </div>
       </div>
 
@@ -430,78 +393,6 @@ export default function Dashboard() {
         <span className="material-symbols-outlined text-3xl">add</span>
       </button>
 
-      {/* Send Report Modal */}
-      {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-          <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl flex flex-col gap-5 p-6">
-            <div className="flex items-center justify-between">
-              <h3 className="text-lg font-extrabold text-slate-900 font-headline">Submit Report — {monthLabel(month)}</h3>
-              <button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-slate-600">
-                <span className="material-symbols-outlined">close</span>
-              </button>
-            </div>
-
-            {/* Cellopark / Pango upload */}
-            <div>
-              <p className="text-xs font-bold uppercase tracking-widest text-slate-500 mb-2 flex items-center gap-1.5">
-                <span className="material-symbols-outlined text-base">local_parking</span>
-                Cellopark / Pango
-                <span className="text-xs font-normal normal-case tracking-normal text-slate-400 ml-1">— optional</span>
-              </p>
-              <label className="flex items-center gap-2 cursor-pointer border-2 border-dashed border-slate-200 rounded-xl px-4 py-3 hover:border-action-blue transition-colors">
-                <span className="material-symbols-outlined text-slate-400">upload_file</span>
-                <span className="text-sm text-slate-500">{parkingFiles.length > 0 ? parkingFiles[0].name : 'Upload PDF'}</span>
-                <input
-                  type="file"
-                  accept="application/pdf"
-                  className="hidden"
-                  onChange={e => setParkingFiles(Array.from(e.target.files))}
-                />
-              </label>
-              {parkingFiles.length > 0 && (
-                <div className="flex items-center gap-2 mt-2 px-3 py-2 bg-slate-50 rounded-lg border border-slate-200">
-                  <span className="material-symbols-outlined text-red-500 text-base">picture_as_pdf</span>
-                  <span className="text-xs text-slate-600 truncate">{parkingFiles[0].name}</span>
-                </div>
-              )}
-            </div>
-
-            {sendMsg && (
-              <div className={`text-sm font-medium px-3 py-2 rounded-xl ${sendMsg.startsWith('Failed') ? 'bg-red-50 text-red-600' : 'bg-emerald-50 text-emerald-700'}`}>
-                {sendMsg}
-              </div>
-            )}
-
-            <div className="flex gap-3">
-              <button
-                onClick={() => setShowModal(false)}
-                className="flex-1 text-sm font-semibold text-slate-600 bg-slate-100 px-4 py-2.5 rounded-full hover:bg-slate-200 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={submitReport}
-                disabled={sending}
-                className="flex-1 flex items-center justify-center gap-1.5 text-sm font-semibold text-white brand-gradient px-4 py-2.5 rounded-full brand-shadow disabled:opacity-50"
-              >
-                <span className="material-symbols-outlined text-sm">{sending ? 'hourglass_top' : 'upload'}</span>
-                {sending ? 'Submitting...' : 'Submit'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Success toast */}
-      {toast && (
-        <div className="fixed bottom-36 lg:bottom-8 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 bg-emerald-600 text-white text-sm font-semibold px-5 py-3 rounded-2xl shadow-xl animate-fade-in-up whitespace-nowrap">
-          <span className="material-symbols-outlined text-base" style={{ fontVariationSettings: "'FILL' 1" }}>check_circle</span>
-          {toast}
-          <button onClick={() => setToast('')} className="ml-1 opacity-70 hover:opacity-100">
-            <span className="material-symbols-outlined text-base">close</span>
-          </button>
-        </div>
-      )}
     </main>
   );
 }
