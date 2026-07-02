@@ -3,29 +3,12 @@ const ExcelJS = require('exceljs');
 const archiver = require('archiver');
 const supabase = require('../supabase');
 const auth = require('../middleware/auth');
+const { calcDaily } = require('../lib/payCalc');
 
 const router = express.Router();
 router.use(auth);
 
-function calcDaily(e, mileageRate = 2) {
-  const totalTests = (e.insurance_tests || 0) + (e.screening_tests || 0) +
-                     (e.mixed_screening_tests || 0) + (e.partial_tests || 0);
-
-  const insurance = (e.insurance_tests || 0) * 80;
-  const screening = (e.screening_tests || 0) * 105;
-  const mixed = (e.mixed_screening_tests || 0) * 120;
-  const partial = (e.partial_tests || 0) * 50;
-  const rawTestsPay = insurance + screening + mixed + partial;
-  const MIN_TESTS_PAY = 240;
-  const testsPay = totalTests > 0 ? Math.max(rawTestsPay, MIN_TESTS_PAY) : rawTestsPay;
-  const minBonus = testsPay - rawTestsPay;
-
-  const km = (e.kilometers || 0) * mileageRate + ((e.kilometers || 0) >= 100 ? 100 : 0);
-  const office = (e.office_hours || 0) * 60;
-  const expenses = (e.food_expense || 0) + (e.parking_expense || 0);
-  return { insurance, screening, mixed, partial, minBonus, km, office, expenses,
-           total: testsPay + km + office + expenses };
-}
+const PROFILE_SELECT = 'first_name, last_name, username, payment_type, global_salary, mileage_rate, insurance_rate, screening_rate, mixed_screening_rate, partial_rate, hourly_rate';
 
 function monthRange(month) {
   const [year, mon] = month.split('-').map(Number);
@@ -34,7 +17,7 @@ function monthRange(month) {
   return { start, end };
 }
 
-function buildSheet(sheet, entries, mileageRate = 2, title = '', bonuses = []) {
+function buildSheet(sheet, entries, profile = {}, title = '', bonuses = []) {
   const headerFill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4F46E5' } };
   const headerFont = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
   const centerAlign = { horizontal: 'center', vertical: 'middle' };
@@ -71,7 +54,7 @@ function buildSheet(sheet, entries, mileageRate = 2, title = '', bonuses = []) {
 
   for (let i = 0; i < entries.length; i++) {
     const e = entries[i];
-    const c = calcDaily(e, mileageRate);
+    const c = calcDaily(e, profile);
     const tests_pay = c.insurance + c.screening + c.mixed + c.partial;
 
     const dataRow = sheet.addRow({
@@ -99,13 +82,16 @@ function buildSheet(sheet, entries, mileageRate = 2, title = '', bonuses = []) {
     sums.parking    += e.parking_expense       || 0;
     sums.tests_pay  += tests_pay;
     sums.min_bonus  += c.minBonus || 0;
-    moneySums.ins   += (e.insurance_tests       || 0) * 80;
-    moneySums.scr   += (e.screening_tests       || 0) * 105;
-    moneySums.mix   += (e.mixed_screening_tests || 0) * 120;
-    moneySums.par   += (e.partial_tests         || 0) * 50;
+    moneySums.ins   += c.insurance;
+    moneySums.scr   += c.screening;
+    moneySums.mix   += c.mixed;
+    moneySums.par   += c.partial;
     moneySums.km    += c.km;
-    moneySums.hrs   += (e.office_hours || 0) * 60;
+    moneySums.hrs   += c.office;
     grandTotal      += c.total;
+  }
+  if (profile.payment_type === 'global') {
+    grandTotal += profile.global_salary || 0;
   }
 
   // Blank separator
@@ -198,7 +184,7 @@ router.get('/excel', async (req, res) => {
   if (!month) return res.status(400).json({ error: 'month param required (YYYY-MM)' });
 
   const { data: user, error: userErr } = await supabase.from('profiles')
-    .select('first_name, last_name, username, mileage_rate').eq('id', req.userId).single();
+    .select(PROFILE_SELECT).eq('id', req.userId).single();
   if (userErr) return res.status(500).json({ error: userErr.message });
 
   const { start, end } = monthRange(month);
@@ -219,7 +205,7 @@ router.get('/excel', async (req, res) => {
   try {
     const workbook = new ExcelJS.Workbook();
     const sheet = workbook.addWorksheet('Salary Report');
-    buildSheet(sheet, entries || [], user.mileage_rate ?? 2, title, bonuses || []);
+    buildSheet(sheet, entries || [], user, title, bonuses || []);
 
     const buffer = await workbook.xlsx.writeBuffer();
     res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(filename)}"`);
@@ -244,7 +230,7 @@ router.get('/download-zip', async (req, res) => {
   if (!report) return res.status(409).json({ error: 'equipment_report_required' });
 
   const { data: user, error: userErr } = await supabase.from('profiles')
-    .select('first_name, last_name, username, mileage_rate').eq('id', req.userId).single();
+    .select(PROFILE_SELECT).eq('id', req.userId).single();
   if (userErr) return res.status(500).json({ error: userErr.message });
 
   const { start, end } = monthRange(month);
@@ -264,7 +250,7 @@ router.get('/download-zip', async (req, res) => {
   try {
     const workbook = new ExcelJS.Workbook();
     const sheet = workbook.addWorksheet('Salary Report');
-    buildSheet(sheet, entries || [], user.mileage_rate ?? 2, title, bonuses || []);
+    buildSheet(sheet, entries || [], user, title, bonuses || []);
     const excelBuffer = await workbook.xlsx.writeBuffer();
 
     const filename = `${name} - ${monthName} ${year}.zip`;

@@ -135,3 +135,13 @@ ALTER TABLE screening_vouchers ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Authenticated users can view own vouchers"
   ON screening_vouchers FOR SELECT TO authenticated
   USING (user_id = auth.uid());
+
+-- ============================================================
+-- Per-Employee Pay Rates (Migration)
+-- ============================================================
+
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS insurance_rate       REAL NOT NULL DEFAULT 80;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS screening_rate       REAL NOT NULL DEFAULT 105;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS mixed_screening_rate REAL NOT NULL DEFAULT 120;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS partial_rate         REAL NOT NULL DEFAULT 50;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS hourly_rate          REAL NOT NULL DEFAULT 90;

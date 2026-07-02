@@ -2,19 +2,43 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import api from '../api.js';
 
-function calcDaily(f) {
+function calcDaily(f, profile = {}) {
+  const paymentType = profile.payment_type || 'per_test';
+  const mileageRate = profile.mileage_rate ?? 2;
+  const km = f.kilometers * mileageRate + (f.kilometers >= 100 ? 100 : 0);
+  const expenses = f.food_expense + f.parking_expense;
+
+  if (paymentType === 'per_hour') {
+    const hourlyRate = profile.hourly_rate ?? 90;
+    const office = f.office_hours * hourlyRate;
+    return {
+      insurance: 0, screening: 0, mixed: 0, partial: 0, minBonus: 0,
+      km, office, expenses, total: office + km + expenses,
+    };
+  }
+
+  if (paymentType === 'global') {
+    return {
+      insurance: 0, screening: 0, mixed: 0, partial: 0, minBonus: 0,
+      km: 0, office: 0, expenses, total: expenses,
+    };
+  }
+
+  const insRate = profile.insurance_rate ?? 80;
+  const scrRate = profile.screening_rate ?? 105;
+  const mixRate = profile.mixed_screening_rate ?? 120;
+  const parRate = profile.partial_rate ?? 50;
+
   const totalTests = f.insurance_tests + f.screening_tests + f.mixed_screening_tests + f.partial_tests;
-  const insurance = f.insurance_tests * 80;
-  const screening = f.screening_tests * 105;
-  const mixed = f.mixed_screening_tests * 120;
-  const partial = f.partial_tests * 50;
+  const insurance = f.insurance_tests * insRate;
+  const screening = f.screening_tests * scrRate;
+  const mixed = f.mixed_screening_tests * mixRate;
+  const partial = f.partial_tests * parRate;
   const rawTestsPay = insurance + screening + mixed + partial;
   const MIN_TESTS_PAY = 240;
   const testsPay = totalTests > 0 ? Math.max(rawTestsPay, MIN_TESTS_PAY) : rawTestsPay;
   const minBonus = testsPay - rawTestsPay;
-  const km = f.kilometers * 2 + (f.kilometers >= 100 ? 100 : 0);
   const office = f.office_hours * 60;
-  const expenses = f.food_expense + f.parking_expense;
   return { insurance, screening, mixed, partial, minBonus, km, office, expenses,
            total: testsPay + km + office + expenses };
 }
@@ -41,8 +65,13 @@ export default function EntryPage() {
   const [viewingUrl, setViewingUrl] = useState(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [profile, setProfile] = useState({});
 
   useEffect(() => { if (date) loadExisting(date); }, [date]);
+
+  useEffect(() => {
+    api.get('/auth/me').then(r => setProfile(r.data)).catch(() => {});
+  }, []);
 
   async function loadExisting(d) {
     try {
@@ -150,7 +179,7 @@ export default function EntryPage() {
     }
   }
 
-  const calc = calcDaily(form);
+  const calc = calcDaily(form, profile);
 
   return (
     <div className="bg-[#F2F2F7] min-h-screen pb-56 lg:pb-24">
@@ -173,10 +202,10 @@ export default function EntryPage() {
           <div className="space-y-3">
             <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest px-1">Tests</h3>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-              <TestField label="Insurance" sub="80 ₪ each" value={form.insurance_tests} onChange={v => set('insurance_tests', v)} calc={calc.insurance} />
-              <TestField label="Screening" sub="105 ₪ each" value={form.screening_tests} onChange={v => set('screening_tests', v)} calc={calc.screening} />
-              <TestField label="Mixed Screening" sub="120 ₪ each" value={form.mixed_screening_tests} onChange={v => set('mixed_screening_tests', v)} calc={calc.mixed} />
-              <TestField label="Partial" sub="50 ₪ each" value={form.partial_tests} onChange={v => set('partial_tests', v)} calc={calc.partial} />
+              <TestField label="Insurance" sub={`${profile.insurance_rate ?? 80} ₪ each`} value={form.insurance_tests} onChange={v => set('insurance_tests', v)} calc={calc.insurance} />
+              <TestField label="Screening" sub={`${profile.screening_rate ?? 105} ₪ each`} value={form.screening_tests} onChange={v => set('screening_tests', v)} calc={calc.screening} />
+              <TestField label="Mixed Screening" sub={`${profile.mixed_screening_rate ?? 120} ₪ each`} value={form.mixed_screening_tests} onChange={v => set('mixed_screening_tests', v)} calc={calc.mixed} />
+              <TestField label="Partial" sub={`${profile.partial_rate ?? 50} ₪ each`} value={form.partial_tests} onChange={v => set('partial_tests', v)} calc={calc.partial} />
             </div>
           </div>
 

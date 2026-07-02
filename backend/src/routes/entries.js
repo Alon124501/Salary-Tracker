@@ -4,6 +4,7 @@ const { z }   = require('zod');
 const supabase = require('../supabase');
 const auth     = require('../middleware/auth');
 const asyncHandler = require('../middleware/asyncHandler');
+const { calcDaily } = require('../lib/payCalc');
 
 const router = express.Router();
 router.use(auth);
@@ -38,29 +39,11 @@ const PutBodySchema = z.object({
   parking_expense:       PutNumericField,
 });
 
-function calcDaily(e, mileageRate = 2) {
-  const totalTests = (e.insurance_tests || 0) + (e.screening_tests || 0) +
-                     (e.mixed_screening_tests || 0) + (e.partial_tests || 0);
-
-  const insurance = (e.insurance_tests || 0) * 80;
-  const screening = (e.screening_tests || 0) * 105;
-  const mixed = (e.mixed_screening_tests || 0) * 120;
-  const partial = (e.partial_tests || 0) * 50;
-  const rawTestsPay = insurance + screening + mixed + partial;
-  const MIN_TESTS_PAY = 240;
-  const testsPay = totalTests > 0 ? Math.max(rawTestsPay, MIN_TESTS_PAY) : rawTestsPay;
-  const minBonus = testsPay - rawTestsPay;
-
-  const km = (e.kilometers || 0) * mileageRate + ((e.kilometers || 0) >= 100 ? 100 : 0);
-  const office = (e.office_hours || 0) * 60;
-  const expenses = (e.food_expense || 0) + (e.parking_expense || 0);
-  return { insurance, screening, mixed, partial, minBonus, km, office, expenses,
-           total: testsPay + km + office + expenses };
-}
-
-async function getUserMileageRate(userId) {
-  const { data } = await supabase.from('profiles').select('mileage_rate').eq('id', userId).single();
-  return data?.mileage_rate ?? 2;
+async function getUserPayProfile(userId) {
+  const { data } = await supabase.from('profiles')
+    .select('payment_type, global_salary, mileage_rate, insurance_rate, screening_rate, mixed_screening_rate, partial_rate, hourly_rate')
+    .eq('id', userId).single();
+  return data || {};
 }
 
 function monthRange(month) {
@@ -78,9 +61,9 @@ router.get('/', asyncHandler(async (req, res) => {
     const { start, end } = monthRange(month);
     query = query.gte('date', start).lte('date', end);
   }
-  const [{ data: rows, error }, mileageRate] = await Promise.all([query, getUserMileageRate(req.userId)]);
+  const [{ data: rows, error }, profile] = await Promise.all([query, getUserPayProfile(req.userId)]);
   if (error) return res.status(500).json({ error: error.message });
-  res.json(rows.map(e => ({ ...e, calc: calcDaily(e, mileageRate) })));
+  res.json(rows.map(e => ({ ...e, calc: calcDaily(e, profile) })));
 }));
 
 // GET /api/entries/summary?month=YYYY-MM
@@ -89,9 +72,9 @@ router.get('/summary', asyncHandler(async (req, res) => {
   if (!month) return res.status(400).json({ error: 'month param required (YYYY-MM)' });
 
   const { start, end } = monthRange(month);
-  const [{ data: rows, error }, mileageRate] = await Promise.all([
+  const [{ data: rows, error }, profile] = await Promise.all([
     supabase.from('entries').select('*').eq('user_id', req.userId).gte('date', start).lte('date', end),
-    getUserMileageRate(req.userId),
+    getUserPayProfile(req.userId),
   ]);
   if (error) return res.status(500).json({ error: error.message });
 
@@ -100,7 +83,7 @@ router.get('/summary', asyncHandler(async (req, res) => {
     km: 0, office: 0, expenses: 0, total: 0, days: rows.length
   };
   for (const e of rows) {
-    const c = calcDaily(e, mileageRate);
+    const c = calcDaily(e, profile);
     totals.insurance += c.insurance;
     totals.screening += c.screening;
     totals.mixed += c.mixed;
@@ -110,6 +93,9 @@ router.get('/summary', asyncHandler(async (req, res) => {
     totals.office += c.office;
     totals.expenses += c.expenses;
     totals.total += c.total;
+  }
+  if (profile.payment_type === 'global') {
+    totals.total += profile.global_salary || 0;
   }
   res.json(totals);
 }));
@@ -149,8 +135,8 @@ router.post('/', asyncHandler(async (req, res) => {
   }, { onConflict: 'user_id,date' }).select().single();
 
   if (error) return res.status(500).json({ error: error.message });
-  const mileageRate = await getUserMileageRate(req.userId);
-  res.status(201).json({ ...entry, calc: calcDaily(entry, mileageRate) });
+  const profile = await getUserPayProfile(req.userId);
+  res.status(201).json({ ...entry, calc: calcDaily(entry, profile) });
 }));
 
 // PUT /api/entries/:id/receipt
@@ -344,8 +330,8 @@ router.put('/:id', asyncHandler(async (req, res) => {
     .update(updates).eq('id', entry.id).select().single();
   if (updateErr) return res.status(500).json({ error: updateErr.message });
 
-  const mileageRate = await getUserMileageRate(req.userId);
-  res.json({ ...updated, calc: calcDaily(updated, mileageRate) });
+  const profile = await getUserPayProfile(req.userId);
+  res.json({ ...updated, calc: calcDaily(updated, profile) });
 }));
 
 // DELETE /api/entries/:id

@@ -6,32 +6,16 @@ const supabase = require('../supabase');
 const auth = require('../middleware/auth');
 const adminAuth = require('../middleware/adminAuth');
 const asyncHandler = require('../middleware/asyncHandler');
+const { calcDaily } = require('../lib/payCalc');
 
 const router = express.Router();
 router.use(auth);
 router.use(adminAuth);
 
 const ACCOUNTING_EMAIL = 'davida@mpcheck.co.il';
+const PROFILE_SELECT = 'first_name, last_name, username, payment_type, global_salary, mileage_rate, insurance_rate, screening_rate, mixed_screening_rate, partial_rate, hourly_rate';
 
-function calcDaily(e, mileageRate = 2) {
-  const totalTests = (e.insurance_tests || 0) + (e.screening_tests || 0) +
-                     (e.mixed_screening_tests || 0) + (e.partial_tests || 0);
-  const insurance  = (e.insurance_tests || 0) * 80;
-  const screening  = (e.screening_tests || 0) * 105;
-  const mixed      = (e.mixed_screening_tests || 0) * 120;
-  const partial    = (e.partial_tests || 0) * 50;
-  const rawTestsPay = insurance + screening + mixed + partial;
-  const MIN_TESTS_PAY = 240;
-  const testsPay = totalTests > 0 ? Math.max(rawTestsPay, MIN_TESTS_PAY) : rawTestsPay;
-  const minBonus = testsPay - rawTestsPay;
-  const km       = (e.kilometers || 0) * mileageRate + ((e.kilometers || 0) >= 100 ? 100 : 0);
-  const office   = (e.office_hours || 0) * 60;
-  const expenses = (e.food_expense || 0) + (e.parking_expense || 0);
-  return { insurance, screening, mixed, partial, minBonus, km, office, expenses,
-           total: testsPay + km + office + expenses };
-}
-
-function buildSheet(sheet, entries, mileageRate = 2, title = '', bonuses = []) {
+function buildSheet(sheet, entries, profile = {}, title = '', bonuses = []) {
   const headerFill   = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4F46E5' } };
   const headerFont   = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
   const centerAlign  = { horizontal: 'center', vertical: 'middle' };
@@ -66,7 +50,7 @@ function buildSheet(sheet, entries, mileageRate = 2, title = '', bonuses = []) {
 
   for (let i = 0; i < entries.length; i++) {
     const e = entries[i];
-    const c = calcDaily(e, mileageRate);
+    const c = calcDaily(e, profile);
     const tests_pay = c.insurance + c.screening + c.mixed + c.partial;
     const dataRow = sheet.addRow({
       date: e.date, ins: e.insurance_tests, scr: e.screening_tests,
@@ -89,13 +73,16 @@ function buildSheet(sheet, entries, mileageRate = 2, title = '', bonuses = []) {
     sums.parking   += e.parking_expense       || 0;
     sums.tests_pay += tests_pay;
     sums.min_bonus += c.minBonus || 0;
-    moneySums.ins  += (e.insurance_tests       || 0) * 80;
-    moneySums.scr  += (e.screening_tests       || 0) * 105;
-    moneySums.mix  += (e.mixed_screening_tests || 0) * 120;
-    moneySums.par  += (e.partial_tests         || 0) * 50;
+    moneySums.ins  += c.insurance;
+    moneySums.scr  += c.screening;
+    moneySums.mix  += c.mixed;
+    moneySums.par  += c.partial;
     moneySums.km   += c.km;
-    moneySums.hrs  += (e.office_hours || 0) * 60;
+    moneySums.hrs  += c.office;
     grandTotal     += c.total;
+  }
+  if (profile.payment_type === 'global') {
+    grandTotal += profile.global_salary || 0;
   }
 
   sheet.addRow({});
@@ -225,12 +212,19 @@ router.get('/users', asyncHandler(async (req, res) => {
 }));
 
 // PATCH /api/admin/users/:id
+const PAYMENT_TYPES = ['per_test', 'per_hour', 'global'];
+
 router.patch('/users/:id', asyncHandler(async (req, res) => {
   const allowed = [
     'first_name', 'last_name', 'email', 'phone', 'profession', 'district', 'address',
     'vehicle_type_color', 'vehicle_number', 'shifts_per_week', 'shift_preference',
     'clothing_size', 'uniform_sets', 'echo_certified', 'mileage_rate',
+    'payment_type', 'global_salary',
+    'insurance_rate', 'screening_rate', 'mixed_screening_rate', 'partial_rate', 'hourly_rate',
   ];
+  if (req.body.payment_type !== undefined && !PAYMENT_TYPES.includes(req.body.payment_type))
+    return res.status(400).json({ error: `Invalid payment_type. Valid: ${PAYMENT_TYPES.join(', ')}` });
+
   const updates = {};
   if (req.body.is_admin !== undefined) {
     if (req.params.id === req.userId)
@@ -341,7 +335,7 @@ router.get('/reports', asyncHandler(async (req, res) => {
     { data: allEntries, error: eErr },
     { data: approvals },
   ] = await Promise.all([
-    supabase.from('profiles').select('id, first_name, last_name, username, mileage_rate').order('first_name'),
+    supabase.from('profiles').select(`id, ${PROFILE_SELECT}`).order('first_name'),
     supabase.from('entries').select('*').gte('date', start).lte('date', end),
     supabase.from('user_monthly_approvals').select('user_id, approved_at').eq('month', month),
   ]);
@@ -358,11 +352,10 @@ router.get('/reports', asyncHandler(async (req, res) => {
 
   const summaries = profiles.map(p => {
     const entries = entriesByUser[p.id] || [];
-    const mileageRate = p.mileage_rate ?? 2;
     const totals = { insurance_tests: 0, screening_tests: 0, mixed_screening_tests: 0,
                      partial_tests: 0, kilometers: 0, office_hours: 0, total: 0, days: entries.length };
     for (const e of entries) {
-      const c = calcDaily(e, mileageRate);
+      const c = calcDaily(e, p);
       totals.insurance_tests      += e.insurance_tests       || 0;
       totals.screening_tests      += e.screening_tests       || 0;
       totals.mixed_screening_tests += e.mixed_screening_tests || 0;
@@ -371,11 +364,15 @@ router.get('/reports', asyncHandler(async (req, res) => {
       totals.office_hours         += e.office_hours          || 0;
       totals.total                += c.total;
     }
+    if (p.payment_type === 'global') {
+      totals.total += p.global_salary || 0;
+    }
     return {
       user: {
         id: p.id,
         name: `${p.first_name || ''} ${p.last_name || ''}`.trim() || p.username,
         username: p.username,
+        payment_type: p.payment_type,
       },
       totals,
       approved: approvalMap[p.id] ? { at: approvalMap[p.id] } : null,
@@ -402,7 +399,7 @@ router.post('/reports/approve', asyncHandler(async (req, res) => {
     { data: allEntries, error: eErr },
     { data: allBonuses },
   ] = await Promise.all([
-    supabase.from('profiles').select('id, first_name, last_name, username, mileage_rate').order('first_name'),
+    supabase.from('profiles').select(`id, ${PROFILE_SELECT}`).order('first_name'),
     supabase.from('entries').select('*').gte('date', start).lte('date', end).order('date', { ascending: true }),
     supabase.from('admin_bonuses').select('*').gte('date', start).lte('date', end).order('date'),
   ]);
@@ -431,12 +428,11 @@ router.post('/reports/approve', asyncHandler(async (req, res) => {
     (async () => {
       for (const p of profiles) {
         const entries = entriesByUser[p.id] || [];
-        if (entries.length === 0) continue;
-        const mileageRate = p.mileage_rate ?? 2;
+        if (entries.length === 0 && p.payment_type !== 'global') continue;
         const name = `${p.first_name || ''} ${p.last_name || ''}`.trim() || p.username;
 
         const workbook = new ExcelJS.Workbook();
-        buildSheet(workbook.addWorksheet('Salary Report'), entries, mileageRate, `${name} — ${monthName} ${year}`, bonusesByUser[p.id] || []);
+        buildSheet(workbook.addWorksheet('Salary Report'), entries, p, `${name} — ${monthName} ${year}`, bonusesByUser[p.id] || []);
         const buf = await workbook.xlsx.writeBuffer();
         archive.append(Buffer.from(buf), { name: `${name} - ${monthName} ${year}.xlsx` });
       }
@@ -475,16 +471,17 @@ router.get('/users/:userId/report/excel', asyncHandler(async (req, res) => {
   const monthName = new Date(year, mon - 1).toLocaleString('en-US', { month: 'long' });
 
   const [{ data: profile }, { data: entries }, { data: bonuses }] = await Promise.all([
-    supabase.from('profiles').select('first_name, last_name, username, mileage_rate').eq('id', userId).single(),
+    supabase.from('profiles').select(PROFILE_SELECT).eq('id', userId).single(),
     supabase.from('entries').select('*').eq('user_id', userId).gte('date', start).lte('date', end).order('date', { ascending: true }),
     supabase.from('admin_bonuses').select('*').eq('user_id', userId).gte('date', start).lte('date', end).order('date'),
   ]);
   if (!profile) return res.status(404).json({ error: 'User not found' });
-  if (!entries || entries.length === 0) return res.status(404).json({ error: 'No entries for this month' });
+  if ((!entries || entries.length === 0) && profile.payment_type !== 'global')
+    return res.status(404).json({ error: 'No entries for this month' });
 
   const name = `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || profile.username;
   const workbook = new ExcelJS.Workbook();
-  buildSheet(workbook.addWorksheet('Salary Report'), entries, profile.mileage_rate ?? 2, `${name} — ${monthName} ${year}`, bonuses || []);
+  buildSheet(workbook.addWorksheet('Salary Report'), entries || [], profile, `${name} — ${monthName} ${year}`, bonuses || []);
   const buf = await workbook.xlsx.writeBuffer();
 
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
@@ -507,17 +504,19 @@ router.post('/users/:userId/report/approve', asyncHandler(async (req, res) => {
     const [year, mon] = month.split('-').map(Number);
     const monthName = new Date(year, mon - 1).toLocaleString('en-US', { month: 'long' });
 
-    const [{ data: profile }, { data: entries }, { data: bonuses }] = await Promise.all([
-      supabase.from('profiles').select('first_name, last_name, username, mileage_rate').eq('id', userId).single(),
+    const [{ data: profile }, { data: entriesRaw }, { data: bonuses }] = await Promise.all([
+      supabase.from('profiles').select(PROFILE_SELECT).eq('id', userId).single(),
       supabase.from('entries').select('*').eq('user_id', userId).gte('date', start).lte('date', end).order('date', { ascending: true }),
       supabase.from('admin_bonuses').select('*').eq('user_id', userId).gte('date', start).lte('date', end).order('date'),
     ]);
     if (!profile) return res.status(404).json({ error: 'User not found' });
-    if (!entries || entries.length === 0) return res.status(404).json({ error: 'No entries for this month' });
+    if ((!entriesRaw || entriesRaw.length === 0) && profile.payment_type !== 'global')
+      return res.status(404).json({ error: 'No entries for this month' });
+    const entries = entriesRaw || [];
 
     const name = `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || profile.username;
     const workbook = new ExcelJS.Workbook();
-    buildSheet(workbook.addWorksheet('Salary Report'), entries, profile.mileage_rate ?? 2, `${name} — ${monthName} ${year}`, bonuses || []);
+    buildSheet(workbook.addWorksheet('Salary Report'), entries, profile, `${name} — ${monthName} ${year}`, bonuses || []);
     const buf = await workbook.xlsx.writeBuffer();
 
     const gmailUser = process.env.GMAIL_USER;

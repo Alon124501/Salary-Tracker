@@ -316,19 +316,32 @@ export default function AdminDashboard() {
     setEdits(prev => ({ ...prev, [userId]: { ...(prev[userId] || {}), [field]: value } }));
   }
 
+  const FLOAT_FIELDS = new Set([
+    'mileage_rate', 'insurance_rate', 'screening_rate', 'mixed_screening_rate',
+    'partial_rate', 'hourly_rate', 'global_salary',
+  ]);
+
   async function commitEdit(userId, field) {
     const value = edits[userId]?.[field];
     if (value === undefined) return;
     const user = users.find(u => u.id === userId);
     const original = user?.[field];
-    const parsed = field === 'mileage_rate' || field === 'uniform_sets'
-      ? (field === 'mileage_rate' ? parseFloat(value) : parseInt(value, 10))
+    const parsed = FLOAT_FIELDS.has(field) ? parseFloat(value)
+      : field === 'uniform_sets' ? parseInt(value, 10)
       : value;
     if (parsed === original || (isNaN(parsed) && original == null)) return;
     try {
       await api.patch(`/admin/users/${userId}`, { [field]: parsed });
       setUsers(prev => prev.map(u => u.id === userId ? { ...u, [field]: parsed } : u));
     } catch (err) { showToast(err?.response?.data?.error || 'Failed to save'); }
+  }
+
+  // ── Payment type (immediate commit, no blur event on a button) ────────
+  async function setPaymentType(userId, type) {
+    try {
+      await api.patch(`/admin/users/${userId}`, { payment_type: type });
+      setUsers(prev => prev.map(u => u.id === userId ? { ...u, payment_type: type } : u));
+    } catch (err) { showToast(err?.response?.data?.error || 'Failed to update payment type'); }
   }
 
   // ── Notifications ─────────────────────────────────────────────────────
@@ -847,36 +860,118 @@ export default function AdminDashboard() {
         <div className="px-4 space-y-3">
           <div className="bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3 text-xs text-amber-700 font-medium">
             <span className="material-symbols-outlined text-sm align-[-3px] mr-1">info</span>
-            The 240 ₪ daily minimum guarantee applies to all employees. Only the mileage rate varies per person.
+            The 240 ₪ daily minimum applies to Per Test employees only. Set each employee's payment type and rates below.
           </div>
 
-          {users.map(u => (
-            <div key={u.id} className="bg-white rounded-2xl shadow-sm border border-slate-100 p-4">
-              <div className="flex items-center justify-between gap-4">
-                <div>
-                  <p className="font-bold text-slate-900">
-                    {u.first_name || u.last_name
-                      ? `${u.first_name || ''} ${u.last_name || ''}`.trim()
-                      : u.username}
-                  </p>
-                  <p className="text-xs text-slate-400">{u.district || ''}</p>
+          {users.map(u => {
+            const paymentType = u.payment_type || 'per_test';
+            return (
+              <div key={u.id} className="bg-white rounded-2xl shadow-sm border border-slate-100 p-4 flex flex-col gap-4">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <p className="font-bold text-slate-900">
+                      {u.first_name || u.last_name
+                        ? `${u.first_name || ''} ${u.last_name || ''}`.trim()
+                        : u.username}
+                    </p>
+                    <p className="text-xs text-slate-400">{u.district || ''}</p>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-slate-400 font-medium whitespace-nowrap">₪ / km</span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.5"
+                      defaultValue={u.mileage_rate ?? 2}
+                      className="w-20 px-2 py-1.5 text-sm font-bold rounded-xl border border-slate-200 focus:border-brand-purple/50 focus:outline-none text-center"
+                      onChange={e => setEdit(u.id, 'mileage_rate', e.target.value)}
+                      onBlur={() => commitEdit(u.id, 'mileage_rate')}
+                    />
+                  </div>
                 </div>
 
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-slate-400 font-medium whitespace-nowrap">₪ / km</span>
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.5"
-                    defaultValue={u.mileage_rate ?? 2}
-                    className="w-20 px-2 py-1.5 text-sm font-bold rounded-xl border border-slate-200 focus:border-brand-purple/50 focus:outline-none text-center"
-                    onChange={e => setEdit(u.id, 'mileage_rate', e.target.value)}
-                    onBlur={() => commitEdit(u.id, 'mileage_rate')}
-                  />
+                {/* Payment type selector */}
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { value: 'per_test', label: 'Per Test', icon: 'biotech' },
+                    { value: 'per_hour', label: 'Per Hour', icon: 'schedule' },
+                    { value: 'global',   label: 'Global',   icon: 'public'   },
+                  ].map(({ value, label, icon }) => (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => setPaymentType(u.id, value)}
+                      className={`flex flex-col items-center gap-1 py-2.5 rounded-xl border-2 transition-all duration-200 ${
+                        paymentType === value
+                          ? 'border-brand-purple bg-purple-50 text-brand-purple'
+                          : 'border-slate-100 text-slate-400 hover:border-slate-300 hover:text-slate-600'
+                      }`}
+                    >
+                      <span className="material-symbols-outlined text-lg" style={paymentType === value ? { fontVariationSettings: "'FILL' 1" } : {}}>{icon}</span>
+                      <span className="text-[11px] font-bold">{label}</span>
+                    </button>
+                  ))}
                 </div>
+
+                {/* Rate inputs, conditional on payment type */}
+                {paymentType === 'per_test' && (
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    {[
+                      { field: 'insurance_rate',       label: 'Insurance',  defaultVal: 80 },
+                      { field: 'screening_rate',       label: 'Screening',  defaultVal: 105 },
+                      { field: 'mixed_screening_rate', label: 'Mixed',      defaultVal: 120 },
+                      { field: 'partial_rate',         label: 'Partial',    defaultVal: 50 },
+                    ].map(({ field, label, defaultVal }) => (
+                      <div key={field} className="flex flex-col gap-1">
+                        <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wide">{label}</span>
+                        <input
+                          type="number"
+                          min="0"
+                          step="1"
+                          defaultValue={u[field] ?? defaultVal}
+                          className="w-full px-2 py-1.5 text-sm font-bold rounded-xl border border-slate-200 focus:border-brand-purple/50 focus:outline-none text-center"
+                          onChange={e => setEdit(u.id, field, e.target.value)}
+                          onBlur={() => commitEdit(u.id, field)}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {paymentType === 'per_hour' && (
+                  <div className="flex flex-col gap-1 max-w-[140px]">
+                    <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wide">₪ / Hour</span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="1"
+                      defaultValue={u.hourly_rate ?? 90}
+                      className="w-full px-2 py-1.5 text-sm font-bold rounded-xl border border-slate-200 focus:border-brand-purple/50 focus:outline-none text-center"
+                      onChange={e => setEdit(u.id, 'hourly_rate', e.target.value)}
+                      onBlur={() => commitEdit(u.id, 'hourly_rate')}
+                    />
+                  </div>
+                )}
+
+                {paymentType === 'global' && (
+                  <div className="flex flex-col gap-1 max-w-[160px]">
+                    <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wide">Monthly Salary (₪)</span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="1"
+                      defaultValue={u.global_salary ?? ''}
+                      placeholder="0"
+                      className="w-full px-2 py-1.5 text-sm font-bold rounded-xl border border-slate-200 focus:border-brand-purple/50 focus:outline-none text-center"
+                      onChange={e => setEdit(u.id, 'global_salary', e.target.value)}
+                      onBlur={() => commitEdit(u.id, 'global_salary')}
+                    />
+                  </div>
+                )}
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
@@ -898,7 +993,7 @@ export default function AdminDashboard() {
             <div className="flex justify-center py-10">
               <span className="material-symbols-outlined text-3xl text-slate-300 animate-spin">progress_activity</span>
             </div>
-          ) : !reportSummary || !reportSummary.summaries.some(s => s.totals.days > 0) ? (
+          ) : !reportSummary || !reportSummary.summaries.some(s => s.totals.days > 0 || s.user.payment_type === 'global') ? (
             <div className="bg-white rounded-2xl border border-slate-100 py-12 flex flex-col items-center gap-2 text-slate-400">
               <span className="material-symbols-outlined text-4xl opacity-30">inbox</span>
               <p className="text-sm font-medium">No entries for this month</p>
@@ -908,7 +1003,7 @@ export default function AdminDashboard() {
               <div className="px-4 py-3 border-b border-slate-100">
                 <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">Employee Reports</p>
               </div>
-              {reportSummary.summaries.filter(s => s.totals.days > 0).map(s => {
+              {reportSummary.summaries.filter(s => s.totals.days > 0 || s.user.payment_type === 'global').map(s => {
                 const isDownloading = downloadingId === s.user.id;
                 const isApproving  = approvingId   === s.user.id;
                 const errMsg       = approveMsgs[s.user.id];

@@ -113,7 +113,7 @@ router.post('/login', asyncHandler(async (req, res) => {
 
 router.get('/me', auth, asyncHandler(async (req, res) => {
   const { data: user, error } = await supabase.from('profiles')
-    .select('username, gmail_user, payment_type, global_salary, first_name, last_name, profession, district, email, phone, vehicle_type_color, vehicle_number, shifts_per_week, address, is_admin')
+    .select('username, gmail_user, payment_type, global_salary, first_name, last_name, profession, district, email, phone, vehicle_type_color, vehicle_number, shifts_per_week, address, is_admin, mileage_rate, insurance_rate, screening_rate, mixed_screening_rate, partial_rate, hourly_rate')
     .eq('id', req.userId)
     .single();
   if (error || !user) return res.status(404).json({ error: 'User not found' });
@@ -149,17 +149,15 @@ router.patch('/profile', auth, upload.single('profession_document'), asyncHandle
   res.json({ success: true });
 }));
 
+// Payment type / rates are admin-only (set via PATCH /api/admin/users/:id) —
+// this endpoint deliberately does not accept them, even if sent, so an
+// employee can't self-assign their own pay rates via a direct API call.
 router.patch('/settings', auth, asyncHandler(async (req, res) => {
-  const { gmail_user, gmail_app_password, payment_type, global_salary } = req.body;
-  const valid = ['per_test', 'per_hour', 'global'];
-  const resolvedType   = valid.includes(payment_type) ? payment_type : null;
-  const resolvedSalary = (resolvedType === 'global' && global_salary != null) ? Number(global_salary) : null;
+  const { gmail_user, gmail_app_password } = req.body;
 
   const { error } = await supabase.from('profiles').update({
     gmail_user:          gmail_user          || null,
     gmail_app_password:  gmail_app_password  || null,
-    payment_type:        resolvedType,
-    global_salary:       resolvedSalary,
   }).eq('id', req.userId);
 
   if (error) return res.status(500).json({ error: error.message });
