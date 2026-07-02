@@ -3,15 +3,6 @@ import api from '../api.js';
 import { useFetch } from '../hooks/useFetch.js';
 import { useToast } from '../context/ToastContext.jsx';
 
-const EQUIPMENT_TYPES = ['bone_density', 'tonometer', 'echocardiogram', 'tanita', 'ge'];
-const EQUIPMENT_LABELS = {
-  bone_density:   'Bone Density',
-  tonometer:      'Tonometer',
-  echocardiogram: 'Echo',
-  tanita:         'Tanita',
-  ge:             'GE',
-};
-
 function activityColor(shiftsPerWeek) {
   const n = parseInt(shiftsPerWeek, 10);
   if (!n || n <= 2) return 'bg-red-100 text-red-700';
@@ -153,6 +144,12 @@ export default function AdminDashboard() {
   const [eqOrderModal, setEqOrderModal] = useState(null);
   const [completingOrderId, setCompletingOrderId] = useState(null);
 
+  // Device recap ("Equipment" directory tab) state
+  const { data: deviceCatalog = [], loading: deviceCatalogLoading, reload: loadDeviceCatalog } =
+    useFetch('/devices/catalog', { enabled: activeTab === 'equipment' });
+  const [devSubTab, setDevSubTab] = useState('grid');
+  const [newDeviceName, setNewDeviceName] = useState('');
+
   // Inline edit state for compensation tab
   const [edits, setEdits] = useState({});
 
@@ -223,6 +220,23 @@ export default function AdminDashboard() {
     } catch (err) { showToast(err?.response?.data?.error || 'Failed to delete item'); }
   }
 
+  // ── Device catalog actions ──────────────────────────────────────────────
+  async function addDeviceCatalogItem() {
+    if (!newDeviceName.trim()) return;
+    try {
+      await api.post('/devices/catalog', { name: newDeviceName.trim() });
+      setNewDeviceName('');
+      loadDeviceCatalog();
+    } catch (err) { showToast(err?.response?.data?.error || 'Failed to add device'); }
+  }
+
+  async function deleteDeviceCatalogItem(id) {
+    try {
+      await api.delete(`/devices/catalog/${id}`);
+      loadDeviceCatalog();
+    } catch (err) { showToast(err?.response?.data?.error || 'Failed to delete device'); }
+  }
+
   async function deleteEmployee(user) {
     setDeletingUser(true);
     try {
@@ -273,20 +287,20 @@ export default function AdminDashboard() {
     finally { setCompletingOrderId(null); }
   }
 
-  // ── Equipment toggle ───────────────────────────────────────────────────
-  async function toggleEquipment(userId, type, hasIt) {
+  // ── Device toggle ───────────────────────────────────────────────────────
+  async function toggleDevice(userId, device, hasIt) {
     try {
       if (hasIt) {
-        await api.delete(`/admin/users/${userId}/equipment/${type}`);
+        await api.delete(`/admin/users/${userId}/devices/${device.id}`);
       } else {
-        await api.post(`/admin/users/${userId}/equipment`, { equipment_type: type });
+        await api.post(`/admin/users/${userId}/devices`, { device_id: device.id });
       }
       setUsers(prev => prev.map(u => {
         if (u.id !== userId) return u;
-        const eq = hasIt ? u.equipment.filter(e => e !== type) : [...u.equipment, type];
-        return { ...u, equipment: eq };
+        const devices = hasIt ? u.devices.filter(d => d.id !== device.id) : [...u.devices, device];
+        return { ...u, devices };
       }));
-    } catch (err) { showToast(err?.response?.data?.error || 'Failed to update equipment'); }
+    } catch (err) { showToast(err?.response?.data?.error || 'Failed to update device'); }
   }
 
   // ── Echo certified toggle ──────────────────────────────────────────────
@@ -708,46 +722,123 @@ export default function AdminDashboard() {
 
       {/* ── Tab: Equipment ─────────────────────────────────────────────── */}
       {activeTab === 'equipment' && (
-        <div className="overflow-x-auto px-4">
-          <table className="min-w-full text-xs">
-            <thead>
-              <tr className="bg-slate-50 text-[10px] uppercase tracking-wide text-slate-500 font-semibold">
-                <th className="sticky left-0 z-10 bg-slate-50 text-left px-3 py-2.5 min-w-[140px]">Employee</th>
-                {EQUIPMENT_TYPES.map(t => (
-                  <th key={t} className="text-center px-3 py-2.5 min-w-[80px]">{EQUIPMENT_LABELS[t]}</th>
-                ))}
-                <th className="text-center px-3 py-2.5 min-w-[90px]">Echo Cert.</th>
-              </tr>
-            </thead>
-            <tbody>
-              {users.map((u, i) => {
-                const name = `${u.first_name || ''} ${u.last_name || ''}`.trim() || u.username;
-                const rowBg = i % 2 === 0 ? 'bg-white' : 'bg-slate-50/50';
-                return (
-                  <tr key={u.id} className={`${rowBg} border-b border-slate-100`}>
-                    <td className={`sticky left-0 z-10 ${rowBg} px-3 py-2.5 font-semibold text-slate-800 whitespace-nowrap`}>{name}</td>
-                    {EQUIPMENT_TYPES.map(type => {
-                      const has = u.equipment.includes(type);
-                      return (
-                        <td key={type} className="px-3 py-2.5 text-center">
-                          <button
-                            onClick={() => toggleEquipment(u.id, type, has)}
-                            className={`px-2 py-1 rounded-lg text-[11px] font-bold transition-all active:scale-95 ${has ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-600'}`}
-                          >{has ? 'Yes' : 'No'}</button>
-                        </td>
-                      );
-                    })}
-                    <td className="px-3 py-2.5 text-center">
-                      <button
-                        onClick={() => toggleEcho(u.id, u.echo_certified)}
-                        className={`px-2 py-1 rounded-lg text-[11px] font-bold transition-all active:scale-95 ${u.echo_certified ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-600'}`}
-                      >{u.echo_certified ? 'Yes' : 'No'}</button>
-                    </td>
+        <div className="px-4 space-y-4">
+          {/* Sub-tab toggle */}
+          <div className="flex gap-2">
+            {[{ id: 'grid', label: 'Grid', icon: 'grid_view' }, { id: 'catalog', label: 'Catalog', icon: 'list' }].map(st => (
+              <button
+                key={st.id}
+                onClick={() => setDevSubTab(st.id)}
+                className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold transition-all active:scale-95 ${
+                  devSubTab === st.id ? 'brand-gradient text-white' : 'bg-white border border-slate-200 text-slate-500'
+                }`}
+                style={devSubTab === st.id ? { boxShadow: '0 4px 14px rgba(139,53,217,0.25)' } : {}}
+              >
+                <span className="material-symbols-outlined text-base" style={{ fontVariationSettings: devSubTab === st.id ? "'FILL' 1" : "'FILL' 0" }}>{st.icon}</span>
+                {st.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Grid sub-tab */}
+          {devSubTab === 'grid' && (
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-xs">
+                <thead>
+                  <tr className="bg-slate-50 text-[10px] uppercase tracking-wide text-slate-500 font-semibold">
+                    <th className="sticky left-0 z-10 bg-slate-50 text-left px-3 py-2.5 min-w-[140px]">Employee</th>
+                    {deviceCatalog.map(d => (
+                      <th key={d.id} className="text-center px-3 py-2.5 min-w-[80px]">{d.name}</th>
+                    ))}
+                    <th className="text-center px-3 py-2.5 min-w-[90px]">Echo Cert.</th>
+                    <th className="text-center px-3 py-2.5 min-w-[110px]">Last Reported</th>
                   </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                </thead>
+                <tbody>
+                  {users.map((u, i) => {
+                    const name = `${u.first_name || ''} ${u.last_name || ''}`.trim() || u.username;
+                    const rowBg = i % 2 === 0 ? 'bg-white' : 'bg-slate-50/50';
+                    return (
+                      <tr key={u.id} className={`${rowBg} border-b border-slate-100`}>
+                        <td className={`sticky left-0 z-10 ${rowBg} px-3 py-2.5 font-semibold text-slate-800 whitespace-nowrap`}>{name}</td>
+                        {deviceCatalog.map(device => {
+                          const has = u.devices.some(d => d.id === device.id);
+                          return (
+                            <td key={device.id} className="px-3 py-2.5 text-center">
+                              <button
+                                onClick={() => toggleDevice(u.id, device, has)}
+                                className={`px-2 py-1 rounded-lg text-[11px] font-bold transition-all active:scale-95 ${has ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-600'}`}
+                              >{has ? 'Yes' : 'No'}</button>
+                            </td>
+                          );
+                        })}
+                        <td className="px-3 py-2.5 text-center">
+                          <button
+                            onClick={() => toggleEcho(u.id, u.echo_certified)}
+                            className={`px-2 py-1 rounded-lg text-[11px] font-bold transition-all active:scale-95 ${u.echo_certified ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-600'}`}
+                          >{u.echo_certified ? 'Yes' : 'No'}</button>
+                        </td>
+                        <td className="px-3 py-2.5 text-center text-slate-400" title="Date employee last submitted their own recap; admin edits above do not change this date">
+                          {u.last_reported
+                            ? new Date(u.last_reported).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+                            : 'Never'}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* Catalog sub-tab */}
+          {devSubTab === 'catalog' && (
+            <div>
+              <div className="flex gap-2 mb-4">
+                <input
+                  type="text"
+                  value={newDeviceName}
+                  onChange={e => setNewDeviceName(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && addDeviceCatalogItem()}
+                  placeholder="Device name..."
+                  className="flex-1 px-3 py-2.5 text-sm rounded-xl border border-slate-200 focus:border-brand-purple/50 focus:outline-none bg-white"
+                />
+                <button
+                  onClick={addDeviceCatalogItem}
+                  className="px-4 py-2.5 rounded-xl text-sm font-bold text-white brand-gradient active:scale-95 transition-all"
+                  style={{ boxShadow: '0 4px 14px rgba(139,53,217,0.25)' }}
+                >
+                  Add
+                </button>
+              </div>
+              {deviceCatalogLoading ? (
+                <div className="flex justify-center py-10">
+                  <span className="material-symbols-outlined text-3xl text-slate-300 animate-spin">progress_activity</span>
+                </div>
+              ) : deviceCatalog.length === 0 ? (
+                <div className="bg-white rounded-2xl border border-slate-100 py-10 flex flex-col items-center gap-2 text-slate-400"
+                  style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
+                  <span className="material-symbols-outlined text-3xl opacity-30">devices</span>
+                  <p className="text-sm">No devices in catalog yet</p>
+                </div>
+              ) : (
+                <div className="flex flex-col gap-2">
+                  {deviceCatalog.map(item => (
+                    <div key={item.id} className="bg-white rounded-2xl border border-slate-100 px-4 py-3.5 flex items-center justify-between"
+                      style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
+                      <p className="text-sm font-semibold text-slate-800">{item.name}</p>
+                      <button
+                        onClick={() => deleteDeviceCatalogItem(item.id)}
+                        className="w-8 h-8 flex items-center justify-center rounded-xl text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all"
+                      >
+                        <span className="material-symbols-outlined text-base">delete</span>
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 
@@ -1871,14 +1962,16 @@ export default function AdminDashboard() {
               <section>
                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-3">Equipment</p>
                 <div className="flex flex-wrap gap-2">
-                  {EQUIPMENT_TYPES.map(t => {
-                    const has = selectedUser.equipment.includes(t);
-                    return (
-                      <span key={t} className={`text-xs font-bold px-2.5 py-1 rounded-xl border ${has ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-slate-50 text-slate-400 border-slate-200'}`}>
-                        {EQUIPMENT_LABELS[t]}
-                      </span>
-                    );
-                  })}
+                  {selectedUser.devices.length === 0 && (
+                    <span className="text-xs font-bold px-2.5 py-1 rounded-xl border bg-slate-50 text-slate-400 border-slate-200">
+                      No devices reported
+                    </span>
+                  )}
+                  {selectedUser.devices.map(d => (
+                    <span key={d.id} className="text-xs font-bold px-2.5 py-1 rounded-xl border bg-emerald-50 text-emerald-700 border-emerald-200">
+                      {d.name}
+                    </span>
+                  ))}
                   <span className={`text-xs font-bold px-2.5 py-1 rounded-xl border ${selectedUser.echo_certified ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-slate-50 text-slate-400 border-slate-200'}`}>
                     Echo Certified
                   </span>

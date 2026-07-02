@@ -49,6 +49,7 @@ app.use('/api/portal',        require('./routes/portal'));
 app.use('/api/notifications', require('./routes/notifications'));
 app.use('/api/contacts',      require('./routes/contacts'));
 app.use('/api/equipment',     require('./routes/equipment'));
+app.use('/api/devices',       require('./routes/devices'));
 app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
 
 // ── Global error handler ───────────────────────────────────────────────────

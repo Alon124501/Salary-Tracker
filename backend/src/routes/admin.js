@@ -12,7 +12,6 @@ router.use(auth);
 router.use(adminAuth);
 
 const ACCOUNTING_EMAIL = 'davida@mpcheck.co.il';
-const EQUIPMENT_TYPES = ['bone_density', 'tonometer', 'echocardiogram', 'tanita', 'ge'];
 
 function calcDaily(e, mileageRate = 2) {
   const totalTests = (e.insurance_tests || 0) + (e.screening_tests || 0) +
@@ -184,17 +183,25 @@ function monthRange(month) {
 
 // GET /api/admin/users
 router.get('/users', asyncHandler(async (req, res) => {
-  const [{ data: profiles, error }, { data: equipment, error: eqErr }] = await Promise.all([
+  const [{ data: profiles, error }, { data: devices, error: devErr }, { data: reports, error: repErr }] = await Promise.all([
     supabase.rpc('get_all_profiles'),
-    supabase.from('user_equipment').select('user_id, equipment_type'),
+    supabase.from('user_devices').select('user_id, device_id, device_catalog(id, name)'),
+    supabase.from('equipment_reports').select('user_id, month, submitted_at'),
   ]);
   if (error)  return res.status(500).json({ error: error.message });
-  if (eqErr)  return res.status(500).json({ error: eqErr.message });
+  if (devErr) return res.status(500).json({ error: devErr.message });
+  if (repErr) return res.status(500).json({ error: repErr.message });
 
-  const eqByUser = {};
-  for (const eq of equipment || []) {
-    if (!eqByUser[eq.user_id]) eqByUser[eq.user_id] = [];
-    eqByUser[eq.user_id].push(eq.equipment_type);
+  const devicesByUser = {};
+  for (const d of devices || []) {
+    if (!devicesByUser[d.user_id]) devicesByUser[d.user_id] = [];
+    if (d.device_catalog) devicesByUser[d.user_id].push({ id: d.device_catalog.id, name: d.device_catalog.name });
+  }
+
+  const lastReportByUser = {};
+  for (const r of reports || []) {
+    const prev = lastReportByUser[r.user_id];
+    if (!prev || r.submitted_at > prev) lastReportByUser[r.user_id] = r.submitted_at;
   }
 
   // Generate signed URLs for profession documents (1-week expiry)
@@ -206,7 +213,12 @@ router.get('/users', asyncHandler(async (req, res) => {
         .createSignedUrl(p.profession_document_url, 604800);
       doc_url = data?.signedUrl || null;
     }
-    return { ...p, profession_document_signed_url: doc_url, equipment: eqByUser[p.id] || [] };
+    return {
+      ...p,
+      profession_document_signed_url: doc_url,
+      devices: devicesByUser[p.id] || [],
+      last_reported: lastReportByUser[p.id] || null,
+    };
   }));
 
   res.json(withUrls);
@@ -236,21 +248,20 @@ router.patch('/users/:id', asyncHandler(async (req, res) => {
   res.json(data);
 }));
 
-// POST /api/admin/users/:id/equipment
-router.post('/users/:id/equipment', asyncHandler(async (req, res) => {
-  const { equipment_type } = req.body;
-  if (!EQUIPMENT_TYPES.includes(equipment_type))
-    return res.status(400).json({ error: `Invalid equipment_type. Valid: ${EQUIPMENT_TYPES.join(', ')}` });
+// POST /api/admin/users/:id/devices — admin override, adds one device
+router.post('/users/:id/devices', asyncHandler(async (req, res) => {
+  const { device_id } = req.body;
+  if (!device_id) return res.status(400).json({ error: 'device_id is required' });
 
-  const { error } = await supabase.from('user_equipment').insert({ user_id: req.params.id, equipment_type });
+  const { error } = await supabase.from('user_devices').insert({ user_id: req.params.id, device_id });
   if (error) return res.status(500).json({ error: error.message });
   res.json({ success: true });
 }));
 
-// DELETE /api/admin/users/:id/equipment/:type
-router.delete('/users/:id/equipment/:type', asyncHandler(async (req, res) => {
-  const { error } = await supabase.from('user_equipment')
-    .delete().eq('user_id', req.params.id).eq('equipment_type', req.params.type);
+// DELETE /api/admin/users/:id/devices/:deviceId — admin override, removes one device
+router.delete('/users/:id/devices/:deviceId', asyncHandler(async (req, res) => {
+  const { error } = await supabase.from('user_devices')
+    .delete().eq('user_id', req.params.id).eq('device_id', req.params.deviceId);
   if (error) return res.status(500).json({ error: error.message });
   res.json({ success: true });
 }));

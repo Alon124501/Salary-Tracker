@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api.js';
+import DeviceRecapModal from '../components/DeviceRecapModal.jsx';
 
 function currentMonth() {
   const d = new Date();
@@ -24,6 +25,7 @@ export default function Dashboard() {
   const [summary, setSummary] = useState(null);
   const [notifications, setNotifications] = useState([]);
   const [bonuses, setBonuses] = useState([]);
+  const [showRecapModal, setShowRecapModal] = useState(false);
 
   useEffect(() => { loadData(); }, [month]);
 
@@ -66,6 +68,10 @@ export default function Dashboard() {
     const res = await fetch(`/api/report/download-zip?month=${month}`, {
       headers: { Authorization: `Bearer ${token}` },
     });
+    if (res.status === 409) {
+      setShowRecapModal(true);
+      return;
+    }
     if (!res.ok) return;
     const cd = res.headers.get('Content-Disposition');
     const match = cd && cd.match(/filename="([^"]+)"/);
@@ -76,6 +82,11 @@ export default function Dashboard() {
     a.download = match ? decodeURIComponent(match[1]) : `${month}.zip`;
     a.click();
     URL.revokeObjectURL(url);
+  }
+
+  function handleRecapSubmitted() {
+    setShowRecapModal(false);
+    downloadZip();
   }
 
   async function approveNotification(id) {
@@ -392,6 +403,8 @@ export default function Dashboard() {
       >
         <span className="material-symbols-outlined text-3xl">add</span>
       </button>
+
+      {showRecapModal && <DeviceRecapModal onSubmitted={handleRecapSubmitted} />}
 
     </main>
   );

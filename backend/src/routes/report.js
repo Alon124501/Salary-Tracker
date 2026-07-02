@@ -236,6 +236,13 @@ router.get('/download-zip', async (req, res) => {
   const { month } = req.query;
   if (!month) return res.status(400).json({ error: 'month param required (YYYY-MM)' });
 
+  const now = new Date();
+  const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const { data: report, error: reportErr } = await supabase.from('equipment_reports')
+    .select('id').eq('user_id', req.userId).eq('month', currentMonth).maybeSingle();
+  if (reportErr) return res.status(500).json({ error: reportErr.message });
+  if (!report) return res.status(409).json({ error: 'equipment_report_required' });
+
   const { data: user, error: userErr } = await supabase.from('profiles')
     .select('first_name, last_name, username, mileage_rate').eq('id', req.userId).single();
   if (userErr) return res.status(500).json({ error: userErr.message });
