@@ -4,7 +4,7 @@ const { z }   = require('zod');
 const supabase = require('../supabase');
 const auth     = require('../middleware/auth');
 const asyncHandler = require('../middleware/asyncHandler');
-const { calcDaily } = require('../lib/payCalc');
+const { calcDaily, foodAudit } = require('../lib/payCalc');
 
 const router = express.Router();
 router.use(auth);
@@ -97,6 +97,7 @@ router.get('/summary', asyncHandler(async (req, res) => {
   if (profile.payment_type === 'global') {
     totals.total += profile.global_salary || 0;
   }
+  totals.foodAudit = foodAudit(rows);
   res.json(totals);
 }));
 

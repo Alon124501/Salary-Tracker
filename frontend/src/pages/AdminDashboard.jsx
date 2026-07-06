@@ -1016,6 +1016,12 @@ export default function AdminDashboard() {
                       <div className="min-w-0">
                         <p className="font-bold text-slate-800 text-sm">{s.user.name}</p>
                         <p className="text-[11px] text-slate-400 mt-0.5">{s.totals.days} day{s.totals.days !== 1 ? 's' : ''} · ₪{s.totals.total.toLocaleString()}</p>
+                        {s.foodAudit?.overBy > 0 && (
+                          <p className="text-[11px] font-bold text-amber-600 mt-1 flex items-center gap-1">
+                            <span className="material-symbols-outlined text-sm">warning</span>
+                            Food: ₪{s.foodAudit.claimed.toLocaleString()} claimed / ₪{s.foodAudit.entitlement.toLocaleString()} allowed ({s.foodAudit.qualifyingDays} qualifying day{s.foodAudit.qualifyingDays !== 1 ? 's' : ''}) — over by ₪{s.foodAudit.overBy.toLocaleString()}
+                          </p>
+                        )}
                       </div>
                       <div className="flex items-center gap-2 flex-shrink-0 flex-wrap justify-end">
                         {/* Open Report */}

@@ -6,7 +6,7 @@ const supabase = require('../supabase');
 const auth = require('../middleware/auth');
 const adminAuth = require('../middleware/adminAuth');
 const asyncHandler = require('../middleware/asyncHandler');
-const { calcDaily } = require('../lib/payCalc');
+const { calcDaily, foodAudit } = require('../lib/payCalc');
 
 const router = express.Router();
 router.use(auth);
@@ -375,6 +375,7 @@ router.get('/reports', asyncHandler(async (req, res) => {
         payment_type: p.payment_type,
       },
       totals,
+      foodAudit: foodAudit(entries),
       approved: approvalMap[p.id] ? { at: approvalMap[p.id] } : null,
     };
   });
