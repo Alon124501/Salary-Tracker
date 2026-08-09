@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import axios from 'axios';
 import api from '../api.js';
 import { useFetch } from '../hooks/useFetch.js';
 import { useToast } from '../context/ToastContext.jsx';
@@ -103,6 +104,24 @@ export default function AdminDashboard() {
   const [editContact, setEditContact] = useState({ name: '', title: '', phone: '' });
   const [contactSaving, setContactSaving] = useState(false);
 
+  // Videos sub-tab
+  const { data: tutorialVideos = [], setData: setTutorialVideos, loading: tutorialsLoading } =
+    useFetch('/tutorials', { enabled: activeTab === 'faq' });
+  const [addingVideo, setAddingVideo] = useState(false);
+  const [newVideoTitle, setNewVideoTitle] = useState('');
+  const [newVideoDeviceId, setNewVideoDeviceId] = useState('');
+  const [newVideoDeviceOther, setNewVideoDeviceOther] = useState('');
+  const [newVideoDesc, setNewVideoDesc] = useState('');
+  const [newVideoSourceType, setNewVideoSourceType] = useState('upload');
+  const [newVideoFile, setNewVideoFile] = useState(null);
+  const [newVideoUrl, setNewVideoUrl] = useState('');
+  const [videoSaving, setVideoSaving] = useState(false);
+  const [editingVideoId, setEditingVideoId] = useState(null);
+  const [editVideoTitle, setEditVideoTitle] = useState('');
+  const [editVideoDeviceId, setEditVideoDeviceId] = useState('');
+  const [editVideoDeviceOther, setEditVideoDeviceOther] = useState('');
+  const [editVideoDesc, setEditVideoDesc] = useState('');
+
   // Reports state
   const [reportMonth, setReportMonth] = useState(nowMonth);
   const [reportSummary, setReportSummary] = useState(null);
@@ -146,7 +165,7 @@ export default function AdminDashboard() {
 
   // Device recap ("Equipment" directory tab) state
   const { data: deviceCatalog = [], loading: deviceCatalogLoading, reload: loadDeviceCatalog } =
-    useFetch('/devices/catalog', { enabled: activeTab === 'equipment' });
+    useFetch('/devices/catalog', { enabled: activeTab === 'equipment' || activeTab === 'faq' });
   const [devSubTab, setDevSubTab] = useState('grid');
   const [newDeviceName, setNewDeviceName] = useState('');
 
@@ -530,6 +549,79 @@ export default function AdminDashboard() {
         items: reordered.map(({ id: xid, sort_order }) => ({ id: xid, sort_order })),
       });
     } catch { setAppCreds(appCreds); }
+  }
+
+  // ── Tutorial videos management ──────────────────────────────────────────
+  async function saveVideo() {
+    if (!newVideoTitle.trim()) return;
+    if (newVideoSourceType === 'upload' && !newVideoFile) return;
+    if (newVideoSourceType === 'link' && !newVideoUrl.trim()) return;
+    setVideoSaving(true);
+    try {
+      let storage_path = null;
+      if (newVideoSourceType === 'upload') {
+        const { data: signed } = await api.post('/tutorials/upload-url', { filename: newVideoFile.name });
+        await axios.put(signed.uploadUrl, newVideoFile, {
+          headers: { 'Content-Type': newVideoFile.type || 'application/octet-stream' },
+        });
+        storage_path = signed.storagePath;
+      }
+      const isOther = newVideoDeviceId === '__other__';
+      const { data } = await api.post('/tutorials', {
+        title: newVideoTitle.trim(),
+        device_id: (!isOther && newVideoDeviceId) ? newVideoDeviceId : null,
+        device_name_other: isOther ? (newVideoDeviceOther.trim() || null) : null,
+        description: newVideoDesc.trim() || null,
+        source_type: newVideoSourceType,
+        storage_path,
+        external_url: newVideoSourceType === 'link' ? newVideoUrl.trim() : null,
+        sort_order: tutorialVideos.length,
+      });
+      setTutorialVideos(prev => [...prev, data]);
+      setNewVideoTitle(''); setNewVideoDeviceId(''); setNewVideoDeviceOther('');
+      setNewVideoDesc(''); setNewVideoFile(null); setNewVideoUrl(''); setAddingVideo(false);
+    } catch (err) { showToast(err?.response?.data?.error || 'Failed to save video'); }
+    finally { setVideoSaving(false); }
+  }
+
+  async function updateVideo(id) {
+    if (!editVideoTitle.trim()) return;
+    setVideoSaving(true);
+    try {
+      const isOther = editVideoDeviceId === '__other__';
+      const { data } = await api.patch(`/tutorials/${id}`, {
+        title: editVideoTitle.trim(),
+        device_id: (!isOther && editVideoDeviceId) ? editVideoDeviceId : null,
+        device_name_other: isOther ? (editVideoDeviceOther.trim() || null) : null,
+        description: editVideoDesc.trim() || null,
+      });
+      setTutorialVideos(prev => prev.map(x => x.id === id ? data : x));
+      setEditingVideoId(null);
+    } catch (err) { showToast(err?.response?.data?.error || 'Failed to update video'); }
+    finally { setVideoSaving(false); }
+  }
+
+  async function deleteVideo(id) {
+    const backup = tutorialVideos;
+    setTutorialVideos(prev => prev.filter(x => x.id !== id));
+    try { await api.delete(`/tutorials/${id}`); }
+    catch { setTutorialVideos(backup); }
+  }
+
+  async function moveVideo(id, direction) {
+    const idx = tutorialVideos.findIndex(x => x.id === id);
+    if (direction === 'up' && idx === 0) return;
+    if (direction === 'down' && idx === tutorialVideos.length - 1) return;
+    const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
+    const newItems = [...tutorialVideos];
+    [newItems[idx], newItems[swapIdx]] = [newItems[swapIdx], newItems[idx]];
+    const reordered = newItems.map((item, i) => ({ ...item, sort_order: i }));
+    setTutorialVideos(reordered);
+    try {
+      await api.post('/tutorials/reorder', {
+        items: reordered.map(({ id: xid, sort_order }) => ({ id: xid, sort_order })),
+      });
+    } catch { setTutorialVideos(tutorialVideos); }
   }
 
   // ── Contacts ──────────────────────────────────────────────────────────
@@ -1072,10 +1164,10 @@ export default function AdminDashboard() {
         <div className="px-4 space-y-4">
           {/* Sub-tab toggle */}
           <div className="flex gap-2">
-            {[{ id: 'faq', label: 'FAQ', icon: 'quiz' }, { id: 'apps', label: 'Apps', icon: 'apps' }, { id: 'contacts', label: 'Contacts', icon: 'call' }].map(st => {
+            {[{ id: 'faq', label: 'FAQ', icon: 'quiz' }, { id: 'apps', label: 'Apps', icon: 'apps' }, { id: 'contacts', label: 'Contacts', icon: 'call' }, { id: 'videos', label: 'Videos', icon: 'smart_display' }].map(st => {
               const active = portalSubTab === st.id;
               return (
-                <button key={st.id} onClick={() => { setPortalSubTab(st.id); setAddingFaq(false); setEditingFaqId(null); setAddingApp(false); setEditingAppId(null); setAddingContact(false); setEditingContactId(null); }}
+                <button key={st.id} onClick={() => { setPortalSubTab(st.id); setAddingFaq(false); setEditingFaqId(null); setAddingApp(false); setEditingAppId(null); setAddingContact(false); setEditingContactId(null); setAddingVideo(false); setEditingVideoId(null); }}
                   className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-2xl text-sm font-bold transition-all active:scale-95 ${active ? 'brand-gradient text-white' : 'bg-white text-slate-500 border border-slate-200'}`}
                   style={active ? { boxShadow: '0 4px 14px rgba(139,53,217,0.3)' } : {}}>
                   <span className="material-symbols-outlined text-base" style={{ fontVariationSettings: active ? "'FILL' 1" : "'FILL' 0" }}>{st.icon}</span>
@@ -1442,6 +1534,175 @@ export default function AdminDashboard() {
                     <button onClick={() => { setAddingContact(true); setEditingContactId(null); }}
                       className="w-full py-3 rounded-2xl text-sm font-bold text-brand-purple border-2 border-dashed border-brand-purple/30 hover:border-brand-purple/50 bg-white active:scale-95 transition-all flex items-center justify-center gap-2">
                       <span className="material-symbols-outlined text-base">add</span>Add Contact
+                    </button>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+
+          {/* Videos sub-tab */}
+          {portalSubTab === 'videos' && (
+            <div className="space-y-3">
+              {tutorialsLoading ? (
+                <div className="flex justify-center py-10"><span className="material-symbols-outlined text-3xl text-slate-300 animate-spin">progress_activity</span></div>
+              ) : (
+                <>
+                  {tutorialVideos.length === 0 && !addingVideo && (
+                    <div className="bg-white rounded-2xl border border-slate-100 py-10 flex flex-col items-center gap-2 text-slate-400">
+                      <span className="material-symbols-outlined text-4xl opacity-30">smart_display</span>
+                      <p className="text-sm font-medium">No videos yet</p>
+                    </div>
+                  )}
+                  {tutorialVideos.map((v, i) => {
+                    const isEditing = editingVideoId === v.id;
+                    const deviceLabel = v.device_name_other || deviceCatalog.find(d => d.id === v.device_id)?.name;
+                    return (
+                      <div key={v.id} className="bg-white rounded-2xl border border-slate-100 p-4 space-y-3">
+                        {isEditing ? (
+                          <>
+                            <Field label="Title" value={editVideoTitle} onChange={setEditVideoTitle} />
+                            <div>
+                              <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Device</label>
+                              <select
+                                value={editVideoDeviceId}
+                                onChange={e => setEditVideoDeviceId(e.target.value)}
+                                className="w-full px-3 py-2.5 text-sm rounded-xl border border-slate-200 focus:border-brand-purple/50 focus:outline-none bg-white"
+                              >
+                                <option value="">None</option>
+                                {deviceCatalog.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                                <option value="__other__">Other...</option>
+                              </select>
+                              {editVideoDeviceId === '__other__' && (
+                                <input
+                                  value={editVideoDeviceOther}
+                                  onChange={e => setEditVideoDeviceOther(e.target.value)}
+                                  placeholder="Device name"
+                                  className="mt-2 w-full px-3 py-2.5 text-sm rounded-xl border border-slate-200 focus:border-brand-purple/50 focus:outline-none bg-white"
+                                />
+                              )}
+                            </div>
+                            <div>
+                              <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Description</label>
+                              <textarea
+                                value={editVideoDesc}
+                                onChange={e => setEditVideoDesc(e.target.value)}
+                                rows={3}
+                                className="w-full px-3 py-2.5 text-sm rounded-xl border border-slate-200 focus:border-brand-purple/50 focus:outline-none bg-white resize-none"
+                              />
+                            </div>
+                            <div className="flex gap-2">
+                              <button onClick={() => updateVideo(v.id)} disabled={videoSaving || !editVideoTitle.trim()}
+                                className="flex-1 py-2 rounded-xl text-sm font-bold text-white brand-gradient active:scale-95 transition-all disabled:opacity-50">Save</button>
+                              <button onClick={() => setEditingVideoId(null)}
+                                className="flex-1 py-2 rounded-xl text-sm font-bold text-slate-600 bg-slate-100 active:scale-95 transition-all">Cancel</button>
+                            </div>
+                          </>
+                        ) : (
+                          <div className="flex items-start gap-3">
+                            <div className="flex flex-col gap-1 flex-shrink-0 pt-0.5">
+                              <button onClick={() => moveVideo(v.id, 'up')} disabled={i === 0}
+                                className="w-8 h-8 flex items-center justify-center rounded-lg bg-slate-50 text-slate-400 hover:bg-slate-100 active:scale-95 transition-all disabled:opacity-20">
+                                <span className="material-symbols-outlined text-base">arrow_upward</span>
+                              </button>
+                              <button onClick={() => moveVideo(v.id, 'down')} disabled={i === tutorialVideos.length - 1}
+                                className="w-8 h-8 flex items-center justify-center rounded-lg bg-slate-50 text-slate-400 hover:bg-slate-100 active:scale-95 transition-all disabled:opacity-20">
+                                <span className="material-symbols-outlined text-base">arrow_downward</span>
+                              </button>
+                            </div>
+                            <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center flex-shrink-0">
+                              <span className="material-symbols-outlined text-slate-400 text-lg">{v.source_type === 'upload' ? 'movie' : 'link'}</span>
+                            </div>
+                            <div className="flex-1 min-w-0 cursor-pointer" onClick={() => {
+                              setEditingVideoId(v.id);
+                              setEditVideoTitle(v.title);
+                              setEditVideoDeviceId(v.device_id || (v.device_name_other ? '__other__' : ''));
+                              setEditVideoDeviceOther(v.device_name_other || '');
+                              setEditVideoDesc(v.description || '');
+                            }}>
+                              <p className="text-sm font-bold text-slate-800">{v.title}</p>
+                              {deviceLabel && <p className="text-xs text-slate-400 mt-0.5">{deviceLabel}</p>}
+                              <p className="text-[10px] text-brand-purple mt-1 font-medium">Tap to edit</p>
+                            </div>
+                            <button onClick={() => deleteVideo(v.id)}
+                              className="flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-lg bg-red-50 text-red-400 hover:bg-red-100 active:scale-95 transition-all">
+                              <span className="material-symbols-outlined text-base">delete</span>
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                  {addingVideo ? (
+                    <div className="bg-white rounded-2xl border border-brand-purple/20 p-4 space-y-3">
+                      <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">New Video</p>
+                      <Field label="Title" value={newVideoTitle} onChange={setNewVideoTitle} />
+                      <div>
+                        <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Device</label>
+                        <select
+                          value={newVideoDeviceId}
+                          onChange={e => setNewVideoDeviceId(e.target.value)}
+                          className="w-full px-3 py-2.5 text-sm rounded-xl border border-slate-200 focus:border-brand-purple/50 focus:outline-none bg-white"
+                        >
+                          <option value="">None</option>
+                          {deviceCatalog.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                          <option value="__other__">Other...</option>
+                        </select>
+                        {newVideoDeviceId === '__other__' && (
+                          <input
+                            value={newVideoDeviceOther}
+                            onChange={e => setNewVideoDeviceOther(e.target.value)}
+                            placeholder="Device name"
+                            className="mt-2 w-full px-3 py-2.5 text-sm rounded-xl border border-slate-200 focus:border-brand-purple/50 focus:outline-none bg-white"
+                          />
+                        )}
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Description</label>
+                        <textarea
+                          value={newVideoDesc}
+                          onChange={e => setNewVideoDesc(e.target.value)}
+                          rows={3}
+                          className="w-full px-3 py-2.5 text-sm rounded-xl border border-slate-200 focus:border-brand-purple/50 focus:outline-none bg-white resize-none"
+                        />
+                      </div>
+                      {/* Upload vs Link toggle */}
+                      <div className="flex gap-2">
+                        {[['upload', 'Upload File'], ['link', 'Paste Link']].map(([mode, label]) => (
+                          <button key={mode} type="button"
+                            onClick={() => setNewVideoSourceType(mode)}
+                            className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all active:scale-95 ${
+                              newVideoSourceType === mode ? 'brand-gradient text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                            }`}
+                          >{label}</button>
+                        ))}
+                      </div>
+                      {newVideoSourceType === 'upload' ? (
+                        <label className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all ${newVideoFile ? 'border-brand-purple/40 bg-purple-50' : 'border-slate-200 hover:border-brand-purple/30'}`}>
+                          <span className="material-symbols-outlined text-slate-400 text-xl flex-shrink-0">movie</span>
+                          <span className="text-xs text-slate-500 flex-1">{newVideoFile ? newVideoFile.name : 'Choose video file (max 200MB)'}</span>
+                          <input type="file" accept="video/*" className="hidden" onChange={e => setNewVideoFile(e.target.files[0] || null)} />
+                        </label>
+                      ) : (
+                        <Field label="Video URL" value={newVideoUrl} onChange={setNewVideoUrl} placeholder="https://youtube.com/..." />
+                      )}
+                      <div className="flex gap-2">
+                        <button onClick={saveVideo}
+                          disabled={videoSaving || !newVideoTitle.trim() || (newVideoSourceType === 'upload' ? !newVideoFile : !newVideoUrl.trim()) || (newVideoFile && newVideoFile.size > 200 * 1024 * 1024)}
+                          className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white brand-gradient active:scale-95 transition-all disabled:opacity-50">
+                          {videoSaving ? 'Saving...' : 'Save'}
+                        </button>
+                        <button onClick={() => { setAddingVideo(false); setNewVideoTitle(''); setNewVideoDeviceId(''); setNewVideoDeviceOther(''); setNewVideoDesc(''); setNewVideoFile(null); setNewVideoUrl(''); }}
+                          className="flex-1 py-2.5 rounded-xl text-sm font-bold text-slate-600 bg-slate-100 active:scale-95 transition-all">Cancel</button>
+                      </div>
+                      {newVideoFile && newVideoFile.size > 200 * 1024 * 1024 && (
+                        <p className="text-xs font-semibold text-red-500">File exceeds 200MB limit</p>
+                      )}
+                    </div>
+                  ) : (
+                    <button onClick={() => { setAddingVideo(true); setEditingVideoId(null); }}
+                      className="w-full py-3 rounded-2xl text-sm font-bold text-brand-purple border-2 border-dashed border-brand-purple/30 hover:border-brand-purple/50 bg-white active:scale-95 transition-all flex items-center justify-center gap-2">
+                      <span className="material-symbols-outlined text-base">add</span>Add Video
                     </button>
                   )}
                 </>

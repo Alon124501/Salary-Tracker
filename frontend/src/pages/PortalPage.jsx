@@ -37,6 +37,16 @@ function renderAnswer(text) {
   });
 }
 
+function getYoutubeEmbed(url) {
+  const m = url?.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|shorts\/))([\w-]{11})/);
+  return m ? `https://www.youtube.com/embed/${m[1]}` : null;
+}
+
+function getVimeoEmbed(url) {
+  const m = url?.match(/vimeo\.com\/(\d+)/);
+  return m ? `https://player.vimeo.com/video/${m[1]}` : null;
+}
+
 function CopyButton({ value }) {
   const [copied, setCopied] = useState(false);
   function copy() {
@@ -75,6 +85,17 @@ export default function PortalPage() {
   const [eqSubmitting, setEqSubmitting] = useState(false);
   const [eqSuccess, setEqSuccess] = useState(false);
 
+  // Tutorial videos state
+  const { data: videos = [], loading: videosLoading } =
+    useFetch('/tutorials', { enabled: tab === 'videos' });
+  const [videoSearch, setVideoSearch] = useState('');
+  const [videoModal, setVideoModal] = useState(null);
+  const filteredVideos = videos.filter(v => {
+    const q = videoSearch.trim().toLowerCase();
+    if (!q) return true;
+    return v.title.toLowerCase().includes(q) || (v.device_name || '').toLowerCase().includes(q);
+  });
+
   async function submitOrder() {
     const items = eqCatalog
       .filter(item => (eqQty[item.id] || 0) > 0)
@@ -105,7 +126,7 @@ export default function PortalPage() {
 
         {/* Tab toggle */}
         <div className="flex gap-2 mb-6 flex-wrap">
-          {[{ id: 'apps', label: 'Apps', icon: 'apps' }, { id: 'faq', label: 'FAQ', icon: 'quiz' }, { id: 'contacts', label: 'Contacts', icon: 'call' }, { id: 'equipment', label: 'Equipment', icon: 'inventory' }].map(t => (
+          {[{ id: 'apps', label: 'Apps', icon: 'apps' }, { id: 'faq', label: 'FAQ', icon: 'quiz' }, { id: 'contacts', label: 'Contacts', icon: 'call' }, { id: 'equipment', label: 'Equipment', icon: 'inventory' }, { id: 'videos', label: 'Videos', icon: 'smart_display' }].map(t => (
             <button
               key={t.id}
               onClick={() => setTab(t.id)}
@@ -319,9 +340,104 @@ export default function PortalPage() {
                 )}
               </div>
             ))}
+
+            {/* ── Tutorial Videos ── */}
+            {tab === 'videos' && (
+              <div className="mb-8">
+                <h2 className="text-base font-extrabold text-slate-700 mb-3 px-1 flex items-center gap-2">
+                  <span className="material-symbols-outlined text-brand-purple text-lg" style={{ fontVariationSettings: "'FILL' 1" }}>smart_display</span>
+                  Tutorial Videos
+                </h2>
+
+                <div className="relative mb-4">
+                  <span className="material-symbols-outlined absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-300 text-lg">search</span>
+                  <input
+                    value={videoSearch}
+                    onChange={e => setVideoSearch(e.target.value)}
+                    placeholder="Search by title or device..."
+                    className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-700 placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-brand-purple/20"
+                  />
+                </div>
+
+                {videosLoading ? (
+                  <div className="flex justify-center py-10">
+                    <span className="material-symbols-outlined text-3xl text-slate-300 animate-spin">progress_activity</span>
+                  </div>
+                ) : filteredVideos.length === 0 ? (
+                  <div className="bg-white rounded-2xl border border-slate-100 py-8 flex flex-col items-center gap-2 text-slate-400"
+                    style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
+                    <span className="material-symbols-outlined text-3xl opacity-30">smart_display</span>
+                    <p className="text-sm">{videos.length === 0 ? 'No tutorial videos yet' : 'No matches'}</p>
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-3">
+                    {filteredVideos.map(v => (
+                      <button
+                        key={v.id}
+                        onClick={() => setVideoModal(v)}
+                        className="bg-white rounded-2xl border border-slate-100 px-4 py-3.5 flex items-center gap-3 text-left active:scale-[0.99] transition-all"
+                        style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}
+                      >
+                        <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center flex-shrink-0">
+                          <span className="material-symbols-outlined text-brand-purple text-lg" style={{ fontVariationSettings: "'FILL' 1" }}>play_circle</span>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-bold text-slate-800 text-sm truncate">{v.title}</p>
+                          {v.device_name && <p className="text-xs text-slate-400 mt-0.5">{v.device_name}</p>}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </>
         )}
       </div>
+
+      {videoModal && (
+        <div
+          className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50"
+          onClick={() => setVideoModal(null)}
+        >
+          <div
+            className="bg-white rounded-2xl max-w-lg w-full p-5 max-h-[90vh] overflow-y-auto"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-bold text-slate-800 text-sm flex-1">{videoModal.title}</h3>
+              <button onClick={() => setVideoModal(null)} className="w-7 h-7 flex items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100">
+                <span className="material-symbols-outlined text-lg">close</span>
+              </button>
+            </div>
+
+            {videoModal.source_type === 'upload' ? (
+              <video controls src={videoModal.video_signed_url} className="w-full rounded-xl bg-black" />
+            ) : (() => {
+              const embed = getYoutubeEmbed(videoModal.external_url) || getVimeoEmbed(videoModal.external_url);
+              return embed ? (
+                <div className="relative w-full rounded-xl overflow-hidden" style={{ paddingTop: '56.25%' }}>
+                  <iframe src={embed} className="absolute inset-0 w-full h-full" allowFullScreen title={videoModal.title} />
+                </div>
+              ) : (
+                <a
+                  href={videoModal.external_url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex items-center justify-center gap-1.5 text-sm font-bold text-white brand-gradient px-4 py-3 rounded-xl active:scale-95 transition-all"
+                >
+                  <span className="material-symbols-outlined text-base" style={{ fontVariationSettings: "'FILL' 1" }}>open_in_new</span>
+                  Open link
+                </a>
+              );
+            })()}
+
+            {videoModal.description && (
+              <p className="text-sm text-slate-500 mt-3 leading-relaxed">{videoModal.description}</p>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
