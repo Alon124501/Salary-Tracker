@@ -180,6 +180,8 @@ export default function EntryPage() {
   }
 
   const calc = calcDaily(form, profile);
+  const totalTests = form.insurance_tests + form.screening_tests + form.mixed_screening_tests + form.partial_tests;
+  const foodLocked = totalTests < 4;
 
   return (
     <div className="bg-[#F2F2F7] min-h-screen pb-56 lg:pb-24">
@@ -252,17 +254,21 @@ export default function EntryPage() {
                     <p className="text-[11px] text-slate-400">Meals and snacks</p>
                   </div>
                 </div>
-                <div className="flex items-center gap-1 bg-[#F2F2F7] px-3 py-2 rounded-lg">
+                <div className={`flex items-center gap-1 bg-[#F2F2F7] px-3 py-2 rounded-lg ${foodLocked ? 'opacity-40' : ''}`}>
                   <span className="text-slate-400 font-bold text-sm">₪</span>
                   <input
                     type="number" inputMode="decimal" min="0" step="0.01"
                     value={form.food_expense === 0 ? '' : form.food_expense}
                     onChange={e => set('food_expense', e.target.value)}
-                    className="w-16 bg-transparent border-none p-0 text-right font-bold text-slate-900 focus:ring-0"
+                    disabled={foodLocked}
+                    className="w-16 bg-transparent border-none p-0 text-right font-bold text-slate-900 focus:ring-0 disabled:cursor-not-allowed"
                     placeholder="0.00"
                   />
                 </div>
               </div>
+              {foodLocked && (
+                <p className="text-[10px] text-amber-600 font-semibold px-4 pb-2 -mt-1">Add 4+ tests to unlock food expense</p>
+              )}
               {/* Parking */}
               <div className="p-4 flex items-center justify-between border-b border-slate-50">
                 <div className="flex items-center gap-3">
@@ -407,18 +413,19 @@ export default function EntryPage() {
                     ))}
                   </div>
                 )}
-                <label className="flex items-center gap-3 cursor-pointer hover:bg-slate-50 rounded-xl transition-colors py-1">
+                <label className={`flex items-center gap-3 rounded-xl transition-colors py-1 ${foodLocked ? 'opacity-40 pointer-events-none' : 'cursor-pointer hover:bg-slate-50'}`}>
                   <div className="w-10 h-10 rounded-full bg-orange-100 flex items-center justify-center flex-shrink-0">
                     <span className="material-symbols-outlined text-orange-600" style={{ fontSize: 20 }}>add_a_photo</span>
                   </div>
                   <div>
                     <p className="text-[13px] font-bold text-slate-900">Add Food Receipt</p>
-                    <p className="text-[11px] text-slate-400">Tap to add photo(s)</p>
+                    <p className="text-[11px] text-slate-400">{foodLocked ? 'Add 4+ tests to unlock' : 'Tap to add photo(s)'}</p>
                   </div>
                   <input
                     type="file"
                     accept="image/*"
                     multiple
+                    disabled={foodLocked}
                     className="hidden"
                     onChange={e => {
                       const files = Array.from(e.target.files).map(file => ({

@@ -64,4 +64,4 @@ function calcDaily(e, profile = {}) {
            total: testsPay + km + office + expenses };
 }
 
-module.exports = { calcDaily, foodAudit, totalTestsFor };
+module.exports = { calcDaily, foodAudit, totalTestsFor, FOOD_BONUS_TEST_THRESHOLD };

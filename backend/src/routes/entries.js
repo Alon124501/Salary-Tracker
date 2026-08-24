@@ -4,7 +4,7 @@ const { z }   = require('zod');
 const supabase = require('../supabase');
 const auth     = require('../middleware/auth');
 const asyncHandler = require('../middleware/asyncHandler');
-const { calcDaily, foodAudit } = require('../lib/payCalc');
+const { calcDaily, foodAudit, totalTestsFor, FOOD_BONUS_TEST_THRESHOLD } = require('../lib/payCalc');
 
 const router = express.Router();
 router.use(auth);
@@ -44,6 +44,17 @@ async function getUserPayProfile(userId) {
     .select('payment_type, global_salary, mileage_rate, insurance_rate, screening_rate, mixed_screening_rate, partial_rate, hourly_rate')
     .eq('id', userId).single();
   return data || {};
+}
+
+// Only blocks INCREASES to food_expense on days with <4 tests; decreases and
+// unrelated field edits always pass through untouched.
+function enforceFoodGate(finalFields, previousFoodExpense) {
+  const qualifies = totalTestsFor(finalFields) >= FOOD_BONUS_TEST_THRESHOLD;
+  const isIncrease = (finalFields.food_expense || 0) > (previousFoodExpense || 0);
+  if (!qualifies && isIncrease) {
+    finalFields.food_expense = previousFoodExpense || 0;
+  }
+  return finalFields;
 }
 
 function monthRange(month) {
@@ -129,6 +140,10 @@ router.post('/', asyncHandler(async (req, res) => {
   const { date, ...fields } = parsed.data;
   if (!date) return res.status(400).json({ error: 'date is required' });
 
+  const { data: existing } = await supabase.from('entries')
+    .select('food_expense').eq('user_id', req.userId).eq('date', date).maybeSingle();
+  enforceFoodGate(fields, existing?.food_expense);
+
   const { data: entry, error } = await supabase.from('entries').upsert({
     user_id: req.userId,
     date,
@@ -173,9 +188,12 @@ router.post('/:id/food-receipt', upload.single('food_receipt'), asyncHandler(asy
   if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
 
   const { data: entry, error: fetchErr } = await supabase.from('entries')
-    .select('id, date, food_receipt_urls')
+    .select('id, date, food_receipt_urls, insurance_tests, screening_tests, mixed_screening_tests, partial_tests')
     .eq('id', req.params.id).eq('user_id', req.userId).single();
   if (fetchErr || !entry) return res.status(404).json({ error: 'Entry not found' });
+  if (totalTestsFor(entry) < FOOD_BONUS_TEST_THRESHOLD) {
+    return res.status(400).json({ error: 'Add at least 4 tests for this day before uploading a food receipt' });
+  }
 
   const ext = req.file.originalname.split('.').pop();
   const month = entry.date.slice(0, 7);
@@ -326,6 +344,7 @@ router.put('/:id', asyncHandler(async (req, res) => {
     food_expense:          fields.food_expense          ?? entry.food_expense,
     parking_expense:       fields.parking_expense       ?? entry.parking_expense,
   };
+  enforceFoodGate(updates, entry.food_expense);
 
   const { data: updated, error: updateErr } = await supabase.from('entries')
     .update(updates).eq('id', entry.id).select().single();
