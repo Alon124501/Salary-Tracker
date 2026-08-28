@@ -12,7 +12,7 @@ const router = express.Router();
 router.use(auth);
 router.use(adminAuth);
 
-const ACCOUNTING_EMAIL = 'davida@mpcheck.co.il';
+const ACCOUNTING_EMAIL = 'alonm@mpcheck.co.il';
 const PROFILE_SELECT = 'first_name, last_name, username, payment_type, global_salary, mileage_rate, insurance_rate, screening_rate, mixed_screening_rate, partial_rate, hourly_rate';
 
 function buildSheet(sheet, entries, profile = {}, title = '', bonuses = []) {
