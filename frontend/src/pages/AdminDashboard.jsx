@@ -338,6 +338,7 @@ export default function AdminDashboard() {
   const FLOAT_FIELDS = new Set([
     'mileage_rate', 'insurance_rate', 'screening_rate', 'mixed_screening_rate',
     'partial_rate', 'hourly_rate', 'global_salary',
+    'km_bonus_threshold', 'km_bonus_amount',
   ]);
 
   async function commitEdit(userId, field) {
@@ -361,6 +362,14 @@ export default function AdminDashboard() {
       await api.patch(`/admin/users/${userId}`, { payment_type: type });
       setUsers(prev => prev.map(u => u.id === userId ? { ...u, payment_type: type } : u));
     } catch (err) { showToast(err?.response?.data?.error || 'Failed to update payment type'); }
+  }
+
+  // ── KM bonus enabled toggle (immediate commit, no blur event on a switch) ──
+  async function toggleKmBonus(userId, current) {
+    try {
+      await api.patch(`/admin/users/${userId}`, { km_bonus_enabled: !current });
+      setUsers(prev => prev.map(u => u.id === userId ? { ...u, km_bonus_enabled: !current } : u));
+    } catch (err) { showToast(err?.response?.data?.error || 'Failed to update km bonus'); }
   }
 
   // ── Notifications ─────────────────────────────────────────────────────
@@ -1004,6 +1013,52 @@ export default function AdminDashboard() {
                       <span className="text-[11px] font-bold">{label}</span>
                     </button>
                   ))}
+                </div>
+
+                {/* KM bonus — per-employee threshold/amount, independent of payment type */}
+                <div className="flex items-center gap-3 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={() => toggleKmBonus(u.id, u.km_bonus_enabled ?? true)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold border-2 transition-all duration-200 ${
+                      (u.km_bonus_enabled ?? true)
+                        ? 'border-brand-purple bg-purple-50 text-brand-purple'
+                        : 'border-slate-100 text-slate-400 hover:border-slate-300 hover:text-slate-600'
+                    }`}
+                  >
+                    <span className="material-symbols-outlined text-sm">{(u.km_bonus_enabled ?? true) ? 'toggle_on' : 'toggle_off'}</span>
+                    KM Bonus {(u.km_bonus_enabled ?? true) ? 'On' : 'Off'}
+                  </button>
+
+                  {(u.km_bonus_enabled ?? true) && (
+                    <>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xs text-slate-400 font-medium whitespace-nowrap">at ≥</span>
+                        <input
+                          type="number"
+                          min="0"
+                          step="1"
+                          defaultValue={u.km_bonus_threshold ?? 100}
+                          className="w-16 px-2 py-1.5 text-sm font-bold rounded-xl border border-slate-200 focus:border-brand-purple/50 focus:outline-none text-center"
+                          onChange={e => setEdit(u.id, 'km_bonus_threshold', e.target.value)}
+                          onBlur={() => commitEdit(u.id, 'km_bonus_threshold')}
+                        />
+                        <span className="text-xs text-slate-400 font-medium whitespace-nowrap">km</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xs text-slate-400 font-medium whitespace-nowrap">+₪</span>
+                        <input
+                          type="number"
+                          min="0"
+                          step="1"
+                          defaultValue={u.km_bonus_amount ?? 100}
+                          className="w-16 px-2 py-1.5 text-sm font-bold rounded-xl border border-slate-200 focus:border-brand-purple/50 focus:outline-none text-center"
+                          onChange={e => setEdit(u.id, 'km_bonus_amount', e.target.value)}
+                          onBlur={() => commitEdit(u.id, 'km_bonus_amount')}
+                        />
+                      </div>
+                    </>
+                  )}
                 </div>
 
                 {/* Rate inputs, conditional on payment type */}

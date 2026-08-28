@@ -5,7 +5,11 @@ import api from '../api.js';
 function calcDaily(f, profile = {}) {
   const paymentType = profile.payment_type || 'per_test';
   const mileageRate = profile.mileage_rate ?? 2;
-  const km = f.kilometers * mileageRate + (f.kilometers >= 100 ? 100 : 0);
+  const kmBonusEnabled = profile.km_bonus_enabled ?? true;
+  const kmBonusThreshold = profile.km_bonus_threshold ?? 100;
+  const kmBonusAmount = profile.km_bonus_amount ?? 100;
+  const km = f.kilometers * mileageRate +
+    (kmBonusEnabled && f.kilometers >= kmBonusThreshold ? kmBonusAmount : 0);
   const expenses = f.food_expense + f.parking_expense;
 
   if (paymentType === 'per_hour') {

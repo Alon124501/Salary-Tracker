@@ -113,7 +113,7 @@ router.post('/login', asyncHandler(async (req, res) => {
 
 router.get('/me', auth, asyncHandler(async (req, res) => {
   const { data: user, error } = await supabase.from('profiles')
-    .select('username, payment_type, global_salary, first_name, last_name, profession, district, email, phone, vehicle_type_color, vehicle_number, shifts_per_week, address, is_admin, mileage_rate, insurance_rate, screening_rate, mixed_screening_rate, partial_rate, hourly_rate')
+    .select('username, payment_type, global_salary, first_name, last_name, profession, district, email, phone, vehicle_type_color, vehicle_number, shifts_per_week, address, is_admin, mileage_rate, insurance_rate, screening_rate, mixed_screening_rate, partial_rate, hourly_rate, km_bonus_enabled, km_bonus_threshold, km_bonus_amount')
     .eq('id', req.userId)
     .single();
   if (error || !user) return res.status(404).json({ error: 'User not found' });

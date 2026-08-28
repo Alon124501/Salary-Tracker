@@ -20,7 +20,11 @@ function foodAudit(entries) {
 function calcDaily(e, profile = {}) {
   const paymentType = profile.payment_type || 'per_test';
   const mileageRate = profile.mileage_rate ?? 2;
-  const km = (e.kilometers || 0) * mileageRate + ((e.kilometers || 0) >= 100 ? 100 : 0);
+  const kmBonusEnabled = profile.km_bonus_enabled ?? true;
+  const kmBonusThreshold = profile.km_bonus_threshold ?? 100;
+  const kmBonusAmount = profile.km_bonus_amount ?? 100;
+  const km = (e.kilometers || 0) * mileageRate +
+    (kmBonusEnabled && (e.kilometers || 0) >= kmBonusThreshold ? kmBonusAmount : 0);
   const expenses = (e.food_expense || 0) + (e.parking_expense || 0);
 
   if (paymentType === 'per_hour') {

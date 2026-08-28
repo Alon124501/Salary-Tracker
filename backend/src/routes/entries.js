@@ -41,7 +41,7 @@ const PutBodySchema = z.object({
 
 async function getUserPayProfile(userId) {
   const { data } = await supabase.from('profiles')
-    .select('payment_type, global_salary, mileage_rate, insurance_rate, screening_rate, mixed_screening_rate, partial_rate, hourly_rate')
+    .select('payment_type, global_salary, mileage_rate, insurance_rate, screening_rate, mixed_screening_rate, partial_rate, hourly_rate, km_bonus_enabled, km_bonus_threshold, km_bonus_amount')
     .eq('id', userId).single();
   return data || {};
 }

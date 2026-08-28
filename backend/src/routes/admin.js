@@ -13,7 +13,7 @@ router.use(auth);
 router.use(adminAuth);
 
 const ACCOUNTING_EMAIL = 'alonm@mpcheck.co.il';
-const PROFILE_SELECT = 'first_name, last_name, username, payment_type, global_salary, mileage_rate, insurance_rate, screening_rate, mixed_screening_rate, partial_rate, hourly_rate';
+const PROFILE_SELECT = 'first_name, last_name, username, payment_type, global_salary, mileage_rate, insurance_rate, screening_rate, mixed_screening_rate, partial_rate, hourly_rate, km_bonus_enabled, km_bonus_threshold, km_bonus_amount';
 
 function buildSheet(sheet, entries, profile = {}, title = '', bonuses = []) {
   const headerFill   = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4F46E5' } };
@@ -221,6 +221,7 @@ router.patch('/users/:id', asyncHandler(async (req, res) => {
     'clothing_size', 'uniform_sets', 'echo_certified', 'mileage_rate',
     'payment_type', 'global_salary',
     'insurance_rate', 'screening_rate', 'mixed_screening_rate', 'partial_rate', 'hourly_rate',
+    'km_bonus_enabled', 'km_bonus_threshold', 'km_bonus_amount',
   ];
   if (req.body.payment_type !== undefined && !PAYMENT_TYPES.includes(req.body.payment_type))
     return res.status(400).json({ error: `Invalid payment_type. Valid: ${PAYMENT_TYPES.join(', ')}` });
