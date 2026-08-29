@@ -33,7 +33,7 @@ const LoginSchema = z.object({
 router.post('/register', upload.single('profession_document'), asyncHandler(async (req, res) => {
   const parsed = RegisterSchema.safeParse(req.body);
   if (!parsed.success) {
-    return res.status(400).json({ error: parsed.error.errors[0].message });
+    return res.status(400).json({ error: parsed.error.issues[0].message });
   }
   const { username, password, first_name, last_name, profession, district,
           email, shifts_per_week, phone, vehicle_type_color, vehicle_number, address } = parsed.data;

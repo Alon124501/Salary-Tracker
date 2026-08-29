@@ -136,7 +136,7 @@ router.get('/backup', asyncHandler(async (req, res) => {
 // POST /api/entries  (upsert by date)
 router.post('/', asyncHandler(async (req, res) => {
   const parsed = EntryBodySchema.safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
   const { date, ...fields } = parsed.data;
   if (!date) return res.status(400).json({ error: 'date is required' });
 
@@ -331,7 +331,7 @@ router.put('/:id', asyncHandler(async (req, res) => {
   if (fetchErr || !entry) return res.status(404).json({ error: 'Entry not found' });
 
   const parsed = PutBodySchema.safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
 
   const { date: _date, ...fields } = parsed.data;
   const updates = {
