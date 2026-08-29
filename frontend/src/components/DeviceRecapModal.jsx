@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import api from '../api.js';
 
 export default function DeviceRecapModal({
@@ -12,6 +12,7 @@ export default function DeviceRecapModal({
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const submitLock = useRef(false);
 
   useEffect(() => {
     Promise.all([api.get('/devices/catalog'), api.get('/devices/mine')])
@@ -32,6 +33,8 @@ export default function DeviceRecapModal({
   }
 
   async function submit() {
+    if (submitLock.current) return;
+    submitLock.current = true;
     setSubmitting(true);
     setError('');
     try {
@@ -41,6 +44,7 @@ export default function DeviceRecapModal({
       setError(err.response?.data?.error || 'Failed to submit. Please try again.');
     } finally {
       setSubmitting(false);
+      submitLock.current = false;
     }
   }
 

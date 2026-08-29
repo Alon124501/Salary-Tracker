@@ -105,18 +105,27 @@ router.post('/report', auth, asyncHandler(async (req, res) => {
   const validIds = deviceIds.filter(id => catalogById.has(id));
 
   const { error: delErr } = await supabase.from('user_devices').delete().eq('user_id', req.userId);
-  if (delErr) return res.status(500).json({ error: delErr.message });
+  if (delErr) {
+    console.error('[devices/report] delete failed:', delErr);
+    return res.status(500).json({ error: delErr.message });
+  }
 
   if (validIds.length > 0) {
     const rows = validIds.map(device_id => ({ user_id: req.userId, device_id }));
     const { error: insErr } = await supabase.from('user_devices').insert(rows);
-    if (insErr) return res.status(500).json({ error: insErr.message });
+    if (insErr) {
+      console.error('[devices/report] insert failed:', insErr);
+      return res.status(500).json({ error: insErr.message });
+    }
   }
 
   const month = currentMonth();
   const { error: repErr } = await supabase.from('equipment_reports')
     .upsert({ user_id: req.userId, month, submitted_at: new Date().toISOString() }, { onConflict: 'user_id,month' });
-  if (repErr) return res.status(500).json({ error: repErr.message });
+  if (repErr) {
+    console.error('[devices/report] equipment_reports upsert failed:', repErr);
+    return res.status(500).json({ error: repErr.message });
+  }
 
   const name = `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || profile.username;
   const deviceNames = validIds.map(id => catalogById.get(id));
