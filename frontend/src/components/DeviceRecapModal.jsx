@@ -1,7 +1,12 @@
 import { useEffect, useState } from 'react';
 import api from '../api.js';
 
-export default function DeviceRecapModal({ onSubmitted }) {
+export default function DeviceRecapModal({
+  onSubmitted,
+  title = 'Monthly Equipment Recap',
+  subtitle = 'Please confirm which devices you currently have before downloading your report.',
+  submitLabel = 'Submit & Download',
+}) {
   const [catalog, setCatalog] = useState([]);
   const [selected, setSelected] = useState(new Set());
   const [loading, setLoading] = useState(true);
@@ -43,9 +48,9 @@ export default function DeviceRecapModal({ onSubmitted }) {
     <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
       <div className="bg-white rounded-3xl w-full max-w-md p-6 shadow-2xl flex flex-col gap-5">
         <div>
-          <h3 className="text-lg font-extrabold text-slate-900 font-headline">Monthly Equipment Recap</h3>
+          <h3 className="text-lg font-extrabold text-slate-900 font-headline">{title}</h3>
           <p className="text-sm text-slate-500 mt-1">
-            Please confirm which devices you currently have before downloading your report.
+            {subtitle}
           </p>
         </div>
 
@@ -89,7 +94,7 @@ export default function DeviceRecapModal({ onSubmitted }) {
           className="w-full flex items-center justify-center gap-1.5 text-sm font-semibold text-white brand-gradient px-4 py-3 rounded-full brand-shadow disabled:opacity-50"
         >
           <span className="material-symbols-outlined text-sm">{submitting ? 'hourglass_top' : 'check_circle'}</span>
-          {submitting ? 'Submitting…' : 'Submit & Download'}
+          {submitting ? 'Submitting…' : submitLabel}
         </button>
       </div>
     </div>

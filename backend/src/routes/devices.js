@@ -73,16 +73,19 @@ router.delete('/catalog/:id', auth, adminAuth, asyncHandler(async (req, res) => 
 // GET /api/devices/mine — authenticated employee
 router.get('/mine', auth, asyncHandler(async (req, res) => {
   const month = currentMonth();
-  const [{ data: devices, error: devErr }, { data: report, error: repErr }] = await Promise.all([
+  const [{ data: devices, error: devErr }, { data: report, error: repErr }, { data: anyReport, error: anyErr }] = await Promise.all([
     supabase.from('user_devices').select('device_id').eq('user_id', req.userId),
     supabase.from('equipment_reports').select('id').eq('user_id', req.userId).eq('month', month).maybeSingle(),
+    supabase.from('equipment_reports').select('id').eq('user_id', req.userId).limit(1).maybeSingle(),
   ]);
   if (devErr) return res.status(500).json({ error: devErr.message });
   if (repErr) return res.status(500).json({ error: repErr.message });
+  if (anyErr) return res.status(500).json({ error: anyErr.message });
 
   res.json({
     deviceIds: (devices || []).map(d => d.device_id),
     submittedThisMonth: !!report,
+    everSubmitted: !!anyReport,
   });
 }));
 

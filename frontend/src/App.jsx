@@ -1,6 +1,12 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { ToastProvider } from './context/ToastContext.jsx';
+import api from './api.js';
+import DeviceRecapModal from './components/DeviceRecapModal.jsx';
+
+// Cached for the life of the page load once an employee is confirmed clear,
+// so client-side navigation between routes doesn't re-check/flash on every AppLayout mount.
+let equipmentGateClear = false;
 
 function ScrollToTop() {
   const { pathname } = useLocation();
@@ -31,6 +37,40 @@ function AdminRoute({ children }) {
 }
 
 function AppLayout({ children }) {
+  const [checking, setChecking] = useState(!equipmentGateClear);
+  const [blocked, setBlocked] = useState(false);
+
+  useEffect(() => {
+    if (equipmentGateClear) return;
+    let cancelled = false;
+    Promise.all([api.get('/auth/me'), api.get('/devices/mine')])
+      .then(([meRes, mineRes]) => {
+        if (cancelled) return;
+        const clear = !!meRes.data.is_admin || !!mineRes.data.everSubmitted;
+        if (clear) {
+          equipmentGateClear = true;
+        } else {
+          setBlocked(true);
+        }
+      })
+      .catch(() => {}) // fail open — don't lock employees out on a transient network error
+      .finally(() => { if (!cancelled) setChecking(false); });
+    return () => { cancelled = true; };
+  }, []);
+
+  if (checking) return null;
+
+  if (blocked) {
+    return (
+      <DeviceRecapModal
+        title="Select Your Equipment"
+        subtitle="Please confirm which devices you currently have to continue."
+        submitLabel="Continue"
+        onSubmitted={() => { equipmentGateClear = true; setBlocked(false); }}
+      />
+    );
+  }
+
   return (
     <>
       <Navbar />
