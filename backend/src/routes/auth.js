@@ -20,7 +20,7 @@ const RegisterSchema = z.object({
   profession: z.string().max(100).optional(),
   district:   z.string().max(100).optional(),
   address:    z.string().max(200).optional(),
-  shifts_per_week: z.coerce.number().int().min(0).max(7).optional(),
+  shifts_per_week: z.string().max(20).optional(),
   vehicle_type_color: z.string().max(100).optional(),
   vehicle_number:     z.string().max(20).optional(),
 });
