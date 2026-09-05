@@ -1,5 +1,4 @@
 const express    = require('express');
-const multer     = require('multer');
 const crypto     = require('crypto');
 const nodemailer = require('nodemailer');
 const { z }      = require('zod');
@@ -9,44 +8,49 @@ const auth       = require('../middleware/auth');
 const asyncHandler = require('../middleware/asyncHandler');
 
 const router = express.Router();
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
 const RegisterSchema = z.object({
-  username: z.string().min(2).max(50).regex(/^\w+$/, 'username must contain only letters, numbers, or underscores'),
   password: z.string().min(6).max(100),
-  first_name: z.string().max(50).optional(),
-  last_name:  z.string().max(50).optional(),
-  email:      z.string().email().optional().or(z.literal('')),
+  first_name: z.string().min(1).max(50),
+  last_name:  z.string().min(1).max(50),
+  email:      z.string().email(),
   phone:      z.string().max(20).optional(),
-  profession: z.string().max(100).optional(),
-  district:   z.string().max(100).optional(),
   address:    z.string().max(200).optional(),
-  shifts_per_week: z.string().max(20).optional(),
+  shirt_size: z.string().max(20).optional(),
+  pants_size: z.string().max(20).optional(),
   vehicle_type_color: z.string().max(100).optional(),
   vehicle_number:     z.string().max(20).optional(),
 });
 
 const LoginSchema = z.object({
-  username: z.string().min(1),
+  email:    z.string().email(),
   password: z.string().min(1),
 });
 
-router.post('/register', upload.single('profession_document'), asyncHandler(async (req, res) => {
+async function generateUsername(firstName, lastName) {
+  const base = `${firstName}${lastName}`
+    .toLowerCase()
+    .normalize('NFKD').replace(new RegExp('[\\u0300-\\u036f]', 'g'), '')
+    .replace(/[^a-z0-9]/g, '') || 'user';
+  let candidate = base;
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const { data } = await supabase.from('profiles').select('id').eq('username', candidate).maybeSingle();
+    if (!data) return candidate;
+    candidate = `${base}${Math.floor(1000 + Math.random() * 9000)}`;
+  }
+  return `${base}${Date.now()}`;
+}
+
+router.post('/register', asyncHandler(async (req, res) => {
   const parsed = RegisterSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: parsed.error.issues[0].message });
   }
-  const { username, password, first_name, last_name, profession, district,
-          email, shifts_per_week, phone, vehicle_type_color, vehicle_number, address } = parsed.data;
+  const { password, first_name, last_name, email, phone,
+          address, shirt_size, pants_size, vehicle_type_color, vehicle_number } = parsed.data;
 
-  const { data: existing } = await supabase.from('profiles').select('id').eq('username', username).maybeSingle();
-  if (existing) {
-    return res.status(409).json({ error: 'Username already taken' });
-  }
-
-  const supabaseEmail = `${username}@salary-tracker.app`;
   const { data, error } = await supabase.auth.admin.createUser({
-    email: supabaseEmail,
+    email,
     password,
     email_confirm: true,
   });
@@ -54,36 +58,26 @@ router.post('/register', upload.single('profession_document'), asyncHandler(asyn
     return res.status(400).json({ error: error.message });
   }
 
-  let profession_document_url = null;
-  if (req.file) {
-    const ext = req.file.originalname.split('.').pop();
-    const filePath = `${data.user.id}/${Date.now()}.${ext}`;
-    const { error: uploadErr } = await supabase.storage
-      .from('profession-documents')
-      .upload(filePath, req.file.buffer, { contentType: req.file.mimetype });
-    if (!uploadErr) profession_document_url = filePath;
-  }
+  const username = await generateUsername(first_name, last_name);
 
   const { error: profileErr } = await supabase.from('profiles').insert({
     id: data.user.id,
     username,
-    first_name: first_name || null,
-    last_name:  last_name  || null,
-    profession: profession || null,
-    district:   district   || null,
-    email:      email      || null,
-    shifts_per_week: shifts_per_week || null,
+    first_name,
+    last_name,
+    email,
     phone:               phone               || null,
+    address:             address             || null,
+    shirt_size:          shirt_size          || null,
+    pants_size:          pants_size          || null,
     vehicle_type_color:  vehicle_type_color  || null,
     vehicle_number:      vehicle_number      || null,
-    address:             address             || null,
-    profession_document_url,
   });
   if (profileErr) {
     return res.status(500).json({ error: profileErr.message });
   }
 
-  const { data: session, error: signInErr } = await supabaseAuth.auth.signInWithPassword({ email: supabaseEmail, password });
+  const { data: session, error: signInErr } = await supabaseAuth.auth.signInWithPassword({ email, password });
   if (signInErr) {
     return res.status(500).json({ error: signInErr.message });
   }
@@ -94,56 +88,42 @@ router.post('/register', upload.single('profession_document'), asyncHandler(asyn
 router.post('/login', asyncHandler(async (req, res) => {
   const parsed = LoginSchema.safeParse(req.body);
   if (!parsed.success) {
-    return res.status(400).json({ error: 'Username and password are required' });
+    return res.status(400).json({ error: 'Email and password are required' });
   }
-  const { username, password } = parsed.data;
+  const { email, password } = parsed.data;
 
-  const { data: profile } = await supabase.from('profiles').select('id').eq('username', username).maybeSingle();
-  if (!profile) {
-    return res.status(401).json({ error: 'Invalid credentials' });
-  }
-
-  const email = `${username}@salary-tracker.app`;
   const { data, error } = await supabaseAuth.auth.signInWithPassword({ email, password });
   if (error) {
     return res.status(401).json({ error: 'Invalid credentials' });
   }
 
-  res.json({ token: data.session.access_token, username });
+  const { data: profile } = await supabase.from('profiles').select('username').eq('id', data.user.id).maybeSingle();
+
+  res.json({ token: data.session.access_token, username: profile?.username });
 }));
 
 router.get('/me', auth, asyncHandler(async (req, res) => {
   const { data: user, error } = await supabase.from('profiles')
-    .select('username, payment_type, global_salary, first_name, last_name, profession, district, email, phone, vehicle_type_color, vehicle_number, shifts_per_week, address, is_admin, mileage_rate, insurance_rate, screening_rate, mixed_screening_rate, partial_rate, hourly_rate, km_bonus_enabled, km_bonus_threshold, km_bonus_amount')
+    .select('username, payment_type, global_salary, first_name, last_name, profession, district, email, phone, vehicle_type_color, vehicle_number, shifts_per_week, shirt_size, pants_size, address, is_admin, mileage_rate, insurance_rate, screening_rate, mixed_screening_rate, partial_rate, hourly_rate, km_bonus_enabled, km_bonus_threshold, km_bonus_amount')
     .eq('id', req.userId)
     .single();
   if (error || !user) return res.status(404).json({ error: 'User not found' });
   res.json(user);
 }));
 
-router.patch('/profile', auth, upload.single('profession_document'), asyncHandler(async (req, res) => {
-  const { first_name, last_name, profession, district, email, vehicle_type_color, vehicle_number, shifts_per_week, address } = req.body;
+router.patch('/profile', auth, asyncHandler(async (req, res) => {
+  const { first_name, last_name, email, vehicle_type_color, vehicle_number, shirt_size, pants_size, address } = req.body;
 
   const updates = {
     first_name: first_name || null,
     last_name:  last_name  || null,
-    profession: profession || null,
-    district:   district   || null,
     email:      email      || null,
     vehicle_type_color:  vehicle_type_color  || null,
     vehicle_number:      vehicle_number      || null,
-    shifts_per_week:     shifts_per_week     || null,
+    shirt_size:          shirt_size          || null,
+    pants_size:          pants_size          || null,
     address:             address             || null,
   };
-
-  if (req.file) {
-    const ext = req.file.originalname.split('.').pop();
-    const filePath = `${req.userId}/${Date.now()}.${ext}`;
-    const { error: uploadErr } = await supabase.storage
-      .from('profession-documents')
-      .upload(filePath, req.file.buffer, { contentType: req.file.mimetype });
-    if (!uploadErr) updates.profession_document_url = filePath;
-  }
 
   const { error } = await supabase.from('profiles').update(updates).eq('id', req.userId);
   if (error) return res.status(500).json({ error: error.message });

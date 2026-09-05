@@ -621,11 +621,10 @@ export default function AdminDashboard() {
       email: user.email || '',
       phone: user.phone || '',
       address: user.address || '',
-      profession: user.profession || '',
-      district: user.district || '',
-      shifts_per_week: user.shifts_per_week || '',
       vehicle_type_color: user.vehicle_type_color || '',
       vehicle_number: user.vehicle_number || '',
+      shirt_size: user.shirt_size || '',
+      pants_size: user.pants_size || '',
       clothing_size: user.clothing_size || '',
       uniform_sets: user.uniform_sets ?? '',
       is_admin: user.is_admin ?? false,
@@ -718,7 +717,7 @@ export default function AdminDashboard() {
                     {u.is_admin && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full brand-gradient text-white">Admin</span>}
                   </div>
                   <p className="text-xs text-slate-400 mt-0.5 truncate">
-                    {[u.district, u.profession].filter(Boolean).join(' · ') || '—'}
+                    {u.email || '—'}
                   </p>
                 </div>
                 <span className="material-symbols-outlined text-slate-300 text-xl flex-shrink-0">chevron_right</span>
@@ -2045,9 +2044,8 @@ export default function AdminDashboard() {
               <section>
                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-3">Work</p>
                 <div className="space-y-3">
-                  <Field label="Profession" value={drawerEdits.profession} onChange={v => setDrawerEdits(p => ({...p, profession: v}))} />
-                  <Field label="District" value={drawerEdits.district} onChange={v => setDrawerEdits(p => ({...p, district: v}))} />
-                  <Field label="Shifts / Week" value={drawerEdits.shifts_per_week} onChange={v => setDrawerEdits(p => ({...p, shifts_per_week: v}))} />
+                  <Field label="Shirt Size" value={drawerEdits.shirt_size} onChange={v => setDrawerEdits(p => ({...p, shirt_size: v}))} placeholder="M" />
+                  <Field label="Pants Size" value={drawerEdits.pants_size} onChange={v => setDrawerEdits(p => ({...p, pants_size: v}))} placeholder="M" />
                   {selectedUser.profession_document_signed_url && (
                     <a href={selectedUser.profession_document_signed_url} target="_blank" rel="noopener noreferrer"
                       className="flex items-center gap-2 text-xs font-semibold text-brand-purple">

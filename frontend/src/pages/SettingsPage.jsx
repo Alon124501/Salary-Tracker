@@ -26,7 +26,7 @@ export default function SettingsPage() {
           </div>
           <div className="flex-1">
             <p className="text-sm font-bold text-slate-800">My Profile</p>
-            <p className="text-xs text-slate-400">Edit your name, profession &amp; district</p>
+            <p className="text-xs text-slate-400">Edit your name, contact info &amp; sizes</p>
           </div>
           <span className="material-symbols-outlined text-slate-400">chevron_right</span>
         </button>

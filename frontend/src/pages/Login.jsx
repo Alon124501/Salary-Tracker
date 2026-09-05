@@ -2,8 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api.js';
 
-const PROFESSIONS = ['Doctor', 'Nurse', 'Paramedic', 'Nursing Student', 'Doctor Student', 'Medic', 'Phlebotomist'];
-const DISTRICTS = ['גוש דן', 'השפלה', 'השרון', 'צפון', 'באר שבע', 'ערבה'];
+const SIZES = ['S', 'M', 'L', 'XL', 'XXL'];
 
 const COUNTRY_CODES = [
   { label: '🇮🇱 +972', value: '+972' },
@@ -86,7 +85,6 @@ export default function Login() {
   const navigate = useNavigate();
   const [mode, setMode] = useState('login');
   const [step, setStep] = useState(1);
-  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -94,10 +92,8 @@ export default function Login() {
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
-  const [profession, setProfession] = useState('');
-  const [district, setDistrict] = useState('');
-  const [shiftsPerWeek, setShiftsPerWeek] = useState('');
-  const [professionDoc, setProfessionDoc] = useState(null);
+  const [shirtSize, setShirtSize] = useState('');
+  const [pantsSize, setPantsSize] = useState('');
   const [vehicleTypeColor, setVehicleTypeColor] = useState('');
   const [vehicleNumber, setVehicleNumber] = useState('');
   const [phoneCountry, setPhoneCountry] = useState('+972');
@@ -115,7 +111,6 @@ export default function Login() {
   function handleNext() {
     setError('');
     if (step === 1) {
-      if (!username) return setError('Username is required');
       if (!email) return setError('Email is required');
       if (password.length < 6) return setError('Password must be at least 6 characters');
       if (password !== confirm) return setError('Passwords do not match');
@@ -138,25 +133,20 @@ export default function Login() {
     try {
       let data;
       if (mode === 'register') {
-        const formData = new FormData();
-        formData.append('username', username);
-        formData.append('password', password);
-        formData.append('first_name', firstName);
-        formData.append('last_name', lastName);
-        formData.append('email', email);
-        formData.append('profession', profession);
-        formData.append('district', district);
-        formData.append('shifts_per_week', shiftsPerWeek);
-        formData.append('phone', phoneCountry + phoneNumber);
-        formData.append('vehicle_type_color', vehicleTypeColor);
-        formData.append('vehicle_number', vehicleNumber);
-        formData.append('address', address);
-        if (professionDoc) formData.append('profession_document', professionDoc);
-        ({ data } = await api.post('/auth/register', formData, {
-          headers: { 'Content-Type': 'multipart/form-data' },
+        ({ data } = await api.post('/auth/register', {
+          password,
+          first_name: firstName,
+          last_name: lastName,
+          email,
+          phone: phoneCountry + phoneNumber,
+          address,
+          shirt_size: shirtSize,
+          pants_size: pantsSize,
+          vehicle_type_color: vehicleTypeColor,
+          vehicle_number: vehicleNumber,
         }));
       } else {
-        ({ data } = await api.post('/auth/login', { username, password }));
+        ({ data } = await api.post('/auth/login', { email, password }));
       }
       localStorage.setItem('token', data.token);
       localStorage.setItem('username', data.username);
@@ -179,10 +169,8 @@ export default function Login() {
     setFirstName('');
     setLastName('');
     setEmail('');
-    setProfession('');
-    setDistrict('');
-    setShiftsPerWeek('');
-    setProfessionDoc(null);
+    setShirtSize('');
+    setPantsSize('');
     setVehicleTypeColor('');
     setVehicleNumber('');
     setPhoneCountry('+972');
@@ -193,7 +181,7 @@ export default function Login() {
   const inputBase = "w-full px-5 py-4 bg-cupertino-grey border-none rounded-cupertino focus:ring-1 focus:ring-action-blue transition-all font-medium text-on-surface placeholder:text-cupertino-label/60";
   const selectBase = inputBase + " appearance-none cursor-pointer";
 
-  const stepTitle = step === 1 ? 'Account' : step === 2 ? 'Personal Info' : 'Work & Vehicle';
+  const stepTitle = step === 1 ? 'Account' : step === 2 ? 'Personal Info' : 'Vehicle & Sizes';
 
   return (
     <div className="bg-background font-body text-on-surface antialiased flex flex-col items-center justify-center p-6 min-h-dvh">
@@ -241,26 +229,16 @@ export default function Login() {
               </div>
             )}
 
-            {/* ── STEP 1 (or login): Username + Password ── */}
+            {/* ── STEP 1 (or login): Email + Password ── */}
             {(mode === 'login' || step === 1) && (
-              <input
-                className={inputBase}
-                placeholder="Username"
-                type="text"
-                value={username}
-                onChange={e => setUsername(e.target.value)}
-                required={mode === 'login'}
-                autoFocus
-              />
-            )}
-
-            {mode === 'register' && step === 1 && (
               <input
                 className={inputBase}
                 placeholder="Email Address"
                 type="email"
                 value={email}
                 onChange={e => setEmail(e.target.value)}
+                required
+                autoFocus
               />
             )}
 
@@ -272,7 +250,7 @@ export default function Login() {
                   type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={e => setPassword(e.target.value)}
-                  required={mode === 'login'}
+                  required
                 />
                 <button
                   type="button"
@@ -376,70 +354,41 @@ export default function Login() {
               </>
             )}
 
-            {/* ── STEP 3: Work & Vehicle ── */}
+            {/* ── STEP 3: Vehicle & Sizes ── */}
             {mode === 'register' && step === 3 && (
               <>
-                <div className="flex items-center gap-3">
-                  <div className="relative flex-1">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="relative">
                     <select
-                      className={selectBase + (profession ? '' : ' text-cupertino-label/60')}
-                      value={profession}
-                      onChange={e => setProfession(e.target.value)}
+                      className={selectBase + (shirtSize ? '' : ' text-cupertino-label/60')}
+                      value={shirtSize}
+                      onChange={e => setShirtSize(e.target.value)}
                       autoFocus
                     >
-                      <option value="">Select Profession</option>
-                      {PROFESSIONS.map(p => (
-                        <option key={p} value={p}>{p}</option>
+                      <option value="">Shirt Size</option>
+                      {SIZES.map(s => (
+                        <option key={s} value={s}>{s}</option>
                       ))}
                     </select>
                     <span className="material-symbols-outlined absolute right-4 top-1/2 -translate-y-1/2 text-cupertino-label pointer-events-none text-xl">
                       expand_more
                     </span>
                   </div>
-                  <label
-                    className={`flex-shrink-0 w-14 h-14 flex items-center justify-center rounded-cupertino cursor-pointer transition-all ${professionDoc ? 'bg-action-blue/10 text-action-blue' : 'bg-cupertino-grey text-cupertino-label hover:brightness-95'}`}
-                    title={professionDoc ? professionDoc.name : 'Upload profession document'}
-                  >
-                    <span className="material-symbols-outlined text-2xl">upload_file</span>
-                    <input
-                      type="file"
-                      className="hidden"
-                      accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
-                      onChange={e => setProfessionDoc(e.target.files[0] || null)}
-                    />
-                  </label>
-                </div>
-
-                <div className="relative">
-                  <select
-                    className={selectBase + ' text-center' + (district ? '' : ' text-cupertino-label/60')}
-                    value={district}
-                    onChange={e => setDistrict(e.target.value)}
-                  >
-                    <option value="">Select District</option>
-                    {DISTRICTS.map(d => (
-                      <option key={d} value={d}>{d}</option>
-                    ))}
-                  </select>
-                  <span className="material-symbols-outlined absolute right-4 top-1/2 -translate-y-1/2 text-cupertino-label pointer-events-none text-xl">
-                    expand_more
-                  </span>
-                </div>
-
-                <div className="relative">
-                  <select
-                    className={selectBase + (shiftsPerWeek ? '' : ' text-cupertino-label/60')}
-                    value={shiftsPerWeek}
-                    onChange={e => setShiftsPerWeek(e.target.value)}
-                  >
-                    <option value="">Shifts Per Week</option>
-                    <option value="1-2">1-2</option>
-                    <option value="3-4">3-4</option>
-                    <option value="5-6">5-6</option>
-                  </select>
-                  <span className="material-symbols-outlined absolute right-4 top-1/2 -translate-y-1/2 text-cupertino-label pointer-events-none text-xl">
-                    expand_more
-                  </span>
+                  <div className="relative">
+                    <select
+                      className={selectBase + (pantsSize ? '' : ' text-cupertino-label/60')}
+                      value={pantsSize}
+                      onChange={e => setPantsSize(e.target.value)}
+                    >
+                      <option value="">Pants Size</option>
+                      {SIZES.map(s => (
+                        <option key={s} value={s}>{s}</option>
+                      ))}
+                    </select>
+                    <span className="material-symbols-outlined absolute right-4 top-1/2 -translate-y-1/2 text-cupertino-label pointer-events-none text-xl">
+                      expand_more
+                    </span>
+                  </div>
                 </div>
 
                 <input

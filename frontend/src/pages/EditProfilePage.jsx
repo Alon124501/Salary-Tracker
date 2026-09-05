@@ -2,8 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api.js';
 
-const PROFESSIONS = ['Doctor', 'Nurse', 'Paramedic', 'Nursing Student', 'Doctor Student', 'Medic', 'Phlebotomist'];
-const DISTRICTS = ['גוש דן', 'השפלה', 'השרון', 'צפון', 'באר שבע', 'ערבה'];
+const SIZES = ['S', 'M', 'L', 'XL', 'XXL'];
 
 const inputBase = "w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-purple/30";
 const selectBase = inputBase + " appearance-none cursor-pointer bg-white";
@@ -13,13 +12,11 @@ export default function EditProfilePage() {
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
-  const [profession, setProfession] = useState('');
-  const [district, setDistrict] = useState('');
+  const [shirtSize, setShirtSize] = useState('');
+  const [pantsSize, setPantsSize] = useState('');
   const [vehicleTypeColor, setVehicleTypeColor] = useState('');
   const [vehicleNumber, setVehicleNumber] = useState('');
-  const [shiftsPerWeek, setShiftsPerWeek] = useState('');
   const [address, setAddress] = useState('');
-  const [newDoc, setNewDoc] = useState(null);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState('');
   const [loading, setLoading] = useState(true);
@@ -35,11 +32,10 @@ export default function EditProfilePage() {
       setFirstName(res.data.first_name || '');
       setLastName(res.data.last_name || '');
       setEmail(res.data.email || '');
-      setProfession(res.data.profession || '');
-      setDistrict(res.data.district || '');
+      setShirtSize(res.data.shirt_size || '');
+      setPantsSize(res.data.pants_size || '');
       setVehicleTypeColor(res.data.vehicle_type_color || '');
       setVehicleNumber(res.data.vehicle_number || '');
-      setShiftsPerWeek(res.data.shifts_per_week || '');
       setAddress(res.data.address || '');
     }).finally(() => setLoading(false));
   }, []);
@@ -49,22 +45,17 @@ export default function EditProfilePage() {
     setSaving(true);
     setMsg('');
     try {
-      const formData = new FormData();
-      formData.append('first_name', firstName);
-      formData.append('last_name', lastName);
-      formData.append('email', email);
-      formData.append('profession', profession);
-      formData.append('district', district);
-      formData.append('vehicle_type_color', vehicleTypeColor);
-      formData.append('vehicle_number', vehicleNumber);
-      formData.append('shifts_per_week', shiftsPerWeek);
-      formData.append('address', address);
-      if (newDoc) formData.append('profession_document', newDoc);
-      await api.patch('/auth/profile', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
+      await api.patch('/auth/profile', {
+        first_name: firstName,
+        last_name: lastName,
+        email,
+        vehicle_type_color: vehicleTypeColor,
+        vehicle_number: vehicleNumber,
+        shirt_size: shirtSize,
+        pants_size: pantsSize,
+        address,
       });
       setMsg('Profile updated successfully.');
-      setNewDoc(null);
     } catch (err) {
       setMsg('Error: ' + (err.response?.data?.error || err.message));
     } finally {
@@ -176,56 +167,38 @@ export default function EditProfilePage() {
               />
             </div>
 
-            <div>
-              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-widest mb-1">Profession</label>
-              <div className="relative">
-                <select
-                  className={selectBase}
-                  value={profession}
-                  onChange={e => setProfession(e.target.value)}
-                  required
-                >
-                  <option value="">Select Profession</option>
-                  {PROFESSIONS.map(p => (
-                    <option key={p} value={p}>{p}</option>
-                  ))}
-                </select>
-                <span className="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none text-lg">expand_more</span>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-widest mb-1">Shirt Size</label>
+                <div className="relative">
+                  <select
+                    className={selectBase}
+                    value={shirtSize}
+                    onChange={e => setShirtSize(e.target.value)}
+                  >
+                    <option value="">Select Size</option>
+                    {SIZES.map(s => (
+                      <option key={s} value={s}>{s}</option>
+                    ))}
+                  </select>
+                  <span className="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none text-lg">expand_more</span>
+                </div>
               </div>
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-widest mb-1">District</label>
-              <div className="relative">
-                <select
-                  className={selectBase}
-                  value={district}
-                  onChange={e => setDistrict(e.target.value)}
-                  required
-                >
-                  <option value="">Select District</option>
-                  {DISTRICTS.map(d => (
-                    <option key={d} value={d}>{d}</option>
-                  ))}
-                </select>
-                <span className="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none text-lg">expand_more</span>
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-widest mb-1">Shifts Per Week</label>
-              <div className="relative">
-                <select
-                  className={selectBase}
-                  value={shiftsPerWeek}
-                  onChange={e => setShiftsPerWeek(e.target.value)}
-                >
-                  <option value="">Select shifts per week</option>
-                  <option value="1-2">1–2 shifts</option>
-                  <option value="3-4">3–4 shifts</option>
-                  <option value="5-6">5–6 shifts</option>
-                </select>
-                <span className="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none text-lg">expand_more</span>
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-widest mb-1">Pants Size</label>
+                <div className="relative">
+                  <select
+                    className={selectBase}
+                    value={pantsSize}
+                    onChange={e => setPantsSize(e.target.value)}
+                  >
+                    <option value="">Select Size</option>
+                    {SIZES.map(s => (
+                      <option key={s} value={s}>{s}</option>
+                    ))}
+                  </select>
+                  <span className="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none text-lg">expand_more</span>
+                </div>
               </div>
             </div>
 
@@ -255,42 +228,6 @@ export default function EditProfilePage() {
               </div>
               <span className="material-symbols-outlined text-slate-300 ml-auto">chevron_right</span>
             </button>
-          </section>
-
-          <section className="bg-white rounded-2xl shadow-[0_2px_8px_rgba(0,0,0,0.04)] border border-slate-100 p-6 flex flex-col gap-4">
-            <div>
-              <h2 className="text-sm font-bold text-slate-700 mb-1">Profession Document</h2>
-              <p className="text-xs text-slate-400">Optional — upload a new document to replace the existing one.</p>
-            </div>
-
-            <label className={`flex items-center gap-3 p-4 rounded-xl border cursor-pointer transition-all ${newDoc ? 'border-brand-purple/40 bg-purple-50' : 'border-slate-100 hover:border-brand-purple/30 hover:bg-purple-50/50'}`}>
-              <div className="w-10 h-10 rounded-xl bg-purple-50 flex items-center justify-center flex-shrink-0">
-                <span className="material-symbols-outlined text-brand-purple" style={{ fontVariationSettings: "'FILL' 1" }}>upload_file</span>
-              </div>
-              <div className="text-left flex-1 min-w-0">
-                <p className="text-sm font-bold text-slate-800">
-                  {newDoc ? 'New document selected' : 'Upload Document'}
-                </p>
-                <p className="text-xs text-slate-400 truncate">
-                  {newDoc ? newDoc.name : 'PDF, JPG, PNG, DOC accepted'}
-                </p>
-              </div>
-              {newDoc && (
-                <button
-                  type="button"
-                  onClick={e => { e.preventDefault(); setNewDoc(null); }}
-                  className="text-slate-400 hover:text-slate-600 flex-shrink-0"
-                >
-                  <span className="material-symbols-outlined text-base">close</span>
-                </button>
-              )}
-              <input
-                type="file"
-                className="hidden"
-                accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
-                onChange={e => setNewDoc(e.target.files[0] || null)}
-              />
-            </label>
           </section>
 
           <section className="bg-white rounded-2xl shadow-[0_2px_8px_rgba(0,0,0,0.04)] border border-slate-100 p-6 flex flex-col gap-5">
