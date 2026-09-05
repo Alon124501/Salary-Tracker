@@ -619,6 +619,7 @@ export default function AdminDashboard() {
       first_name: user.first_name || '',
       last_name: user.last_name || '',
       email: user.email || '',
+      id_number: user.id_number || '',
       phone: user.phone || '',
       address: user.address || '',
       vehicle_type_color: user.vehicle_type_color || '',
@@ -2037,6 +2038,7 @@ export default function AdminDashboard() {
                     <Field label="Last Name" value={drawerEdits.last_name} onChange={v => setDrawerEdits(p => ({...p, last_name: v}))} />
                   </div>
                   <Field label="Email" value={drawerEdits.email} onChange={v => setDrawerEdits(p => ({...p, email: v}))} type="email" />
+                  <Field label="ID Number" value={drawerEdits.id_number} onChange={v => setDrawerEdits(p => ({...p, id_number: v}))} />
                   <Field label="Phone" value={drawerEdits.phone} onChange={v => setDrawerEdits(p => ({...p, phone: v}))} type="tel" />
                   <Field label="כתובת מגורים" value={drawerEdits.address} onChange={v => setDrawerEdits(p => ({...p, address: v}))} dir="rtl" placeholder="רחוב, עיר" />
                 </div>

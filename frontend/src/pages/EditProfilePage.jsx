@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api.js';
+import { isValidIsraeliId } from '../utils/israeliId.js';
 
 const SIZES = ['S', 'M', 'L', 'XL', 'XXL'];
 
@@ -11,6 +12,7 @@ export default function EditProfilePage() {
   const navigate = useNavigate();
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
+  const [idNumber, setIdNumber] = useState('');
   const [email, setEmail] = useState('');
   const [shirtSize, setShirtSize] = useState('');
   const [pantsSize, setPantsSize] = useState('');
@@ -31,6 +33,7 @@ export default function EditProfilePage() {
     api.get('/auth/me').then(res => {
       setFirstName(res.data.first_name || '');
       setLastName(res.data.last_name || '');
+      setIdNumber(res.data.id_number || '');
       setEmail(res.data.email || '');
       setShirtSize(res.data.shirt_size || '');
       setPantsSize(res.data.pants_size || '');
@@ -42,6 +45,10 @@ export default function EditProfilePage() {
 
   async function handleSubmit(e) {
     e.preventDefault();
+    if (!isValidIsraeliId(idNumber)) {
+      setMsg('Error: Invalid Israeli ID number');
+      return;
+    }
     setSaving(true);
     setMsg('');
     try {
@@ -49,6 +56,7 @@ export default function EditProfilePage() {
         first_name: firstName,
         last_name: lastName,
         email,
+        id_number: idNumber,
         vehicle_type_color: vehicleTypeColor,
         vehicle_number: vehicleNumber,
         shirt_size: shirtSize,
@@ -163,6 +171,20 @@ export default function EditProfilePage() {
                 value={email}
                 onChange={e => setEmail(e.target.value)}
                 placeholder="your@email.com"
+                required
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-widest mb-1">תעודת זהות</label>
+              <input
+                className={inputBase}
+                type="text"
+                inputMode="numeric"
+                value={idNumber}
+                onChange={e => setIdNumber(e.target.value.replace(/\D/g, '').slice(0, 9))}
+                placeholder="תעודת זהות"
+                dir="rtl"
                 required
               />
             </div>

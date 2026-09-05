@@ -72,7 +72,7 @@ router.get('/users', asyncHandler(async (req, res) => {
 // PATCH /api/admin/users/:id
 router.patch('/users/:id', asyncHandler(async (req, res) => {
   const allowed = [
-    'first_name', 'last_name', 'email', 'phone', 'address',
+    'first_name', 'last_name', 'email', 'id_number', 'phone', 'address',
     'vehicle_type_color', 'vehicle_number', 'shift_preference',
     'clothing_size', 'uniform_sets', 'echo_certified', 'shirt_size', 'pants_size',
   ];

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api.js';
+import { isValidIsraeliId } from '../utils/israeliId.js';
 
 const SIZES = ['S', 'M', 'L', 'XL', 'XXL'];
 
@@ -91,6 +92,7 @@ export default function Login() {
   const [showConfirm, setShowConfirm] = useState(false);
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
+  const [idNumber, setIdNumber] = useState('');
   const [email, setEmail] = useState('');
   const [shirtSize, setShirtSize] = useState('');
   const [pantsSize, setPantsSize] = useState('');
@@ -117,6 +119,7 @@ export default function Login() {
       setStep(2);
     } else if (step === 2) {
       if (!firstName || !lastName) return setError('Full name is required');
+      if (!isValidIsraeliId(idNumber)) return setError('Invalid Israeli ID number');
       if (phoneNumber.length !== 9) return setError('Phone number must be exactly 9 digits');
       setStep(3);
     }
@@ -138,6 +141,7 @@ export default function Login() {
           first_name: firstName,
           last_name: lastName,
           email,
+          id_number: idNumber,
           phone: phoneCountry + phoneNumber,
           address,
           shirt_size: shirtSize,
@@ -168,6 +172,7 @@ export default function Login() {
     setShowConfirm(false);
     setFirstName('');
     setLastName('');
+    setIdNumber('');
     setEmail('');
     setShirtSize('');
     setPantsSize('');
@@ -316,6 +321,16 @@ export default function Login() {
                     onChange={e => setLastName(e.target.value)}
                   />
                 </div>
+
+                <input
+                  className={inputBase}
+                  placeholder="תעודת זהות"
+                  type="text"
+                  inputMode="numeric"
+                  value={idNumber}
+                  onChange={e => setIdNumber(e.target.value.replace(/\D/g, '').slice(0, 9))}
+                  dir="rtl"
+                />
 
                 <div className="flex gap-2">
                   <div className="relative flex-shrink-0" style={{ width: '7.5rem' }}>

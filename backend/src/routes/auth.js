@@ -9,11 +9,25 @@ const asyncHandler = require('../middleware/asyncHandler');
 
 const router = express.Router();
 
+function isValidIsraeliId(id) {
+  const s = String(id || '').trim();
+  if (!/^\d{5,9}$/.test(s)) return false;
+  const padded = s.padStart(9, '0');
+  let sum = 0;
+  for (let i = 0; i < 9; i++) {
+    let d = Number(padded[i]) * ((i % 2) + 1);
+    if (d > 9) d -= 9;
+    sum += d;
+  }
+  return sum % 10 === 0;
+}
+
 const RegisterSchema = z.object({
   password: z.string().min(6).max(100),
   first_name: z.string().min(1).max(50),
   last_name:  z.string().min(1).max(50),
   email:      z.string().email(),
+  id_number:  z.string().refine(isValidIsraeliId, 'Invalid Israeli ID number'),
   phone:      z.string().max(20).optional(),
   address:    z.string().max(200).optional(),
   shirt_size: z.string().max(20).optional(),
@@ -46,8 +60,13 @@ router.post('/register', asyncHandler(async (req, res) => {
   if (!parsed.success) {
     return res.status(400).json({ error: parsed.error.issues[0].message });
   }
-  const { password, first_name, last_name, email, phone,
+  const { password, first_name, last_name, email, id_number, phone,
           address, shirt_size, pants_size, vehicle_type_color, vehicle_number } = parsed.data;
+
+  const { data: existingId } = await supabase.from('profiles').select('id').eq('id_number', id_number).maybeSingle();
+  if (existingId) {
+    return res.status(409).json({ error: 'This ID number is already registered' });
+  }
 
   const { data, error } = await supabase.auth.admin.createUser({
     email,
@@ -66,6 +85,7 @@ router.post('/register', asyncHandler(async (req, res) => {
     first_name,
     last_name,
     email,
+    id_number,
     phone:               phone               || null,
     address:             address             || null,
     shirt_size:          shirt_size          || null,
@@ -104,7 +124,7 @@ router.post('/login', asyncHandler(async (req, res) => {
 
 router.get('/me', auth, asyncHandler(async (req, res) => {
   const { data: user, error } = await supabase.from('profiles')
-    .select('username, payment_type, global_salary, first_name, last_name, profession, district, email, phone, vehicle_type_color, vehicle_number, shifts_per_week, shirt_size, pants_size, address, is_admin, mileage_rate, insurance_rate, screening_rate, mixed_screening_rate, partial_rate, hourly_rate, km_bonus_enabled, km_bonus_threshold, km_bonus_amount')
+    .select('username, payment_type, global_salary, first_name, last_name, profession, district, email, id_number, phone, vehicle_type_color, vehicle_number, shifts_per_week, shirt_size, pants_size, address, is_admin, mileage_rate, insurance_rate, screening_rate, mixed_screening_rate, partial_rate, hourly_rate, km_bonus_enabled, km_bonus_threshold, km_bonus_amount')
     .eq('id', req.userId)
     .single();
   if (error || !user) return res.status(404).json({ error: 'User not found' });
@@ -112,12 +132,17 @@ router.get('/me', auth, asyncHandler(async (req, res) => {
 }));
 
 router.patch('/profile', auth, asyncHandler(async (req, res) => {
-  const { first_name, last_name, email, vehicle_type_color, vehicle_number, shirt_size, pants_size, address } = req.body;
+  const { first_name, last_name, email, id_number, vehicle_type_color, vehicle_number, shirt_size, pants_size, address } = req.body;
+
+  if (id_number !== undefined && !isValidIsraeliId(id_number)) {
+    return res.status(400).json({ error: 'Invalid Israeli ID number' });
+  }
 
   const updates = {
     first_name: first_name || null,
     last_name:  last_name  || null,
     email:      email      || null,
+    id_number:  id_number  || null,
     vehicle_type_color:  vehicle_type_color  || null,
     vehicle_number:      vehicle_number      || null,
     shirt_size:          shirt_size          || null,
