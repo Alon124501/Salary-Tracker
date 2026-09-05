@@ -4,15 +4,11 @@ const supabase = require('../supabase');
 const auth = require('../middleware/auth');
 const adminAuth = require('../middleware/adminAuth');
 const asyncHandler = require('../middleware/asyncHandler');
+const { currentWeek } = require('../lib/equipmentWeek');
 
 const router = express.Router();
 
 const RECAP_EMAILS = ['alonm@mpcheck.co.il', 'davida@mpcheck.co.il'];
-
-function currentMonth() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-}
 
 async function sendRecapEmail(name, deviceNames) {
   const gmailUser = process.env.GMAIL_USER;
@@ -72,10 +68,10 @@ router.delete('/catalog/:id', auth, adminAuth, asyncHandler(async (req, res) => 
 
 // GET /api/devices/mine — authenticated employee
 router.get('/mine', auth, asyncHandler(async (req, res) => {
-  const month = currentMonth();
+  const week = currentWeek();
   const [{ data: devices, error: devErr }, { data: report, error: repErr }, { data: anyReport, error: anyErr }] = await Promise.all([
     supabase.from('user_devices').select('device_id').eq('user_id', req.userId),
-    supabase.from('equipment_reports').select('id').eq('user_id', req.userId).eq('month', month).maybeSingle(),
+    supabase.from('equipment_reports').select('id').eq('user_id', req.userId).eq('week', week).maybeSingle(),
     supabase.from('equipment_reports').select('id').eq('user_id', req.userId).limit(1).maybeSingle(),
   ]);
   if (devErr) return res.status(500).json({ error: devErr.message });
@@ -84,7 +80,7 @@ router.get('/mine', auth, asyncHandler(async (req, res) => {
 
   res.json({
     deviceIds: (devices || []).map(d => d.device_id),
-    submittedThisMonth: !!report,
+    submittedThisWeek: !!report,
     everSubmitted: !!anyReport,
   });
 }));
@@ -119,9 +115,9 @@ router.post('/report', auth, asyncHandler(async (req, res) => {
     }
   }
 
-  const month = currentMonth();
+  const week = currentWeek();
   const { error: repErr } = await supabase.from('equipment_reports')
-    .upsert({ user_id: req.userId, month, submitted_at: new Date().toISOString() }, { onConflict: 'user_id,month' });
+    .upsert({ user_id: req.userId, week, submitted_at: new Date().toISOString() }, { onConflict: 'user_id,week' });
   if (repErr) {
     console.error('[devices/report] equipment_reports upsert failed:', repErr);
     return res.status(500).json({ error: repErr.message });
@@ -131,7 +127,7 @@ router.post('/report', auth, asyncHandler(async (req, res) => {
   const deviceNames = validIds.map(id => catalogById.get(id));
   await sendRecapEmail(name, deviceNames);
 
-  res.json({ success: true, month });
+  res.json({ success: true, week });
 }));
 
 module.exports = router;

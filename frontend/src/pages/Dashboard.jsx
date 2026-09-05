@@ -24,7 +24,6 @@ export default function Dashboard() {
   const [entries, setEntries] = useState([]);
   const [summary, setSummary] = useState(null);
   const [notifications, setNotifications] = useState([]);
-  const [bonuses, setBonuses] = useState([]);
   const [showRecapModal, setShowRecapModal] = useState(false);
 
   useEffect(() => { loadData(); }, [month]);
@@ -35,14 +34,12 @@ export default function Dashboard() {
 
   async function loadData() {
     try {
-      const [entriesRes, summaryRes, bonusRes] = await Promise.all([
+      const [entriesRes, summaryRes] = await Promise.all([
         api.get(`/entries?month=${month}`),
         api.get(`/entries/summary?month=${month}`),
-        api.get(`/entries/bonuses?month=${month}`),
       ]);
       setEntries(entriesRes.data);
       setSummary(summaryRes.data);
-      setBonuses(bonusRes.data || []);
     } catch {}
   }
 
@@ -115,7 +112,6 @@ export default function Dashboard() {
   }
 
   const s = summary || {};
-  const bonusTotal = bonuses.reduce((sum, b) => sum + Number(b.amount), 0);
 
   return (
     <main className="w-full max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pb-32 lg:pb-24 pt-20 flex flex-col gap-8">
@@ -207,15 +203,15 @@ export default function Dashboard() {
         </h2>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
 
-          {/* Total hero card */}
+          {/* Total tests hero card */}
           <div className="col-span-2 lg:col-span-4 brand-gradient p-6 rounded-2xl text-white brand-shadow">
             <div className="flex justify-between items-start mb-5">
               <div>
-                <p className="text-xs font-semibold uppercase tracking-widest opacity-80 mb-2">Total Earnings</p>
-                <h3 className="text-5xl font-extrabold tracking-tight font-headline leading-none">{((s.total || 0) + bonusTotal).toFixed(0)} <span className="text-2xl font-medium opacity-80">₪</span></h3>
+                <p className="text-xs font-semibold uppercase tracking-widest opacity-80 mb-2">Total Tests</p>
+                <h3 className="text-5xl font-extrabold tracking-tight font-headline leading-none">{s.totalTests || 0}</h3>
               </div>
               <div className="bg-white/20 p-2.5 rounded-xl">
-                <span className="material-symbols-outlined text-white" style={{ fontVariationSettings: "'FILL' 1" }}>payments</span>
+                <span className="material-symbols-outlined text-white" style={{ fontVariationSettings: "'FILL' 1" }}>biotech</span>
               </div>
             </div>
             <div className="flex items-center gap-4 pt-4 border-t border-white/20">
@@ -238,7 +234,7 @@ export default function Dashboard() {
               <span className="material-symbols-outlined text-brand-purple text-lg" style={{ fontVariationSettings: "'FILL' 1" }}>directions_car</span>
             </div>
             <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">KM Travel</p>
-            <div className="text-2xl font-bold text-slate-900 font-headline">{(s.km || 0).toFixed(0)} <span className="text-sm font-normal text-slate-400">₪</span></div>
+            <div className="text-2xl font-bold text-slate-900 font-headline">{(s.kilometers || 0).toFixed(0)} <span className="text-sm font-normal text-slate-400">km</span></div>
           </div>
 
           {/* Expenses */}
@@ -256,7 +252,7 @@ export default function Dashboard() {
               <span className="material-symbols-outlined text-amber-500 text-lg" style={{ fontVariationSettings: "'FILL' 1" }}>corporate_fare</span>
             </div>
             <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">Office</p>
-            <div className="text-2xl font-bold text-slate-900 font-headline">{(s.office || 0).toFixed(0)} <span className="text-sm font-normal text-slate-400">₪</span></div>
+            <div className="text-2xl font-bold text-slate-900 font-headline">{(s.office_hours || 0).toFixed(0)} <span className="text-sm font-normal text-slate-400">hrs</span></div>
           </div>
 
           {/* Screening */}
@@ -265,7 +261,7 @@ export default function Dashboard() {
               <span className="material-symbols-outlined text-sky-500 text-lg" style={{ fontVariationSettings: "'FILL' 1" }}>medical_services</span>
             </div>
             <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">Screening</p>
-            <div className="text-2xl font-bold text-slate-900 font-headline">{((s.screening || 0) + (s.mixed || 0)).toFixed(0)} <span className="text-sm font-normal text-slate-400">₪</span></div>
+            <div className="text-2xl font-bold text-slate-900 font-headline">{(s.screening_tests || 0) + (s.mixed_screening_tests || 0)}</div>
           </div>
 
           {/* Insurance */}
@@ -274,19 +270,17 @@ export default function Dashboard() {
               <span className="material-symbols-outlined text-emerald-500 text-lg" style={{ fontVariationSettings: "'FILL' 1" }}>syringe</span>
             </div>
             <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">Insurance</p>
-            <div className="text-2xl font-bold text-slate-900 font-headline">{(s.insurance || 0).toFixed(0)} <span className="text-sm font-normal text-slate-400">₪</span></div>
+            <div className="text-2xl font-bold text-slate-900 font-headline">{s.insurance_tests || 0}</div>
           </div>
 
-          {/* Bonuses */}
-          {bonusTotal > 0 && (
-            <div className="bg-amber-50 p-4 rounded-2xl shadow-card border border-amber-200 hover:shadow-card-hover transition-shadow duration-200">
-              <div className="w-9 h-9 rounded-xl bg-amber-100 flex items-center justify-center mb-3">
-                <span className="material-symbols-outlined text-amber-500 text-lg" style={{ fontVariationSettings: "'FILL' 1" }}>payments</span>
-              </div>
-              <p className="text-[10px] font-bold uppercase tracking-widest text-amber-500 mb-1">Bonuses</p>
-              <div className="text-2xl font-bold text-amber-700 font-headline">{bonusTotal.toFixed(0)} <span className="text-sm font-normal text-amber-400">₪</span></div>
+          {/* Partial */}
+          <div className="bg-white p-4 rounded-2xl shadow-card border border-slate-100 hover:shadow-card-hover transition-shadow duration-200">
+            <div className="w-9 h-9 rounded-xl bg-fuchsia-50 flex items-center justify-center mb-3">
+              <span className="material-symbols-outlined text-fuchsia-500 text-lg" style={{ fontVariationSettings: "'FILL' 1" }}>science</span>
             </div>
-          )}
+            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">Partial</p>
+            <div className="text-2xl font-bold text-slate-900 font-headline">{s.partial_tests || 0}</div>
+          </div>
         </div>
       </section>
 
@@ -297,7 +291,7 @@ export default function Dashboard() {
           Daily Entries
         </h2>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-          {entries.length === 0 && bonuses.length === 0 ? (
+          {entries.length === 0 ? (
             <div className="col-span-2 flex flex-col items-center justify-center py-16 gap-3 text-slate-400">
               <span className="material-symbols-outlined text-5xl opacity-30">event_busy</span>
               <p className="text-sm font-medium">No entries for this month</p>
@@ -308,34 +302,7 @@ export default function Dashboard() {
                 Add your first entry
               </button>
             </div>
-          ) : [
-              ...entries.map(e => ({ type: 'entry', date: e.date, data: e })),
-              ...bonuses.map(b => ({ type: 'bonus', date: b.date, data: b })),
-            ].sort((a, b) => b.date.localeCompare(a.date)).map(item => {
-            if (item.type === 'bonus') {
-              const b = item.data;
-              const [y, m, d] = b.date.split('-');
-              const monthName = new Date(y, m - 1).toLocaleString('en-US', { month: 'short' });
-              return (
-                <div key={`bonus-${b.id}`} className="flex items-center justify-between p-4 rounded-2xl bg-amber-50 border border-amber-200 shadow-card">
-                  <div className="flex items-center gap-3.5">
-                    <div className="w-11 h-11 rounded-xl bg-amber-400 flex flex-col items-center justify-center flex-shrink-0">
-                      <span className="text-[9px] font-bold uppercase leading-none text-white/80">{monthName}</span>
-                      <span className="text-lg font-extrabold leading-none text-white font-headline">{d}</span>
-                    </div>
-                    <div>
-                      <p className="font-bold text-amber-800 text-sm flex items-center gap-1.5">
-                        <span className="material-symbols-outlined text-sm" style={{ fontVariationSettings: "'FILL' 1" }}>payments</span>
-                        Bonus
-                      </p>
-                      {b.note && <p className="text-xs text-amber-600 mt-0.5">{b.note}</p>}
-                    </div>
-                  </div>
-                  <p className="font-extrabold text-amber-700 text-base font-headline">+{Number(b.amount).toLocaleString()} <span className="text-xs font-normal text-amber-500">₪</span></p>
-                </div>
-              );
-            }
-            const e = item.data;
+          ) : [...entries].sort((a, b) => b.date.localeCompare(a.date)).map(e => {
             const [y, m, d] = e.date.split('-');
             const monthName = new Date(y, m - 1).toLocaleString('en-US', { month: 'short' });
             const tests = totalTests(e);
@@ -372,9 +339,6 @@ export default function Dashboard() {
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <div className="text-right mr-1">
-                    <p className="font-extrabold text-slate-900 text-base font-headline">{e.calc.total.toFixed(0)} <span className="text-xs font-normal text-slate-400">₪</span></p>
-                  </div>
                   <button
                     title="Edit"
                     className="w-9 h-9 flex items-center justify-center text-slate-300 hover:text-brand-purple hover:bg-purple-50 rounded-xl transition-all"
@@ -404,7 +368,13 @@ export default function Dashboard() {
         <span className="material-symbols-outlined text-3xl">add</span>
       </button>
 
-      {showRecapModal && <DeviceRecapModal onSubmitted={handleRecapSubmitted} />}
+      {showRecapModal && (
+        <DeviceRecapModal
+          title="Weekly Equipment Recap"
+          subtitle="Please confirm which devices you currently have this week to continue."
+          onSubmitted={handleRecapSubmitted}
+        />
+      )}
 
     </main>
   );

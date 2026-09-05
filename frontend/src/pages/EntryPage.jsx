@@ -2,51 +2,6 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import api from '../api.js';
 
-function calcDaily(f, profile = {}) {
-  const paymentType = profile.payment_type || 'per_test';
-  const mileageRate = profile.mileage_rate ?? 2;
-  const kmBonusEnabled = profile.km_bonus_enabled ?? true;
-  const kmBonusThreshold = profile.km_bonus_threshold ?? 100;
-  const kmBonusAmount = profile.km_bonus_amount ?? 100;
-  const km = f.kilometers * mileageRate +
-    (kmBonusEnabled && f.kilometers >= kmBonusThreshold ? kmBonusAmount : 0);
-  const expenses = f.food_expense + f.parking_expense;
-
-  if (paymentType === 'per_hour') {
-    const hourlyRate = profile.hourly_rate ?? 90;
-    const office = f.office_hours * hourlyRate;
-    return {
-      insurance: 0, screening: 0, mixed: 0, partial: 0, minBonus: 0,
-      km, office, expenses, total: office + km + expenses,
-    };
-  }
-
-  if (paymentType === 'global') {
-    return {
-      insurance: 0, screening: 0, mixed: 0, partial: 0, minBonus: 0,
-      km: 0, office: 0, expenses, total: expenses,
-    };
-  }
-
-  const insRate = profile.insurance_rate ?? 80;
-  const scrRate = profile.screening_rate ?? 105;
-  const mixRate = profile.mixed_screening_rate ?? 120;
-  const parRate = profile.partial_rate ?? 50;
-
-  const totalTests = f.insurance_tests + f.screening_tests + f.mixed_screening_tests + f.partial_tests;
-  const insurance = f.insurance_tests * insRate;
-  const screening = f.screening_tests * scrRate;
-  const mixed = f.mixed_screening_tests * mixRate;
-  const partial = f.partial_tests * parRate;
-  const rawTestsPay = insurance + screening + mixed + partial;
-  const MIN_TESTS_PAY = 240;
-  const testsPay = totalTests > 0 ? Math.max(rawTestsPay, MIN_TESTS_PAY) : rawTestsPay;
-  const minBonus = testsPay - rawTestsPay;
-  const office = f.office_hours * 60;
-  return { insurance, screening, mixed, partial, minBonus, km, office, expenses,
-           total: testsPay + km + office + expenses };
-}
-
 function today() {
   return new Date().toISOString().slice(0, 10);
 }
@@ -69,13 +24,8 @@ export default function EntryPage() {
   const [viewingUrl, setViewingUrl] = useState(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [profile, setProfile] = useState({});
 
   useEffect(() => { if (date) loadExisting(date); }, [date]);
-
-  useEffect(() => {
-    api.get('/auth/me').then(r => setProfile(r.data)).catch(() => {});
-  }, []);
 
   async function loadExisting(d) {
     try {
@@ -183,7 +133,6 @@ export default function EntryPage() {
     }
   }
 
-  const calc = calcDaily(form, profile);
   const totalTests = form.insurance_tests + form.screening_tests + form.mixed_screening_tests + form.partial_tests;
   const foodLocked = totalTests < 4;
 
@@ -208,10 +157,10 @@ export default function EntryPage() {
           <div className="space-y-3">
             <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest px-1">Tests</h3>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-              <TestField label="Insurance" sub={`${profile.insurance_rate ?? 80} ₪ each`} value={form.insurance_tests} onChange={v => set('insurance_tests', v)} calc={calc.insurance} />
-              <TestField label="Screening" sub={`${profile.screening_rate ?? 105} ₪ each`} value={form.screening_tests} onChange={v => set('screening_tests', v)} calc={calc.screening} />
-              <TestField label="Mixed Screening" sub={`${profile.mixed_screening_rate ?? 120} ₪ each`} value={form.mixed_screening_tests} onChange={v => set('mixed_screening_tests', v)} calc={calc.mixed} />
-              <TestField label="Partial" sub={`${profile.partial_rate ?? 50} ₪ each`} value={form.partial_tests} onChange={v => set('partial_tests', v)} calc={calc.partial} />
+              <TestField label="Insurance" value={form.insurance_tests} onChange={v => set('insurance_tests', v)} />
+              <TestField label="Screening" value={form.screening_tests} onChange={v => set('screening_tests', v)} />
+              <TestField label="Mixed Screening" value={form.mixed_screening_tests} onChange={v => set('mixed_screening_tests', v)} />
+              <TestField label="Partial" value={form.partial_tests} onChange={v => set('partial_tests', v)} />
             </div>
           </div>
 
@@ -228,7 +177,6 @@ export default function EntryPage() {
                 className="w-full bg-[#F2F2F7] border-none rounded-xl p-3 text-2xl font-bold focus:ring-2 focus:ring-brand-purple transition-all text-slate-900"
                 placeholder="0"
               />
-              {calc.km > 0 && <p className="text-[11px] text-brand-purple font-bold mt-1">{calc.km.toFixed(0)} ₪</p>}
             </div>
             <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100">
               <label className="block text-xs font-bold text-slate-400 mb-2 uppercase tracking-wider">Office Hrs</label>
@@ -239,7 +187,6 @@ export default function EntryPage() {
                 className="w-full bg-[#F2F2F7] border-none rounded-xl p-3 text-2xl font-bold focus:ring-2 focus:ring-brand-purple transition-all text-slate-900"
                 placeholder="0"
               />
-              {calc.office > 0 && <p className="text-[11px] text-brand-purple font-bold mt-1">{calc.office.toFixed(0)} ₪</p>}
             </div>
           </div>
 
@@ -445,24 +392,25 @@ export default function EntryPage() {
             </div>
           </div>
 
-          {/* Live Total */}
+          {/* Tests Today */}
           <div className="brand-gradient p-5 rounded-2xl brand-shadow flex justify-between items-center">
             <div>
-              <span className="text-white/70 text-[10px] font-bold uppercase tracking-widest block mb-1">Live Total</span>
-              <h2 className="text-4xl font-extrabold text-white font-headline leading-none">{calc.total.toFixed(0)} <span className="text-xl font-medium opacity-80">₪</span></h2>
+              <span className="text-white/70 text-[10px] font-bold uppercase tracking-widest block mb-1">Tests Today</span>
+              <h2 className="text-4xl font-extrabold text-white font-headline leading-none">{totalTests}</h2>
             </div>
             <div className="flex flex-col items-end gap-2">
-              {calc.total > 0 && (
+              {totalTests > 0 && (
                 <span className="inline-flex items-center gap-1 bg-white/20 text-white px-2.5 py-1 rounded-lg text-[10px] font-bold">
-                  <span className="material-symbols-outlined" style={{ fontSize: 12 }}>trending_up</span>
-                  ESTIMATED
+                  <span className="material-symbols-outlined" style={{ fontSize: 12 }}>biotech</span>
+                  TESTS
                 </span>
               )}
               <p className="text-white/60 text-[10px] font-medium text-right">
                 {[
-                  calc.insurance > 0 && `Ins: ${calc.insurance}₪`,
-                  calc.screening > 0 && `Scr: ${calc.screening}₪`,
-                  calc.km > 0 && `KM: ${calc.km}₪`,
+                  form.insurance_tests > 0 && `Ins: ${form.insurance_tests}`,
+                  form.screening_tests > 0 && `Scr: ${form.screening_tests}`,
+                  form.mixed_screening_tests > 0 && `Mix: ${form.mixed_screening_tests}`,
+                  form.partial_tests > 0 && `Par: ${form.partial_tests}`,
                 ].filter(Boolean).join(' · ') || 'Fill in your data'}
               </p>
             </div>
@@ -627,18 +575,15 @@ function CalendarPicker({ value, onChange }) {
   );
 }
 
-function TestField({ label, sub, value, onChange, calc }) {
+function TestField({ label, value, onChange }) {
   const num = Number(value) || 0;
   return (
     <div className="bg-white rounded-2xl shadow-card border border-slate-100 flex flex-col overflow-hidden">
       <div className="px-3 pt-3 pb-2 text-center">
         <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">{label}</p>
-        <p className="text-[10px] text-slate-300 mt-0.5">{sub}</p>
       </div>
       <div className="text-center py-2">
         <span className="text-3xl font-extrabold text-slate-900 font-headline tabular-nums">{num}</span>
-        {calc > 0 && <p className="text-[11px] text-brand-purple font-bold mt-0.5">{calc.toFixed(0)} ₪</p>}
-        {calc === 0 && <p className="text-[11px] text-transparent font-bold mt-0.5">—</p>}
       </div>
       <div className="grid grid-cols-2 border-t border-slate-100 mt-1">
         <button

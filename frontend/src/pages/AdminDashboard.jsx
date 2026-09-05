@@ -14,7 +14,6 @@ function activityColor(shiftsPerWeek) {
 const TABS = [
   { id: 'directory',    label: 'Directory',    icon: 'people' },
   { id: 'equipment',    label: 'Equipment',    icon: 'medical_services' },
-  { id: 'compensation', label: 'Compensation', icon: 'payments' },
   { id: 'reports',       label: 'Reports',       icon: 'assignment' },
   { id: 'notifications', label: 'Notifications', icon: 'notifications' },
   { id: 'faq',           label: 'Portal',        icon: 'hub' },
@@ -28,18 +27,6 @@ const FAQ_CATEGORIES = [
 
 function nowMonth() {
   return new Date().toISOString().slice(0, 7);
-}
-
-function bonusMonthOptions() {
-  const opts = [];
-  const now = new Date();
-  for (let i = -1; i <= 6; i++) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    const value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-    const label = d.toLocaleString('en-US', { month: 'long', year: 'numeric' });
-    opts.push({ value, label });
-  }
-  return opts;
 }
 
 function Field({ label, value, onChange, type = 'text', dir, placeholder, step }) {
@@ -169,9 +156,6 @@ export default function AdminDashboard() {
   const [devSubTab, setDevSubTab] = useState('grid');
   const [newDeviceName, setNewDeviceName] = useState('');
 
-  // Inline edit state for compensation tab
-  const [edits, setEdits] = useState({});
-
   // Directory drawer state
   const [selectedUser, setSelectedUser] = useState(null);
   const [drawerEdits, setDrawerEdits] = useState({});
@@ -179,28 +163,9 @@ export default function AdminDashboard() {
   const [currentUserId, setCurrentUserId] = useState(null);
   const [deleteConfirmUser, setDeleteConfirmUser] = useState(null);
   const [deletingUser, setDeletingUser] = useState(false);
-  const [drawerTab, setDrawerTab] = useState('details');
-
-  // Bonus state (employee drawer)
-  const [bonuses, setBonuses] = useState([]);
-  const [bonusMonth, setBonusMonth] = useState(() => {
-    const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-  });
-  const [bonusForm, setBonusForm] = useState({ date: '', amount: '', note: '' });
-  const [addingBonus, setAddingBonus] = useState(false);
-  const [showBonusForm, setShowBonusForm] = useState(false);
-
   useEffect(() => {
     api.get('/auth/me').then(r => setCurrentUserId(r.data.id)).catch(() => {});
   }, []);
-
-  useEffect(() => {
-    if (!selectedUser) { setBonuses([]); return; }
-    api.get(`/admin/users/${selectedUser.id}/bonuses?month=${bonusMonth}`)
-      .then(r => setBonuses(r.data))
-      .catch(() => setBonuses([]));
-  }, [selectedUser, bonusMonth]);
 
   const loadReportSummary = useCallback(async (month) => {
     setSummaryLoading(true);
@@ -271,30 +236,6 @@ export default function AdminDashboard() {
     }
   }
 
-  async function addBonus() {
-    if (!bonusForm.date || !bonusForm.amount) return;
-    setAddingBonus(true);
-    try {
-      const { data } = await api.post(`/admin/users/${selectedUser.id}/bonuses`, bonusForm);
-      setBonuses(prev => [...prev, data].sort((a, b) => a.date.localeCompare(b.date)));
-      setBonusForm({ date: '', amount: '', note: '' });
-      setShowBonusForm(false);
-    } catch (err) {
-      showToast(err?.response?.data?.error || 'Failed to add bonus');
-    } finally {
-      setAddingBonus(false);
-    }
-  }
-
-  async function deleteBonus(id) {
-    try {
-      await api.delete(`/admin/users/${selectedUser.id}/bonuses/${id}`);
-      setBonuses(prev => prev.filter(b => b.id !== id));
-    } catch (err) {
-      showToast(err?.response?.data?.error || 'Failed to delete bonus');
-    }
-  }
-
   async function completeOrder(id) {
     setCompletingOrderId(id);
     try {
@@ -328,48 +269,6 @@ export default function AdminDashboard() {
       await api.patch(`/admin/users/${userId}`, { echo_certified: !current });
       setUsers(prev => prev.map(u => u.id === userId ? { ...u, echo_certified: !current } : u));
     } catch (err) { showToast(err?.response?.data?.error || 'Failed to update echo certification'); }
-  }
-
-  // ── Inline PATCH on blur ───────────────────────────────────────────────
-  function setEdit(userId, field, value) {
-    setEdits(prev => ({ ...prev, [userId]: { ...(prev[userId] || {}), [field]: value } }));
-  }
-
-  const FLOAT_FIELDS = new Set([
-    'mileage_rate', 'insurance_rate', 'screening_rate', 'mixed_screening_rate',
-    'partial_rate', 'hourly_rate', 'global_salary',
-    'km_bonus_threshold', 'km_bonus_amount',
-  ]);
-
-  async function commitEdit(userId, field) {
-    const value = edits[userId]?.[field];
-    if (value === undefined) return;
-    const user = users.find(u => u.id === userId);
-    const original = user?.[field];
-    const parsed = FLOAT_FIELDS.has(field) ? parseFloat(value)
-      : field === 'uniform_sets' ? parseInt(value, 10)
-      : value;
-    if (parsed === original || (isNaN(parsed) && original == null)) return;
-    try {
-      await api.patch(`/admin/users/${userId}`, { [field]: parsed });
-      setUsers(prev => prev.map(u => u.id === userId ? { ...u, [field]: parsed } : u));
-    } catch (err) { showToast(err?.response?.data?.error || 'Failed to save'); }
-  }
-
-  // ── Payment type (immediate commit, no blur event on a button) ────────
-  async function setPaymentType(userId, type) {
-    try {
-      await api.patch(`/admin/users/${userId}`, { payment_type: type });
-      setUsers(prev => prev.map(u => u.id === userId ? { ...u, payment_type: type } : u));
-    } catch (err) { showToast(err?.response?.data?.error || 'Failed to update payment type'); }
-  }
-
-  // ── KM bonus enabled toggle (immediate commit, no blur event on a switch) ──
-  async function toggleKmBonus(userId, current) {
-    try {
-      await api.patch(`/admin/users/${userId}`, { km_bonus_enabled: !current });
-      setUsers(prev => prev.map(u => u.id === userId ? { ...u, km_bonus_enabled: !current } : u));
-    } catch (err) { showToast(err?.response?.data?.error || 'Failed to update km bonus'); }
   }
 
   // ── Notifications ─────────────────────────────────────────────────────
@@ -716,9 +615,6 @@ export default function AdminDashboard() {
   // ── Directory drawer ───────────────────────────────────────────────────
   function openDrawer(user) {
     setSelectedUser(user);
-    setDrawerTab('details');
-    setBonusForm({ date: '', amount: '', note: '' });
-    setShowBonusForm(false);
     setDrawerEdits({
       first_name: user.first_name || '',
       last_name: user.last_name || '',
@@ -732,7 +628,6 @@ export default function AdminDashboard() {
       vehicle_number: user.vehicle_number || '',
       clothing_size: user.clothing_size || '',
       uniform_sets: user.uniform_sets ?? '',
-      mileage_rate: user.mileage_rate ?? 2,
       is_admin: user.is_admin ?? false,
     });
   }
@@ -743,7 +638,6 @@ export default function AdminDashboard() {
     try {
       const updates = { ...drawerEdits };
       if (updates.uniform_sets !== '') updates.uniform_sets = parseInt(updates.uniform_sets, 10);
-      if (updates.mileage_rate !== '') updates.mileage_rate = parseFloat(updates.mileage_rate);
       await api.patch(`/admin/users/${selectedUser.id}`, updates);
       setUsers(prev => prev.map(u => u.id === selectedUser.id ? { ...u, ...updates } : u));
       setSelectedUser(null);
@@ -956,172 +850,6 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      {/* ── Tab: Compensation ──────────────────────────────────────────── */}
-      {activeTab === 'compensation' && (
-        <div className="px-4 space-y-3">
-          <div className="bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3 text-xs text-amber-700 font-medium">
-            <span className="material-symbols-outlined text-sm align-[-3px] mr-1">info</span>
-            The 240 ₪ daily minimum applies to Per Test employees only. Set each employee's payment type and rates below.
-          </div>
-
-          {users.map(u => {
-            const paymentType = u.payment_type || 'per_test';
-            return (
-              <div key={u.id} className="bg-white rounded-2xl shadow-sm border border-slate-100 p-4 flex flex-col gap-4">
-                <div className="flex items-center justify-between gap-4">
-                  <div>
-                    <p className="font-bold text-slate-900">
-                      {u.first_name || u.last_name
-                        ? `${u.first_name || ''} ${u.last_name || ''}`.trim()
-                        : u.username}
-                    </p>
-                    <p className="text-xs text-slate-400">{u.district || ''}</p>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-slate-400 font-medium whitespace-nowrap">₪ / km</span>
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.5"
-                      defaultValue={u.mileage_rate ?? 2}
-                      className="w-20 px-2 py-1.5 text-sm font-bold rounded-xl border border-slate-200 focus:border-brand-purple/50 focus:outline-none text-center"
-                      onChange={e => setEdit(u.id, 'mileage_rate', e.target.value)}
-                      onBlur={() => commitEdit(u.id, 'mileage_rate')}
-                    />
-                  </div>
-                </div>
-
-                {/* Payment type selector */}
-                <div className="grid grid-cols-3 gap-2">
-                  {[
-                    { value: 'per_test', label: 'Per Test', icon: 'biotech' },
-                    { value: 'per_hour', label: 'Per Hour', icon: 'schedule' },
-                    { value: 'global',   label: 'Global',   icon: 'public'   },
-                  ].map(({ value, label, icon }) => (
-                    <button
-                      key={value}
-                      type="button"
-                      onClick={() => setPaymentType(u.id, value)}
-                      className={`flex flex-col items-center gap-1 py-2.5 rounded-xl border-2 transition-all duration-200 ${
-                        paymentType === value
-                          ? 'border-brand-purple bg-purple-50 text-brand-purple'
-                          : 'border-slate-100 text-slate-400 hover:border-slate-300 hover:text-slate-600'
-                      }`}
-                    >
-                      <span className="material-symbols-outlined text-lg" style={paymentType === value ? { fontVariationSettings: "'FILL' 1" } : {}}>{icon}</span>
-                      <span className="text-[11px] font-bold">{label}</span>
-                    </button>
-                  ))}
-                </div>
-
-                {/* KM bonus — per-employee threshold/amount, independent of payment type */}
-                <div className="flex items-center gap-3 flex-wrap">
-                  <button
-                    type="button"
-                    onClick={() => toggleKmBonus(u.id, u.km_bonus_enabled ?? true)}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold border-2 transition-all duration-200 ${
-                      (u.km_bonus_enabled ?? true)
-                        ? 'border-brand-purple bg-purple-50 text-brand-purple'
-                        : 'border-slate-100 text-slate-400 hover:border-slate-300 hover:text-slate-600'
-                    }`}
-                  >
-                    <span className="material-symbols-outlined text-sm">{(u.km_bonus_enabled ?? true) ? 'toggle_on' : 'toggle_off'}</span>
-                    KM Bonus {(u.km_bonus_enabled ?? true) ? 'On' : 'Off'}
-                  </button>
-
-                  {(u.km_bonus_enabled ?? true) && (
-                    <>
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-xs text-slate-400 font-medium whitespace-nowrap">at ≥</span>
-                        <input
-                          type="number"
-                          min="0"
-                          step="1"
-                          defaultValue={u.km_bonus_threshold ?? 100}
-                          className="w-16 px-2 py-1.5 text-sm font-bold rounded-xl border border-slate-200 focus:border-brand-purple/50 focus:outline-none text-center"
-                          onChange={e => setEdit(u.id, 'km_bonus_threshold', e.target.value)}
-                          onBlur={() => commitEdit(u.id, 'km_bonus_threshold')}
-                        />
-                        <span className="text-xs text-slate-400 font-medium whitespace-nowrap">km</span>
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-xs text-slate-400 font-medium whitespace-nowrap">+₪</span>
-                        <input
-                          type="number"
-                          min="0"
-                          step="1"
-                          defaultValue={u.km_bonus_amount ?? 100}
-                          className="w-16 px-2 py-1.5 text-sm font-bold rounded-xl border border-slate-200 focus:border-brand-purple/50 focus:outline-none text-center"
-                          onChange={e => setEdit(u.id, 'km_bonus_amount', e.target.value)}
-                          onBlur={() => commitEdit(u.id, 'km_bonus_amount')}
-                        />
-                      </div>
-                    </>
-                  )}
-                </div>
-
-                {/* Rate inputs, conditional on payment type */}
-                {paymentType === 'per_test' && (
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                    {[
-                      { field: 'insurance_rate',       label: 'Insurance',  defaultVal: 80 },
-                      { field: 'screening_rate',       label: 'Screening',  defaultVal: 105 },
-                      { field: 'mixed_screening_rate', label: 'Mixed',      defaultVal: 120 },
-                      { field: 'partial_rate',         label: 'Partial',    defaultVal: 50 },
-                    ].map(({ field, label, defaultVal }) => (
-                      <div key={field} className="flex flex-col gap-1">
-                        <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wide">{label}</span>
-                        <input
-                          type="number"
-                          min="0"
-                          step="1"
-                          defaultValue={u[field] ?? defaultVal}
-                          className="w-full px-2 py-1.5 text-sm font-bold rounded-xl border border-slate-200 focus:border-brand-purple/50 focus:outline-none text-center"
-                          onChange={e => setEdit(u.id, field, e.target.value)}
-                          onBlur={() => commitEdit(u.id, field)}
-                        />
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {paymentType === 'per_hour' && (
-                  <div className="flex flex-col gap-1 max-w-[140px]">
-                    <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wide">₪ / Hour</span>
-                    <input
-                      type="number"
-                      min="0"
-                      step="1"
-                      defaultValue={u.hourly_rate ?? 90}
-                      className="w-full px-2 py-1.5 text-sm font-bold rounded-xl border border-slate-200 focus:border-brand-purple/50 focus:outline-none text-center"
-                      onChange={e => setEdit(u.id, 'hourly_rate', e.target.value)}
-                      onBlur={() => commitEdit(u.id, 'hourly_rate')}
-                    />
-                  </div>
-                )}
-
-                {paymentType === 'global' && (
-                  <div className="flex flex-col gap-1 max-w-[160px]">
-                    <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wide">Monthly Salary (₪)</span>
-                    <input
-                      type="number"
-                      min="0"
-                      step="1"
-                      defaultValue={u.global_salary ?? ''}
-                      placeholder="0"
-                      className="w-full px-2 py-1.5 text-sm font-bold rounded-xl border border-slate-200 focus:border-brand-purple/50 focus:outline-none text-center"
-                      onChange={e => setEdit(u.id, 'global_salary', e.target.value)}
-                      onBlur={() => commitEdit(u.id, 'global_salary')}
-                    />
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      )}
-
       {/* ── Tab: Reports ───────────────────────────────────────────────── */}
       {activeTab === 'reports' && (
         <div className="px-4 space-y-4">
@@ -1140,7 +868,7 @@ export default function AdminDashboard() {
             <div className="flex justify-center py-10">
               <span className="material-symbols-outlined text-3xl text-slate-300 animate-spin">progress_activity</span>
             </div>
-          ) : !reportSummary || !reportSummary.summaries.some(s => s.totals.days > 0 || s.user.payment_type === 'global') ? (
+          ) : !reportSummary || !reportSummary.summaries.some(s => s.totals.days > 0) ? (
             <div className="bg-white rounded-2xl border border-slate-100 py-12 flex flex-col items-center gap-2 text-slate-400">
               <span className="material-symbols-outlined text-4xl opacity-30">inbox</span>
               <p className="text-sm font-medium">No entries for this month</p>
@@ -1150,7 +878,7 @@ export default function AdminDashboard() {
               <div className="px-4 py-3 border-b border-slate-100">
                 <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">Employee Reports</p>
               </div>
-              {reportSummary.summaries.filter(s => s.totals.days > 0 || s.user.payment_type === 'global').map(s => {
+              {reportSummary.summaries.filter(s => s.totals.days > 0).map(s => {
                 const isDownloading = downloadingId === s.user.id;
                 const isApproving  = approvingId   === s.user.id;
                 const errMsg       = approveMsgs[s.user.id];
@@ -1162,7 +890,7 @@ export default function AdminDashboard() {
                     <div className="flex items-center justify-between gap-3 flex-wrap">
                       <div className="min-w-0">
                         <p className="font-bold text-slate-800 text-sm">{s.user.name}</p>
-                        <p className="text-[11px] text-slate-400 mt-0.5">{s.totals.days} day{s.totals.days !== 1 ? 's' : ''} · ₪{s.totals.total.toLocaleString()}</p>
+                        <p className="text-[11px] text-slate-400 mt-0.5">{s.totals.days} day{s.totals.days !== 1 ? 's' : ''} · {s.totals.total_tests} test{s.totals.total_tests !== 1 ? 's' : ''}</p>
                         {s.foodAudit?.overBy > 0 && (
                           <p className="text-[11px] font-bold text-amber-600 mt-1 flex items-center gap-1">
                             <span className="material-symbols-outlined text-sm">warning</span>
@@ -2301,18 +2029,7 @@ export default function AdminDashboard() {
                 <span className="material-symbols-outlined text-base">close</span>
               </button>
             </div>
-            <div className="flex gap-2 px-5 pt-3 pb-2 border-b border-slate-100 flex-shrink-0">
-              {[{ id: 'details', label: 'Details' }, { id: 'bonuses', label: 'Bonuses' }].map(t => (
-                <button key={t.id} onClick={() => setDrawerTab(t.id)}
-                  className={`px-4 py-1.5 rounded-xl text-sm font-semibold transition-all ${
-                    drawerTab === t.id ? 'brand-gradient text-white' : 'text-slate-400 hover:bg-slate-100'
-                  }`}>
-                  {t.label}
-                </button>
-              ))}
-            </div>
             <div className="overflow-y-auto flex-1 px-5 py-4 space-y-5">
-              {drawerTab === 'details' && <>
               <section>
                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-3">Personal</p>
                 <div className="space-y-3">
@@ -2347,11 +2064,10 @@ export default function AdminDashboard() {
                 </div>
               </section>
               <section>
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-3">Uniform & Pay</p>
-                <div className="grid grid-cols-3 gap-3">
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-3">Uniform</p>
+                <div className="grid grid-cols-2 gap-3">
                   <Field label="Size" value={drawerEdits.clothing_size} onChange={v => setDrawerEdits(p => ({...p, clothing_size: v}))} placeholder="M" />
                   <Field label="Sets" value={String(drawerEdits.uniform_sets)} onChange={v => setDrawerEdits(p => ({...p, uniform_sets: v}))} type="number" />
-                  <Field label="₪ / km" value={String(drawerEdits.mileage_rate)} onChange={v => setDrawerEdits(p => ({...p, mileage_rate: v}))} type="number" step="0.5" />
                 </div>
               </section>
               <section>
@@ -2394,75 +2110,6 @@ export default function AdminDashboard() {
                   </span>
                 </div>
               </section>
-              </>}
-
-              {drawerTab === 'bonuses' && <section>
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-3">Compensation Bonuses</p>
-                <div className="rounded-2xl bg-slate-50 p-3">
-                  <div className="flex items-center justify-between mb-3">
-                    <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Month</span>
-                    <select
-                      value={bonusMonth}
-                      onChange={e => setBonusMonth(e.target.value)}
-                      className="text-xs font-semibold text-slate-600 bg-white border border-slate-200 rounded-xl px-2 py-1 focus:outline-none"
-                    >
-                      {bonusMonthOptions().map(o => (
-                        <option key={o.value} value={o.value}>{o.label}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {bonuses.length === 0 && !showBonusForm && (
-                    <p className="text-xs text-slate-400 text-center py-2">No bonuses for this month</p>
-                  )}
-
-                  {bonuses.map(b => (
-                    <div key={b.id} className="flex items-center gap-2 py-2 border-b border-slate-100 last:border-0">
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-semibold text-slate-700">{b.date} · ₪{b.amount}</p>
-                        {b.note && <p className="text-[11px] text-slate-400 truncate">{b.note}</p>}
-                      </div>
-                      <button onClick={() => deleteBonus(b.id)} className="text-slate-300 hover:text-red-500 transition-colors flex-shrink-0">
-                        <span className="material-symbols-outlined text-base">delete</span>
-                      </button>
-                    </div>
-                  ))}
-
-                  {showBonusForm ? (
-                    <div className="pt-2 space-y-2">
-                      <input type="date" value={bonusForm.date} onChange={e => setBonusForm(p => ({...p, date: e.target.value}))}
-                        className="w-full px-3 py-2 text-sm rounded-xl border border-slate-200 focus:border-brand-purple/50 focus:outline-none bg-white" />
-                      <input type="number" min="1" step="any" placeholder="Amount (₪)" value={bonusForm.amount} onChange={e => setBonusForm(p => ({...p, amount: e.target.value}))}
-                        className="w-full px-3 py-2 text-sm rounded-xl border border-slate-200 focus:border-brand-purple/50 focus:outline-none bg-white" />
-                      <input type="text" placeholder="Note (optional, e.g. Urgent test – Haifa)" value={bonusForm.note} onChange={e => setBonusForm(p => ({...p, note: e.target.value}))}
-                        className="w-full px-3 py-2 text-sm rounded-xl border border-slate-200 focus:border-brand-purple/50 focus:outline-none bg-white" />
-                      <div className="flex gap-2 pt-1">
-                        <button
-                          onClick={() => { setShowBonusForm(false); setBonusForm({ date: '', amount: '', note: '' }); }}
-                          className="flex-1 py-2 rounded-xl text-xs font-bold bg-slate-100 text-slate-600 hover:bg-slate-200 transition-all"
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          onClick={addBonus}
-                          disabled={addingBonus || !bonusForm.date || !bonusForm.amount}
-                          className="flex-1 py-2 rounded-xl text-xs font-bold text-white brand-gradient transition-all disabled:opacity-50"
-                        >
-                          {addingBonus ? 'Saving…' : 'Save'}
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <button
-                      onClick={() => setShowBonusForm(true)}
-                      className="mt-2 w-full flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-bold text-brand-purple bg-purple-50 hover:bg-purple-100 transition-all"
-                    >
-                      <span className="material-symbols-outlined text-sm">add</span>
-                      Add Bonus
-                    </button>
-                  )}
-                </div>
-              </section>}
             </div>
             <div className="px-5 py-4 border-t border-slate-100 flex-shrink-0 flex items-center gap-3">
               {selectedUser?.id !== currentUserId && (
@@ -2474,7 +2121,6 @@ export default function AdminDashboard() {
                   Delete
                 </button>
               )}
-              {drawerTab === 'details' && (
               <button
                 onClick={saveDrawer}
                 disabled={drawerSaving}
@@ -2483,7 +2129,6 @@ export default function AdminDashboard() {
               >
                 {drawerSaving ? 'Saving...' : 'Save Changes'}
               </button>
-              )}
             </div>
           </div>
           </div>

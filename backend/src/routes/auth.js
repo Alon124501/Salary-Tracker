@@ -4,6 +4,7 @@ const crypto     = require('crypto');
 const nodemailer = require('nodemailer');
 const { z }      = require('zod');
 const supabase   = require('../supabase');
+const supabaseAuth = require('../supabaseAuth');
 const auth       = require('../middleware/auth');
 const asyncHandler = require('../middleware/asyncHandler');
 
@@ -82,7 +83,7 @@ router.post('/register', upload.single('profession_document'), asyncHandler(asyn
     return res.status(500).json({ error: profileErr.message });
   }
 
-  const { data: session, error: signInErr } = await supabase.auth.signInWithPassword({ email: supabaseEmail, password });
+  const { data: session, error: signInErr } = await supabaseAuth.auth.signInWithPassword({ email: supabaseEmail, password });
   if (signInErr) {
     return res.status(500).json({ error: signInErr.message });
   }
@@ -103,7 +104,7 @@ router.post('/login', asyncHandler(async (req, res) => {
   }
 
   const email = `${username}@salary-tracker.app`;
-  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+  const { data, error } = await supabaseAuth.auth.signInWithPassword({ email, password });
   if (error) {
     return res.status(401).json({ error: 'Invalid credentials' });
   }

@@ -6,157 +6,15 @@ const supabase = require('../supabase');
 const auth = require('../middleware/auth');
 const adminAuth = require('../middleware/adminAuth');
 const asyncHandler = require('../middleware/asyncHandler');
-const { calcDaily, foodAudit } = require('../lib/payCalc');
+const { foodAudit, totalTestsFor } = require('../lib/payCalc');
+const { buildSheet } = require('../lib/reportSheet');
 
 const router = express.Router();
 router.use(auth);
 router.use(adminAuth);
 
 const ACCOUNTING_EMAIL = 'alonm@mpcheck.co.il';
-const PROFILE_SELECT = 'first_name, last_name, username, payment_type, global_salary, mileage_rate, insurance_rate, screening_rate, mixed_screening_rate, partial_rate, hourly_rate, km_bonus_enabled, km_bonus_threshold, km_bonus_amount';
-
-function buildSheet(sheet, entries, profile = {}, title = '', bonuses = []) {
-  const headerFill   = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4F46E5' } };
-  const headerFont   = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
-  const centerAlign  = { horizontal: 'center', vertical: 'middle' };
-  const stripeFill   = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF9FAFB' } };
-  const totalFill    = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF0F2F5' } };
-  const numCols = 12;
-
-  sheet.columns = [
-    { header: 'Date',                key: 'date',      width: 14 },
-    { header: 'Insurance Tests',     key: 'ins',       width: 16 },
-    { header: 'Screening Tests',     key: 'scr',       width: 16 },
-    { header: 'Mixed Screening',     key: 'mix',       width: 16 },
-    { header: 'Partial Tests',       key: 'par',       width: 14 },
-    { header: 'Kilometers',          key: 'km',        width: 12 },
-    { header: '100km Bonus (₪)',     key: 'km_bonus',  width: 14 },
-    { header: 'Office Hours',        key: 'hrs',       width: 14 },
-    { header: 'Food (₪)',            key: 'food',      width: 12 },
-    { header: 'Parking (₪)',         key: 'parking',   width: 12 },
-    { header: 'Tests Pay (₪)',       key: 'tests_pay', width: 14 },
-    { header: 'Min. Guarantee (₪)', key: 'min_bonus', width: 16 },
-  ];
-
-  sheet.getRow(1).eachCell(cell => {
-    cell.fill = headerFill; cell.font = headerFont; cell.alignment = centerAlign;
-  });
-  sheet.getRow(1).height = 22;
-
-  const sums = { ins: 0, scr: 0, mix: 0, par: 0, km: 0, km_bonus: 0, hrs: 0,
-                 food: 0, parking: 0, tests_pay: 0, min_bonus: 0 };
-  const moneySums = { ins: 0, scr: 0, mix: 0, par: 0, km: 0, hrs: 0 };
-  let grandTotal = 0;
-
-  for (let i = 0; i < entries.length; i++) {
-    const e = entries[i];
-    const c = calcDaily(e, profile);
-    const tests_pay = c.insurance + c.screening + c.mixed + c.partial;
-    const dataRow = sheet.addRow({
-      date: e.date, ins: e.insurance_tests, scr: e.screening_tests,
-      mix: e.mixed_screening_tests, par: e.partial_tests, km: e.kilometers,
-      km_bonus: (e.kilometers || 0) >= 100 ? 100 : null,
-      hrs: e.office_hours, food: e.food_expense, parking: e.parking_expense,
-      tests_pay, min_bonus: c.minBonus || 0,
-    });
-    if (i % 2 === 0) {
-      for (let col = 1; col <= numCols; col++) dataRow.getCell(col).fill = stripeFill;
-    }
-    sums.ins       += e.insurance_tests       || 0;
-    sums.scr       += e.screening_tests       || 0;
-    sums.mix       += e.mixed_screening_tests || 0;
-    sums.par       += e.partial_tests         || 0;
-    sums.km        += e.kilometers            || 0;
-    sums.km_bonus  += (e.kilometers || 0) >= 100 ? 100 : 0;
-    sums.hrs       += e.office_hours          || 0;
-    sums.food      += e.food_expense          || 0;
-    sums.parking   += e.parking_expense       || 0;
-    sums.tests_pay += tests_pay;
-    sums.min_bonus += c.minBonus || 0;
-    moneySums.ins  += c.insurance;
-    moneySums.scr  += c.screening;
-    moneySums.mix  += c.mixed;
-    moneySums.par  += c.partial;
-    moneySums.km   += c.km;
-    moneySums.hrs  += c.office;
-    grandTotal     += c.total;
-  }
-  if (profile.payment_type === 'global') {
-    grandTotal += profile.global_salary || 0;
-  }
-
-  sheet.addRow({});
-  const totalsRow = sheet.addRow({ date: 'TOTAL', ...sums });
-  totalsRow.eachCell(cell => { cell.font = { bold: true }; cell.fill = totalFill; cell.alignment = centerAlign; });
-
-  const totalMoneyRow = sheet.addRow({
-    ins: moneySums.ins > 0 ? `₪${moneySums.ins}` : '',
-    scr: moneySums.scr > 0 ? `₪${moneySums.scr}` : '',
-    mix: moneySums.mix > 0 ? `₪${moneySums.mix}` : '',
-    par: moneySums.par > 0 ? `₪${moneySums.par}` : '',
-    km:  moneySums.km  > 0 ? `₪${moneySums.km}`  : '',
-    km_bonus:  sums.km_bonus  > 0 ? `₪${sums.km_bonus}`  : '',
-    hrs:       moneySums.hrs  > 0 ? `₪${moneySums.hrs}`  : '',
-    food:      sums.food      > 0 ? `₪${sums.food}`      : '',
-    parking:   sums.parking   > 0 ? `₪${sums.parking}`   : '',
-    tests_pay: sums.tests_pay > 0 ? `₪${sums.tests_pay}` : '',
-    min_bonus: sums.min_bonus > 0 ? `₪${sums.min_bonus}` : '',
-  });
-  totalMoneyRow.height = 14;
-  for (let col = 1; col <= numCols; col++) {
-    const cell = totalMoneyRow.getCell(col);
-    cell.font = { bold: true, italic: true, size: 9, color: { argb: 'FF6B7280' } };
-    cell.fill = totalFill; cell.alignment = centerAlign;
-  }
-
-  let bonusTotal = 0;
-  if (bonuses.length > 0) {
-    sheet.addRow({});
-    const bonusHeaderRow = sheet.addRow({ date: 'ADDITIONAL COMPENSATION' });
-    for (let col = 1; col <= numCols; col++) {
-      const cell = bonusHeaderRow.getCell(col);
-      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEDE9FE' } };
-      cell.font = { bold: true, color: { argb: 'FF6D28D9' }, size: 10 };
-      cell.alignment = centerAlign;
-    }
-    bonusHeaderRow.height = 20;
-    for (let i = 0; i < bonuses.length; i++) {
-      const b = bonuses[i];
-      const bonusRow = sheet.addRow({ date: b.date, ins: b.note || '', min_bonus: `₪${b.amount}` });
-      if (i % 2 === 0) {
-        for (let col = 1; col <= numCols; col++) bonusRow.getCell(col).fill = stripeFill;
-      }
-      bonusTotal += Number(b.amount);
-    }
-    const bonusTotRow = sheet.addRow({ date: 'Total Bonuses', min_bonus: `₪${bonusTotal}` });
-    bonusTotRow.eachCell(cell => {
-      cell.font = { bold: true, color: { argb: 'FF6D28D9' } };
-      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEDE9FE' } };
-      cell.alignment = centerAlign;
-    });
-  }
-
-  sheet.addRow({});
-  const grandTotalRow = sheet.addRow({ date: 'TOTAL EARNINGS', min_bonus: `₪${grandTotal + bonusTotal}` });
-  grandTotalRow.height = 26;
-  for (let col = 1; col <= numCols; col++) {
-    const cell = grandTotalRow.getCell(col);
-    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4F46E5' } };
-    cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 12 };
-    cell.alignment = centerAlign;
-  }
-
-  if (title) {
-    sheet.spliceRows(1, 0, [title]);
-    sheet.mergeCells(1, 1, 1, numCols);
-    sheet.getRow(1).height = 30;
-    const titleCell = sheet.getCell(1, 1);
-    titleCell.value = title;
-    titleCell.font = { bold: true, size: 14, color: { argb: 'FF1E1B4B' } };
-    titleCell.alignment = centerAlign;
-    titleCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEDE9FE' } };
-  }
-}
+const PROFILE_SELECT = 'first_name, last_name, username';
 
 function monthRange(month) {
   const [year, mon] = month.split('-').map(Number);
@@ -173,7 +31,7 @@ router.get('/users', asyncHandler(async (req, res) => {
   const [{ data: profiles, error }, { data: devices, error: devErr }, { data: reports, error: repErr }] = await Promise.all([
     supabase.rpc('get_all_profiles'),
     supabase.from('user_devices').select('user_id, device_id, device_catalog(id, name)'),
-    supabase.from('equipment_reports').select('user_id, month, submitted_at'),
+    supabase.from('equipment_reports').select('user_id, submitted_at'),
   ]);
   if (error)  return res.status(500).json({ error: error.message });
   if (devErr) return res.status(500).json({ error: devErr.message });
@@ -212,19 +70,12 @@ router.get('/users', asyncHandler(async (req, res) => {
 }));
 
 // PATCH /api/admin/users/:id
-const PAYMENT_TYPES = ['per_test', 'per_hour', 'global'];
-
 router.patch('/users/:id', asyncHandler(async (req, res) => {
   const allowed = [
     'first_name', 'last_name', 'email', 'phone', 'profession', 'district', 'address',
     'vehicle_type_color', 'vehicle_number', 'shifts_per_week', 'shift_preference',
-    'clothing_size', 'uniform_sets', 'echo_certified', 'mileage_rate',
-    'payment_type', 'global_salary',
-    'insurance_rate', 'screening_rate', 'mixed_screening_rate', 'partial_rate', 'hourly_rate',
-    'km_bonus_enabled', 'km_bonus_threshold', 'km_bonus_amount',
+    'clothing_size', 'uniform_sets', 'echo_certified',
   ];
-  if (req.body.payment_type !== undefined && !PAYMENT_TYPES.includes(req.body.payment_type))
-    return res.status(400).json({ error: `Invalid payment_type. Valid: ${PAYMENT_TYPES.join(', ')}` });
 
   const updates = {};
   if (req.body.is_admin !== undefined) {
@@ -281,47 +132,6 @@ router.delete('/users/:id', asyncHandler(async (req, res) => {
   res.json({ success: true });
 }));
 
-// ── Bonuses ────────────────────────────────────────────────────────────────
-
-function nextMonth(month) {
-  const [year, mon] = month.split('-').map(Number);
-  if (mon === 12) return `${year + 1}-01-01`;
-  return `${year}-${String(mon + 1).padStart(2, '0')}-01`;
-}
-
-// GET /api/admin/users/:userId/bonuses?month=YYYY-MM
-router.get('/users/:userId/bonuses', asyncHandler(async (req, res) => {
-  const { userId } = req.params;
-  const { month } = req.query;
-  let q = supabase.from('admin_bonuses').select('*').eq('user_id', userId).order('date');
-  if (month) q = q.gte('date', `${month}-01`).lt('date', nextMonth(month));
-  const { data, error } = await q;
-  if (error) return res.status(500).json({ error: error.message });
-  res.json(data);
-}));
-
-// POST /api/admin/users/:userId/bonuses  — { date, amount, note }
-router.post('/users/:userId/bonuses', asyncHandler(async (req, res) => {
-  const { userId } = req.params;
-  const { date, amount, note } = req.body;
-  if (!date || !amount) return res.status(400).json({ error: 'date and amount are required' });
-  const { data, error } = await supabase
-    .from('admin_bonuses')
-    .insert({ user_id: userId, date, amount: Number(amount), note: note || null })
-    .select().single();
-  if (error) return res.status(500).json({ error: error.message });
-  res.json(data);
-}));
-
-// DELETE /api/admin/users/:userId/bonuses/:bonusId
-router.delete('/users/:userId/bonuses/:bonusId', asyncHandler(async (req, res) => {
-  const { userId, bonusId } = req.params;
-  const { error } = await supabase.from('admin_bonuses')
-    .delete().eq('id', bonusId).eq('user_id', userId);
-  if (error) return res.status(500).json({ error: error.message });
-  res.json({ success: true });
-}));
-
 // ── Reports ────────────────────────────────────────────────────────────────
 
 // GET /api/admin/reports?month=YYYY-MM
@@ -354,26 +164,21 @@ router.get('/reports', asyncHandler(async (req, res) => {
   const summaries = profiles.map(p => {
     const entries = entriesByUser[p.id] || [];
     const totals = { insurance_tests: 0, screening_tests: 0, mixed_screening_tests: 0,
-                     partial_tests: 0, kilometers: 0, office_hours: 0, total: 0, days: entries.length };
+                     partial_tests: 0, kilometers: 0, office_hours: 0, total_tests: 0, days: entries.length };
     for (const e of entries) {
-      const c = calcDaily(e, p);
       totals.insurance_tests      += e.insurance_tests       || 0;
       totals.screening_tests      += e.screening_tests       || 0;
       totals.mixed_screening_tests += e.mixed_screening_tests || 0;
       totals.partial_tests        += e.partial_tests         || 0;
       totals.kilometers           += e.kilometers            || 0;
       totals.office_hours         += e.office_hours          || 0;
-      totals.total                += c.total;
-    }
-    if (p.payment_type === 'global') {
-      totals.total += p.global_salary || 0;
+      totals.total_tests          += totalTestsFor(e);
     }
     return {
       user: {
         id: p.id,
         name: `${p.first_name || ''} ${p.last_name || ''}`.trim() || p.username,
         username: p.username,
-        payment_type: p.payment_type,
       },
       totals,
       foodAudit: foodAudit(entries),
@@ -399,11 +204,9 @@ router.post('/reports/approve', asyncHandler(async (req, res) => {
   const [
     { data: profiles, error: pErr },
     { data: allEntries, error: eErr },
-    { data: allBonuses },
   ] = await Promise.all([
     supabase.from('profiles').select(`id, ${PROFILE_SELECT}`).order('first_name'),
     supabase.from('entries').select('*').gte('date', start).lte('date', end).order('date', { ascending: true }),
-    supabase.from('admin_bonuses').select('*').gte('date', start).lte('date', end).order('date'),
   ]);
   if (pErr) return res.status(500).json({ error: pErr.message });
   if (eErr) return res.status(500).json({ error: eErr.message });
@@ -412,11 +215,6 @@ router.post('/reports/approve', asyncHandler(async (req, res) => {
   for (const e of allEntries || []) {
     if (!entriesByUser[e.user_id]) entriesByUser[e.user_id] = [];
     entriesByUser[e.user_id].push(e);
-  }
-  const bonusesByUser = {};
-  for (const b of allBonuses || []) {
-    if (!bonusesByUser[b.user_id]) bonusesByUser[b.user_id] = [];
-    bonusesByUser[b.user_id].push(b);
   }
 
   // Build ZIP of one Excel per user
@@ -430,11 +228,11 @@ router.post('/reports/approve', asyncHandler(async (req, res) => {
     (async () => {
       for (const p of profiles) {
         const entries = entriesByUser[p.id] || [];
-        if (entries.length === 0 && p.payment_type !== 'global') continue;
+        if (entries.length === 0) continue;
         const name = `${p.first_name || ''} ${p.last_name || ''}`.trim() || p.username;
 
         const workbook = new ExcelJS.Workbook();
-        buildSheet(workbook.addWorksheet('Salary Report'), entries, p, `${name} — ${monthName} ${year}`, bonusesByUser[p.id] || []);
+        buildSheet(workbook.addWorksheet('Salary Report'), entries, p, `${name} — ${monthName} ${year}`);
         const buf = await workbook.xlsx.writeBuffer();
         archive.append(Buffer.from(buf), { name: `${name} - ${monthName} ${year}.xlsx` });
       }
@@ -472,18 +270,17 @@ router.get('/users/:userId/report/excel', asyncHandler(async (req, res) => {
   const [year, mon] = month.split('-').map(Number);
   const monthName = new Date(year, mon - 1).toLocaleString('en-US', { month: 'long' });
 
-  const [{ data: profile }, { data: entries }, { data: bonuses }] = await Promise.all([
+  const [{ data: profile }, { data: entries }] = await Promise.all([
     supabase.from('profiles').select(PROFILE_SELECT).eq('id', userId).single(),
     supabase.from('entries').select('*').eq('user_id', userId).gte('date', start).lte('date', end).order('date', { ascending: true }),
-    supabase.from('admin_bonuses').select('*').eq('user_id', userId).gte('date', start).lte('date', end).order('date'),
   ]);
   if (!profile) return res.status(404).json({ error: 'User not found' });
-  if ((!entries || entries.length === 0) && profile.payment_type !== 'global')
+  if (!entries || entries.length === 0)
     return res.status(404).json({ error: 'No entries for this month' });
 
   const name = `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || profile.username;
   const workbook = new ExcelJS.Workbook();
-  buildSheet(workbook.addWorksheet('Salary Report'), entries || [], profile, `${name} — ${monthName} ${year}`, bonuses || []);
+  buildSheet(workbook.addWorksheet('Salary Report'), entries || [], profile, `${name} — ${monthName} ${year}`);
   const buf = await workbook.xlsx.writeBuffer();
 
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
@@ -506,19 +303,18 @@ router.post('/users/:userId/report/approve', asyncHandler(async (req, res) => {
     const [year, mon] = month.split('-').map(Number);
     const monthName = new Date(year, mon - 1).toLocaleString('en-US', { month: 'long' });
 
-    const [{ data: profile }, { data: entriesRaw }, { data: bonuses }] = await Promise.all([
+    const [{ data: profile }, { data: entriesRaw }] = await Promise.all([
       supabase.from('profiles').select(PROFILE_SELECT).eq('id', userId).single(),
       supabase.from('entries').select('*').eq('user_id', userId).gte('date', start).lte('date', end).order('date', { ascending: true }),
-      supabase.from('admin_bonuses').select('*').eq('user_id', userId).gte('date', start).lte('date', end).order('date'),
     ]);
     if (!profile) return res.status(404).json({ error: 'User not found' });
-    if ((!entriesRaw || entriesRaw.length === 0) && profile.payment_type !== 'global')
+    if (!entriesRaw || entriesRaw.length === 0)
       return res.status(404).json({ error: 'No entries for this month' });
     const entries = entriesRaw || [];
 
     const name = `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || profile.username;
     const workbook = new ExcelJS.Workbook();
-    buildSheet(workbook.addWorksheet('Salary Report'), entries, profile, `${name} — ${monthName} ${year}`, bonuses || []);
+    buildSheet(workbook.addWorksheet('Salary Report'), entries, profile, `${name} — ${monthName} ${year}`);
     const buf = await workbook.xlsx.writeBuffer();
 
     const gmailUser = process.env.GMAIL_USER;

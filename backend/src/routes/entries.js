@@ -4,7 +4,7 @@ const { z }   = require('zod');
 const supabase = require('../supabase');
 const auth     = require('../middleware/auth');
 const asyncHandler = require('../middleware/asyncHandler');
-const { calcDaily, foodAudit, totalTestsFor, FOOD_BONUS_TEST_THRESHOLD } = require('../lib/payCalc');
+const { foodAudit, totalTestsFor, dailyExpenses, FOOD_BONUS_TEST_THRESHOLD } = require('../lib/payCalc');
 
 const router = express.Router();
 router.use(auth);
@@ -39,13 +39,6 @@ const PutBodySchema = z.object({
   parking_expense:       PutNumericField,
 });
 
-async function getUserPayProfile(userId) {
-  const { data } = await supabase.from('profiles')
-    .select('payment_type, global_salary, mileage_rate, insurance_rate, screening_rate, mixed_screening_rate, partial_rate, hourly_rate, km_bonus_enabled, km_bonus_threshold, km_bonus_amount')
-    .eq('id', userId).single();
-  return data || {};
-}
-
 // Only blocks INCREASES to food_expense on days with <4 tests; decreases and
 // unrelated field edits always pass through untouched.
 function enforceFoodGate(finalFields, previousFoodExpense) {
@@ -72,9 +65,9 @@ router.get('/', asyncHandler(async (req, res) => {
     const { start, end } = monthRange(month);
     query = query.gte('date', start).lte('date', end);
   }
-  const [{ data: rows, error }, profile] = await Promise.all([query, getUserPayProfile(req.userId)]);
+  const { data: rows, error } = await query;
   if (error) return res.status(500).json({ error: error.message });
-  res.json(rows.map(e => ({ ...e, calc: calcDaily(e, profile) })));
+  res.json(rows);
 }));
 
 // GET /api/entries/summary?month=YYYY-MM
@@ -83,45 +76,27 @@ router.get('/summary', asyncHandler(async (req, res) => {
   if (!month) return res.status(400).json({ error: 'month param required (YYYY-MM)' });
 
   const { start, end } = monthRange(month);
-  const [{ data: rows, error }, profile] = await Promise.all([
-    supabase.from('entries').select('*').eq('user_id', req.userId).gte('date', start).lte('date', end),
-    getUserPayProfile(req.userId),
-  ]);
+  const { data: rows, error } = await supabase.from('entries').select('*')
+    .eq('user_id', req.userId).gte('date', start).lte('date', end);
   if (error) return res.status(500).json({ error: error.message });
 
   const totals = {
-    insurance: 0, screening: 0, mixed: 0, partial: 0, minBonus: 0,
-    km: 0, office: 0, expenses: 0, total: 0, days: rows.length
+    insurance_tests: 0, screening_tests: 0, mixed_screening_tests: 0, partial_tests: 0,
+    totalTests: 0, kilometers: 0, office_hours: 0, expenses: 0, days: rows.length
   };
   for (const e of rows) {
-    const c = calcDaily(e, profile);
-    totals.insurance += c.insurance;
-    totals.screening += c.screening;
-    totals.mixed += c.mixed;
-    totals.partial += c.partial;
-    totals.minBonus += c.minBonus;
-    totals.km += c.km;
-    totals.office += c.office;
-    totals.expenses += c.expenses;
-    totals.total += c.total;
+    totals.insurance_tests += e.insurance_tests || 0;
+    totals.screening_tests += e.screening_tests || 0;
+    totals.mixed_screening_tests += e.mixed_screening_tests || 0;
+    totals.partial_tests += e.partial_tests || 0;
+    totals.kilometers += e.kilometers || 0;
+    totals.office_hours += e.office_hours || 0;
+    totals.expenses += dailyExpenses(e);
   }
-  if (profile.payment_type === 'global') {
-    totals.total += profile.global_salary || 0;
-  }
+  totals.totalTests = totals.insurance_tests + totals.screening_tests +
+                       totals.mixed_screening_tests + totals.partial_tests;
   totals.foodAudit = foodAudit(rows);
   res.json(totals);
-}));
-
-// GET /api/entries/bonuses?month=YYYY-MM  — employee's own bonuses for a month
-router.get('/bonuses', asyncHandler(async (req, res) => {
-  const { month } = req.query;
-  if (!month) return res.status(400).json({ error: 'month param required (YYYY-MM)' });
-  const { start, end } = monthRange(month);
-  const { data, error } = await supabase.from('admin_bonuses')
-    .select('*').eq('user_id', req.userId)
-    .gte('date', start).lte('date', end).order('date');
-  if (error) return res.status(500).json({ error: error.message });
-  res.json(data);
 }));
 
 // GET /api/entries/backup
@@ -151,8 +126,7 @@ router.post('/', asyncHandler(async (req, res) => {
   }, { onConflict: 'user_id,date' }).select().single();
 
   if (error) return res.status(500).json({ error: error.message });
-  const profile = await getUserPayProfile(req.userId);
-  res.status(201).json({ ...entry, calc: calcDaily(entry, profile) });
+  res.status(201).json(entry);
 }));
 
 // PUT /api/entries/:id/receipt
@@ -350,8 +324,7 @@ router.put('/:id', asyncHandler(async (req, res) => {
     .update(updates).eq('id', entry.id).select().single();
   if (updateErr) return res.status(500).json({ error: updateErr.message });
 
-  const profile = await getUserPayProfile(req.userId);
-  res.json({ ...updated, calc: calcDaily(updated, profile) });
+  res.json(updated);
 }));
 
 // DELETE /api/entries/:id

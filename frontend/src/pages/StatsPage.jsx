@@ -13,27 +13,26 @@ function monthLabel(month) {
 
 const DAY_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 
+function totalTestsFor(e) {
+  return (e.insurance_tests || 0) + (e.screening_tests || 0) + (e.mixed_screening_tests || 0) + (e.partial_tests || 0);
+}
+
 export default function StatsPage() {
   const [month, setMonth] = useState(currentMonth());
   const [entries, setEntries] = useState([]);
   const [stats, setStats] = useState(null);
-  const [bonuses, setBonuses] = useState([]);
 
   useEffect(() => { loadStats(); }, [month]);
 
   async function loadStats() {
     try {
-      const [{ data }, { data: bonusData }] = await Promise.all([
-        api.get(`/entries?month=${month}`),
-        api.get(`/entries/bonuses?month=${month}`),
-      ]);
+      const { data } = await api.get(`/entries?month=${month}`);
       setEntries(data);
-      setBonuses(bonusData || []);
 
       const s = {
         insurance_tests: 0, screening_tests: 0,
         mixed_screening_tests: 0, partial_tests: 0,
-        kilometers: 0, km_pay: 0, office_hours: 0, days: data.length,
+        kilometers: 0, office_hours: 0, days: data.length,
       };
       for (const e of data) {
         s.insurance_tests += e.insurance_tests;
@@ -41,7 +40,6 @@ export default function StatsPage() {
         s.mixed_screening_tests += e.mixed_screening_tests;
         s.partial_tests += e.partial_tests;
         s.kilometers += e.kilometers;
-        s.km_pay += e.calc.km;
         s.office_hours += e.office_hours;
       }
       s.total_tests = s.insurance_tests + s.screening_tests + s.mixed_screening_tests + s.partial_tests;
@@ -53,9 +51,7 @@ export default function StatsPage() {
   const weekBars = buildWeekBars(entries);
   const maxBar = Math.max(...weekBars.map(b => b.total), 1);
 
-  const avgDaily = stats && stats.days > 0
-    ? entries.reduce((sum, e) => sum + e.calc.total, 0) / stats.days
-    : 0;
+  const avgDailyTests = stats && stats.days > 0 ? stats.total_tests / stats.days : 0;
 
   const s = stats || {};
 
@@ -112,10 +108,6 @@ export default function StatsPage() {
               <span className="material-symbols-outlined">directions_car</span>
             </div>
           </div>
-          <div className="mt-4 flex items-center gap-2 text-brand-purple text-sm font-bold">
-            <span className="material-symbols-outlined text-base" style={{ fontVariationSettings: "'FILL' 1" }}>payments</span>
-            <span>₪{(s.km_pay || 0).toFixed(0)} km reimbursement</span>
-          </div>
           {s.office_hours > 0 && (
             <div className="mt-2 flex items-center gap-2 text-cupertino-label text-sm">
               <span className="material-symbols-outlined text-base">corporate_fare</span>
@@ -129,7 +121,7 @@ export default function StatsPage() {
       <section className="bg-white p-7 rounded-2xl border border-slate-100">
         <div className="flex justify-between items-center mb-10">
           <h3 className="text-lg font-bold text-slate-900 font-headline">Weekly Activity</h3>
-          <span className="text-brand-purple text-xs font-bold uppercase tracking-wider">Daily Earnings</span>
+          <span className="text-brand-purple text-xs font-bold uppercase tracking-wider">Daily Tests</span>
         </div>
         <div className="flex items-end justify-between h-40 gap-3">
           {weekBars.map((bar, i) => {
@@ -140,7 +132,7 @@ export default function StatsPage() {
                 <div
                   className={`w-full rounded-full transition-all duration-500 ${bar.total > 0 ? 'brand-gradient' : 'bg-slate-100'}`}
                   style={{ height: `${height}%`, minHeight: bar.total > 0 ? 8 : 8 }}
-                  title={bar.total > 0 ? `${bar.total.toFixed(0)} ₪` : 'No entry'}
+                  title={bar.total > 0 ? `${bar.total} tests` : 'No entry'}
                 />
                 <span className={`text-[10px] font-bold uppercase ${isToday ? 'text-brand-purple' : 'text-cupertino-label'}`}>
                   {DAY_LABELS[bar.day]}
@@ -150,30 +142,6 @@ export default function StatsPage() {
           })}
         </div>
       </section>
-
-      {/* Bonuses */}
-      {bonuses.length > 0 && (
-        <section className="space-y-3">
-          <h3 className="text-[11px] font-bold text-cupertino-label uppercase tracking-[0.15em] ml-1">Bonuses</h3>
-          <div className="bg-white rounded-2xl border border-slate-100 divide-y divide-slate-100">
-            {bonuses.map(b => (
-              <div key={b.id} className="flex items-center justify-between px-5 py-3">
-                <div>
-                  <p className="text-sm font-semibold text-slate-800">{b.date}</p>
-                  {b.note && <p className="text-xs text-cupertino-label mt-0.5">{b.note}</p>}
-                </div>
-                <span className="text-sm font-extrabold text-brand-purple">+₪{Number(b.amount).toLocaleString()}</span>
-              </div>
-            ))}
-            <div className="flex items-center justify-between px-5 py-3">
-              <p className="text-sm font-bold text-slate-500">Total Bonuses</p>
-              <span className="text-sm font-extrabold text-slate-900">
-                ₪{bonuses.reduce((s, b) => s + Number(b.amount), 0).toLocaleString()}
-              </span>
-            </div>
-          </div>
-        </section>
-      )}
 
       {/* Efficiency */}
       <section className="pb-8 space-y-3">
@@ -185,11 +153,11 @@ export default function StatsPage() {
                 <span className="material-symbols-outlined" style={{ fontVariationSettings: "'FILL' 1" }}>bolt</span>
               </div>
               <div>
-                <p className="text-sm font-bold text-slate-900">Avg. Daily Earnings</p>
+                <p className="text-sm font-bold text-slate-900">Avg. Daily Tests</p>
                 <p className="text-[11px] text-cupertino-label font-medium">Based on work days</p>
               </div>
             </div>
-            <span className="text-xl font-extrabold text-slate-900">{avgDaily.toFixed(0)} ₪</span>
+            <span className="text-xl font-extrabold text-slate-900">{avgDailyTests.toFixed(1)}</span>
           </div>
 
           <div className="flex items-center justify-between p-5 bg-white rounded-2xl border border-slate-100">
@@ -235,7 +203,7 @@ function buildWeekBars(entries) {
     const entry = entries.find(e => e.date === dateStr);
     bars.push({
       day: i,
-      total: entry ? entry.calc.total : 0,
+      total: entry ? totalTestsFor(entry) : 0,
       isToday: i === dayOfWeek,
     });
   }
