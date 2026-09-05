@@ -2,11 +2,11 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { clearCache } from '../hooks/useFetch.js';
 
 const items = [
-  { path: '/', icon: 'home', label: 'Home' },
-  { path: '/stats', icon: 'insights', label: 'Stats' },
-  { path: '/entry', icon: 'add_circle', label: 'Entry' },
+  { path: '/', icon: 'home', label: 'בית' },
+  { path: '/stats', icon: 'insights', label: 'סטטיסטיקה' },
+  { path: '/entry', icon: 'add_circle', label: 'דיווח' },
   { path: '/screening-locations', icon: 'business', label: 'סקר' },
-  { path: '/portal', icon: 'hub', label: 'Portal' },
+  { path: '/portal', icon: 'hub', label: 'פורטל' },
 ];
 
 export default function BottomNav() {

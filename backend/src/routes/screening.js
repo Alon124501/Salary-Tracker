@@ -49,7 +49,7 @@ router.get('/companies', async (req, res) => {
 // POST /api/screening/companies  (admin)
 router.post('/companies', adminAuth, upload.fields([{ name: 'logo' }, { name: 'brochure' }]), async (req, res) => {
   const { name } = req.body;
-  if (!name?.trim()) return res.status(400).json({ error: 'Company name is required' });
+  if (!name?.trim()) return res.status(400).json({ error: 'נדרש שם חברה' });
 
   const logoFile = req.files?.logo?.[0];
   const brochureFile = req.files?.brochure?.[0];
@@ -71,7 +71,7 @@ router.post('/companies', adminAuth, upload.fields([{ name: 'logo' }, { name: 'b
 // PUT /api/screening/companies/:id  (admin)
 router.put('/companies/:id', adminAuth, upload.fields([{ name: 'logo' }, { name: 'brochure' }]), async (req, res) => {
   const { name } = req.body;
-  if (!name?.trim()) return res.status(400).json({ error: 'Company name is required' });
+  if (!name?.trim()) return res.status(400).json({ error: 'נדרש שם חברה' });
 
   const updates = { name: name.trim() };
   const logoFile = req.files?.logo?.[0];
@@ -123,7 +123,7 @@ router.get('/companies/:id/branches', async (req, res) => {
 // POST /api/screening/companies/:id/branches  (admin)
 router.post('/companies/:id/branches', adminAuth, upload.none(), async (req, res) => {
   const { name, contacts, requires_echo_bed, test_types, registration_url } = req.body;
-  if (!name?.trim()) return res.status(400).json({ error: 'Branch name is required' });
+  if (!name?.trim()) return res.status(400).json({ error: 'נדרש שם סניף' });
 
   let parsedContacts;
   try {
@@ -131,7 +131,7 @@ router.post('/companies/:id/branches', adminAuth, upload.none(), async (req, res
       ? (typeof contacts === 'string' ? JSON.parse(contacts) : contacts)
       : [];
   } catch {
-    return res.status(400).json({ error: 'Invalid contacts format' });
+    return res.status(400).json({ error: 'פורמט אנשי קשר לא תקין' });
   }
 
   const { data, error } = await supabase
@@ -153,7 +153,7 @@ router.post('/companies/:id/branches', adminAuth, upload.none(), async (req, res
 // PUT /api/screening/branches/:id  (admin)
 router.put('/branches/:id', adminAuth, upload.none(), async (req, res) => {
   const { name, contacts, requires_echo_bed, test_types, registration_url } = req.body;
-  if (!name?.trim()) return res.status(400).json({ error: 'Branch name is required' });
+  if (!name?.trim()) return res.status(400).json({ error: 'נדרש שם סניף' });
 
   let parsedContacts;
   try {
@@ -161,7 +161,7 @@ router.put('/branches/:id', adminAuth, upload.none(), async (req, res) => {
       ? (typeof contacts === 'string' ? JSON.parse(contacts) : contacts)
       : [];
   } catch {
-    return res.status(400).json({ error: 'Invalid contacts format' });
+    return res.status(400).json({ error: 'פורמט אנשי קשר לא תקין' });
   }
 
   const updates = {
@@ -241,11 +241,11 @@ function extractFields(text) {
 // GET /api/screening/branches/:id/vouchers/download?date=YYYY-MM-DD  (admin only)
 router.get('/branches/:id/vouchers/download', async (req, res) => {
   const { date } = req.query;
-  if (!date) return res.status(400).json({ error: 'date query param required' });
+  if (!date) return res.status(400).json({ error: 'נדרש פרמטר תאריך' });
 
   const { data: profile } = await supabase
     .from('profiles').select('is_admin').eq('id', req.userId).single();
-  if (!profile?.is_admin) return res.status(403).json({ error: 'Admin access required' });
+  if (!profile?.is_admin) return res.status(403).json({ error: 'נדרשת גישת מנהל' });
 
   const { data: vouchers, error } = await supabase
     .from('screening_vouchers')
@@ -254,7 +254,7 @@ router.get('/branches/:id/vouchers/download', async (req, res) => {
     .eq('work_date', date)
     .order('created_at', { ascending: true });
   if (error) return res.status(500).json({ error: error.message });
-  if (!vouchers?.length) return res.status(404).json({ error: 'No vouchers for this date' });
+  if (!vouchers?.length) return res.status(404).json({ error: 'אין שוברים לתאריך זה' });
 
   res.setHeader('Content-Type', 'application/zip');
   res.setHeader('Content-Disposition', `attachment; filename="vouchers-${date}.zip"`);
@@ -275,14 +275,14 @@ router.get('/branches/:id/vouchers/download', async (req, res) => {
 
   const downloadResults = await Promise.all(vouchers.map((v, i) => {
     const p = v.profiles;
-    const employeeName = (p ? `${p.first_name || ''} ${p.last_name || ''}`.trim() || p.username : 'unknown')
+    const employeeName = (p ? `${p.first_name || ''} ${p.last_name || ''}`.trim() || p.username : 'לא ידוע')
       .replace(/\s+/g, '_');
     const safeFileName = `${i + 1}_${employeeName}_${v.file_name}`;
     const ext = v.file_name.split('.').pop().toLowerCase();
     const isImage = IMAGE_EXTS.has(ext);
     const employeeDisplay = p
       ? `${p.first_name || ''} ${p.last_name || ''}`.trim() || p.username
-      : 'unknown';
+      : 'לא ידוע';
     return supabase.storage.from('screening-vouchers').download(v.file_url).then(async ({ data: fileData, error: dlErr }) => {
       if (dlErr || !fileData) return null;
       const buf = Buffer.from(await fileData.arrayBuffer());
@@ -299,8 +299,8 @@ router.get('/branches/:id/vouchers/download', async (req, res) => {
     sheet.addRow({
       num: i + 1,
       employee: employeeDisplay,
-      idNumbers: isImage ? idNumbers : 'PDF – OCR skipped',
-      voucherNumber: isImage ? voucherNumber : 'PDF – OCR skipped',
+      idNumbers: isImage ? idNumbers : 'PDF – דילוג על זיהוי אוטומטי',
+      voucherNumber: isImage ? voucherNumber : 'PDF – דילוג על זיהוי אוטומטי',
     });
   }
 
@@ -313,7 +313,7 @@ router.get('/branches/:id/vouchers/download', async (req, res) => {
 // GET /api/screening/branches/:id/vouchers?date=YYYY-MM-DD
 router.get('/branches/:id/vouchers', async (req, res) => {
   const { date } = req.query;
-  if (!date) return res.status(400).json({ error: 'date query param required' });
+  if (!date) return res.status(400).json({ error: 'נדרש פרמטר תאריך' });
 
   const { data: profile } = await supabase
     .from('profiles')
@@ -354,11 +354,11 @@ router.get('/branches/:id/vouchers', async (req, res) => {
 // POST /api/screening/branches/:id/vouchers
 router.post('/branches/:id/vouchers', upload.single('voucher'), async (req, res) => {
   const { work_date } = req.body;
-  if (!work_date) return res.status(400).json({ error: 'work_date is required' });
-  if (!req.file) return res.status(400).json({ error: 'voucher file is required' });
+  if (!work_date) return res.status(400).json({ error: 'נדרש תאריך עבודה' });
+  if (!req.file) return res.status(400).json({ error: 'נדרש קובץ שובר' });
 
   const filePath = await uploadVoucherFile(req.file, req.params.id, work_date, req.userId);
-  if (!filePath) return res.status(500).json({ error: 'File upload failed' });
+  if (!filePath) return res.status(500).json({ error: 'העלאת הקובץ נכשלה' });
 
   const { data, error } = await supabase
     .from('screening_vouchers')
@@ -384,7 +384,7 @@ router.delete('/vouchers/:id', async (req, res) => {
     .select('*')
     .eq('id', req.params.id)
     .single();
-  if (fetchErr || !voucher) return res.status(404).json({ error: 'Voucher not found' });
+  if (fetchErr || !voucher) return res.status(404).json({ error: 'השובר לא נמצא' });
 
   const { data: profile } = await supabase
     .from('profiles')
@@ -394,11 +394,11 @@ router.delete('/vouchers/:id', async (req, res) => {
   const isAdmin = !!profile?.is_admin;
 
   if (voucher.user_id !== req.userId && !isAdmin) {
-    return res.status(403).json({ error: 'Not authorised' });
+    return res.status(403).json({ error: 'אין הרשאה' });
   }
 
   const { error: storageErr } = await supabase.storage.from('screening-vouchers').remove([voucher.file_url]);
-  if (storageErr) return res.status(500).json({ error: 'Failed to delete file from storage' });
+  if (storageErr) return res.status(500).json({ error: 'מחיקת הקובץ מהאחסון נכשלה' });
   const { error } = await supabase.from('screening_vouchers').delete().eq('id', req.params.id);
   if (error) return res.status(500).json({ error: error.message });
   res.json({ success: true });

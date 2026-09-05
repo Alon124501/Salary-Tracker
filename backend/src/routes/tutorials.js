@@ -36,7 +36,7 @@ router.get('/', auth, asyncHandler(async (req, res) => {
 // POST /api/tutorials/upload-url — admin: get a direct-to-storage signed upload URL
 router.post('/upload-url', auth, adminAuth, asyncHandler(async (req, res) => {
   const { filename } = req.body;
-  if (!filename?.trim()) return res.status(400).json({ error: 'filename is required' });
+  if (!filename?.trim()) return res.status(400).json({ error: 'נדרש שם קובץ' });
 
   const ext = filename.split('.').pop();
   const storagePath = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
@@ -49,10 +49,10 @@ router.post('/upload-url', auth, adminAuth, asyncHandler(async (req, res) => {
 // POST /api/tutorials — admin: create row
 router.post('/', auth, adminAuth, asyncHandler(async (req, res) => {
   const { title, device_id, device_name_other, description, source_type, storage_path, external_url, sort_order } = req.body;
-  if (!title?.trim()) return res.status(400).json({ error: 'title is required' });
-  if (!['upload', 'link'].includes(source_type)) return res.status(400).json({ error: 'source_type must be upload or link' });
-  if (source_type === 'upload' && !storage_path) return res.status(400).json({ error: 'storage_path is required for uploads' });
-  if (source_type === 'link' && !external_url?.trim()) return res.status(400).json({ error: 'external_url is required for links' });
+  if (!title?.trim()) return res.status(400).json({ error: 'נדרשת כותרת' });
+  if (!['upload', 'link'].includes(source_type)) return res.status(400).json({ error: 'סוג המקור חייב להיות העלאה או קישור' });
+  if (source_type === 'upload' && !storage_path) return res.status(400).json({ error: 'נדרש נתיב אחסון עבור קבצים שהועלו' });
+  if (source_type === 'link' && !external_url?.trim()) return res.status(400).json({ error: 'נדרשת כתובת URL עבור קישורים' });
 
   const { data, error } = await supabase
     .from('tutorial_videos')
@@ -76,7 +76,7 @@ router.post('/', auth, adminAuth, asyncHandler(async (req, res) => {
 router.post('/reorder', auth, adminAuth, asyncHandler(async (req, res) => {
   const { items } = req.body;
   if (!Array.isArray(items) || items.length === 0)
-    return res.status(400).json({ error: 'items array is required' });
+    return res.status(400).json({ error: 'נדרש מערך פריטים' });
 
   const { error } = await supabase
     .from('tutorial_videos')

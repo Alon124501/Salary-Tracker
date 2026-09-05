@@ -59,7 +59,7 @@ function CopyButton({ value }) {
     <button
       onClick={copy}
       className="flex-shrink-0 w-7 h-7 flex items-center justify-center rounded-lg text-slate-400 hover:text-brand-purple hover:bg-purple-50 transition-all active:scale-95"
-      title="Copy"
+      title="העתק"
     >
       <span className="material-symbols-outlined text-base" style={{ fontVariationSettings: copied ? "'FILL' 1" : "'FILL' 0" }}>
         {copied ? 'check' : 'content_copy'}
@@ -107,7 +107,7 @@ export default function PortalPage() {
       setEqQty({});
       setEqSuccess(true);
       setTimeout(() => setEqSuccess(false), 3000);
-    } catch (err) { showToast(err?.response?.data?.error || 'Failed to submit order'); }
+    } catch (err) { showToast(err?.response?.data?.error || 'שליחת ההזמנה נכשלה'); }
     finally { setEqSubmitting(false); }
   }
 
@@ -120,13 +120,13 @@ export default function PortalPage() {
       <div className="max-w-2xl mx-auto">
 
         <div className="mb-6">
-          <h1 className="text-2xl font-extrabold tracking-tight brand-gradient-text">Portal</h1>
-          <p className="text-sm text-slate-400 mt-1">Applications &amp; FAQ</p>
+          <h1 className="text-2xl font-extrabold tracking-tight brand-gradient-text">פורטל</h1>
+          <p className="text-sm text-slate-400 mt-1">אפליקציות ושאלות נפוצות</p>
         </div>
 
         {/* Tab toggle */}
         <div className="flex gap-2 mb-6 flex-wrap">
-          {[{ id: 'apps', label: 'Apps', icon: 'apps' }, { id: 'faq', label: 'FAQ', icon: 'quiz' }, { id: 'contacts', label: 'Contacts', icon: 'call' }, { id: 'equipment', label: 'Equipment', icon: 'inventory' }, { id: 'videos', label: 'Videos', icon: 'smart_display' }].map(t => (
+          {[{ id: 'apps', label: 'אפליקציות', icon: 'apps' }, { id: 'faq', label: 'שאלות נפוצות', icon: 'quiz' }, { id: 'contacts', label: 'אנשי קשר', icon: 'call' }, { id: 'equipment', label: 'ציוד', icon: 'inventory' }, { id: 'videos', label: 'סרטונים', icon: 'smart_display' }].map(t => (
             <button
               key={t.id}
               onClick={() => setTab(t.id)}
@@ -154,14 +154,14 @@ export default function PortalPage() {
             {tab === 'apps' && <div className="mb-8">
               <h2 className="text-base font-extrabold text-slate-700 mb-3 px-1 flex items-center gap-2">
                 <span className="material-symbols-outlined text-brand-purple text-lg" style={{ fontVariationSettings: "'FILL' 1" }}>apps</span>
-                Applications
+                אפליקציות
               </h2>
 
               {creds.length === 0 ? (
                 <div className="bg-white rounded-2xl border border-slate-100 py-8 flex flex-col items-center gap-2 text-slate-400"
                   style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
                   <span className="material-symbols-outlined text-3xl opacity-30">apps</span>
-                  <p className="text-sm">No applications yet</p>
+                  <p className="text-sm">אין עדיין אפליקציות</p>
                 </div>
               ) : (
                 <div className="flex flex-col gap-3">
@@ -183,12 +183,12 @@ export default function PortalPage() {
                       </div>
                       <div className="space-y-2">
                         <div className="flex items-center gap-2">
-                          <span className="text-[11px] font-semibold text-slate-400 w-20 flex-shrink-0">Username</span>
+                          <span className="text-[11px] font-semibold text-slate-400 w-20 flex-shrink-0">שם משתמש</span>
                           <span className="text-sm text-slate-700 flex-1 font-mono">{cred.username}</span>
                           <CopyButton value={cred.username} />
                         </div>
                         <div className="flex items-center gap-2">
-                          <span className="text-[11px] font-semibold text-slate-400 w-20 flex-shrink-0">Password</span>
+                          <span className="text-[11px] font-semibold text-slate-400 w-20 flex-shrink-0">סיסמה</span>
                           <span className="text-sm text-slate-700 flex-1 font-mono">{cred.password}</span>
                           <CopyButton value={cred.password} />
                         </div>
@@ -204,13 +204,13 @@ export default function PortalPage() {
               <div className="mb-8">
                 <h2 className="text-base font-extrabold text-slate-700 mb-3 px-1 flex items-center gap-2">
                   <span className="material-symbols-outlined text-brand-purple text-lg" style={{ fontVariationSettings: "'FILL' 1" }}>call</span>
-                  Important Contacts
+                  אנשי קשר חשובים
                 </h2>
                 {contacts.length === 0 ? (
                   <div className="bg-white rounded-2xl border border-slate-100 py-8 flex flex-col items-center gap-2 text-slate-400"
                     style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
                     <span className="material-symbols-outlined text-3xl opacity-30">call</span>
-                    <p className="text-sm">No contacts added yet</p>
+                    <p className="text-sm">עדיין לא נוספו אנשי קשר</p>
                   </div>
                 ) : (
                   <div className="flex flex-col gap-3">
@@ -229,7 +229,7 @@ export default function PortalPage() {
                           className="flex items-center gap-1.5 text-sm font-bold text-white brand-gradient px-4 py-2 rounded-xl active:scale-95 transition-all flex-shrink-0"
                           style={{ boxShadow: '0 2px 8px rgba(139,53,217,0.25)' }}>
                           <span className="material-symbols-outlined text-base" style={{ fontVariationSettings: "'FILL' 1" }}>call</span>
-                          Call
+                          התקשר
                         </a>
                       </div>
                     ))}
@@ -243,12 +243,12 @@ export default function PortalPage() {
               <div className="mb-8">
                 <h2 className="text-base font-extrabold text-slate-700 mb-3 px-1 flex items-center gap-2">
                   <span className="material-symbols-outlined text-brand-purple text-lg" style={{ fontVariationSettings: "'FILL' 1" }}>inventory</span>
-                  Order Equipment
+                  הזמנת ציוד
                 </h2>
                 {eqSuccess && (
                   <div className="mb-4 flex items-center gap-2 bg-emerald-50 border border-emerald-200 text-emerald-700 text-sm font-semibold px-4 py-3 rounded-2xl">
                     <span className="material-symbols-outlined text-lg" style={{ fontVariationSettings: "'FILL' 1" }}>check_circle</span>
-                    Order submitted successfully!
+                    ההזמנה נשלחה בהצלחה!
                   </div>
                 )}
                 {eqCatalogLoading ? (
@@ -259,7 +259,7 @@ export default function PortalPage() {
                   <div className="bg-white rounded-2xl border border-slate-100 py-10 flex flex-col items-center gap-2 text-slate-400"
                     style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
                     <span className="material-symbols-outlined text-3xl opacity-30">inventory</span>
-                    <p className="text-sm">No items available</p>
+                    <p className="text-sm">אין פריטים זמינים</p>
                   </div>
                 ) : (
                   <>
@@ -288,7 +288,7 @@ export default function PortalPage() {
                       className="w-full py-3 rounded-2xl text-sm font-bold text-white brand-gradient active:scale-[0.98] transition-all disabled:opacity-40"
                       style={{ boxShadow: '0 4px 14px rgba(139,53,217,0.3)' }}
                     >
-                      {eqSubmitting ? 'Submitting...' : 'Submit Order'}
+                      {eqSubmitting ? 'שולח...' : 'שלח הזמנה'}
                     </button>
                   </>
                 )}
@@ -304,7 +304,7 @@ export default function PortalPage() {
                   <div className="bg-white rounded-2xl border border-slate-100 py-8 flex flex-col items-center gap-2 text-slate-400"
                     style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
                     <span className="material-symbols-outlined text-3xl opacity-30">quiz</span>
-                    <p className="text-sm">No questions yet</p>
+                    <p className="text-sm">אין עדיין שאלות</p>
                   </div>
                 ) : (
                   <div className="flex flex-col gap-3">
@@ -346,16 +346,16 @@ export default function PortalPage() {
               <div className="mb-8">
                 <h2 className="text-base font-extrabold text-slate-700 mb-3 px-1 flex items-center gap-2">
                   <span className="material-symbols-outlined text-brand-purple text-lg" style={{ fontVariationSettings: "'FILL' 1" }}>smart_display</span>
-                  Tutorial Videos
+                  סרטוני הדרכה
                 </h2>
 
                 <div className="relative mb-4">
-                  <span className="material-symbols-outlined absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-300 text-lg">search</span>
+                  <span className="material-symbols-outlined absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-300 text-lg">search</span>
                   <input
                     value={videoSearch}
                     onChange={e => setVideoSearch(e.target.value)}
-                    placeholder="Search by title or device..."
-                    className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-700 placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-brand-purple/20"
+                    placeholder="חיפוש לפי כותרת או מכשיר..."
+                    className="w-full pr-10 pl-4 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-700 placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-brand-purple/20"
                   />
                 </div>
 
@@ -367,7 +367,7 @@ export default function PortalPage() {
                   <div className="bg-white rounded-2xl border border-slate-100 py-8 flex flex-col items-center gap-2 text-slate-400"
                     style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
                     <span className="material-symbols-outlined text-3xl opacity-30">smart_display</span>
-                    <p className="text-sm">{videos.length === 0 ? 'No tutorial videos yet' : 'No matches'}</p>
+                    <p className="text-sm">{videos.length === 0 ? 'אין עדיין סרטוני הדרכה' : 'אין תוצאות'}</p>
                   </div>
                 ) : (
                   <div className="flex flex-col gap-3">
@@ -427,7 +427,7 @@ export default function PortalPage() {
                   className="flex items-center justify-center gap-1.5 text-sm font-bold text-white brand-gradient px-4 py-3 rounded-xl active:scale-95 transition-all"
                 >
                   <span className="material-symbols-outlined text-base" style={{ fontVariationSettings: "'FILL' 1" }}>open_in_new</span>
-                  Open link
+                  פתח קישור
                 </a>
               );
             })()}

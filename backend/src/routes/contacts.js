@@ -20,7 +20,7 @@ router.get('/', auth, asyncHandler(async (req, res) => {
 router.post('/', auth, adminAuth, asyncHandler(async (req, res) => {
   const { name, title, phone, sort_order } = req.body;
   if (!name?.trim() || !phone?.trim())
-    return res.status(400).json({ error: 'name and phone are required' });
+    return res.status(400).json({ error: 'יש למלא שם וטלפון' });
 
   const { data, error } = await supabase
     .from('contacts')
@@ -34,14 +34,14 @@ router.post('/', auth, adminAuth, asyncHandler(async (req, res) => {
 router.post('/reorder', auth, adminAuth, asyncHandler(async (req, res) => {
   const { items } = req.body;
   if (!Array.isArray(items) || items.length === 0)
-    return res.status(400).json({ error: 'items array is required' });
+    return res.status(400).json({ error: 'נדרש מערך פריטים' });
 
   // Validate all IDs exist before upserting to prevent inserting arbitrary rows
   const ids = items.map(({ id }) => id);
   const { data: existing } = await supabase.from('contacts').select('id').in('id', ids);
   const validIds = new Set((existing || []).map(r => r.id));
   const safeItems = items.filter(({ id }) => validIds.has(id));
-  if (safeItems.length === 0) return res.status(400).json({ error: 'No valid contact IDs' });
+  if (safeItems.length === 0) return res.status(400).json({ error: 'לא נמצאו מזהי אנשי קשר תקינים' });
 
   const { error } = await supabase
     .from('contacts')
@@ -59,7 +59,7 @@ router.patch('/:id', auth, adminAuth, asyncHandler(async (req, res) => {
   if (phone !== undefined) updates.phone = phone.trim();
 
   if (Object.keys(updates).length === 0)
-    return res.status(400).json({ error: 'No fields to update' });
+    return res.status(400).json({ error: 'אין שדות לעדכון' });
 
   const { data, error } = await supabase
     .from('contacts')

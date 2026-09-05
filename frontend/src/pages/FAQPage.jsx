@@ -53,8 +53,8 @@ export default function FAQPage() {
       <div className="max-w-2xl mx-auto">
 
         <div className="mb-6">
-          <h1 className="text-2xl font-extrabold tracking-tight brand-gradient-text">FAQ</h1>
-          <p className="text-sm text-slate-400 mt-1">שאלות נפוצות</p>
+          <h1 className="text-2xl font-extrabold tracking-tight brand-gradient-text">שאלות נפוצות</h1>
+          <p className="text-sm text-slate-400 mt-1">תשובות לשאלות הנפוצות ביותר</p>
         </div>
 
         {loading ? (
@@ -70,7 +70,7 @@ export default function FAQPage() {
                 <div className="bg-white rounded-2xl border border-slate-100 py-8 flex flex-col items-center gap-2 text-slate-400"
                   style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
                   <span className="material-symbols-outlined text-3xl opacity-30">quiz</span>
-                  <p className="text-sm">No questions yet</p>
+                  <p className="text-sm">אין עדיין שאלות</p>
                 </div>
               ) : (
                 <div className="flex flex-col gap-3">

@@ -11,7 +11,7 @@ export default function SettingsPage() {
     <main className="w-full max-w-lg mx-auto px-4 sm:px-6 pb-32 lg:pb-24 pt-24 flex flex-col gap-8">
       <h1 className="flex items-center gap-2 text-2xl font-extrabold text-on-background tracking-tight font-headline">
         <span className="material-symbols-outlined text-brand-purple" style={{ fontVariationSettings: "'FILL' 1" }}>manage_accounts</span>
-        Settings
+        הגדרות
       </h1>
 
       {/* Edit Profile */}
@@ -19,24 +19,24 @@ export default function SettingsPage() {
         <button
           type="button"
           onClick={() => navigate('/edit-profile')}
-          className="w-full flex items-center gap-4 text-left"
+          className="w-full flex items-center gap-4 text-right"
         >
           <div className="w-10 h-10 rounded-xl bg-purple-50 flex items-center justify-center flex-shrink-0">
             <span className="material-symbols-outlined text-brand-purple" style={{ fontVariationSettings: "'FILL' 1" }}>person</span>
           </div>
           <div className="flex-1">
-            <p className="text-sm font-bold text-slate-800">My Profile</p>
-            <p className="text-xs text-slate-400">Edit your name, contact info &amp; sizes</p>
+            <p className="text-sm font-bold text-slate-800">הפרופיל שלי</p>
+            <p className="text-xs text-slate-400">ערוך את שמך, פרטי הקשר והמידות</p>
           </div>
-          <span className="material-symbols-outlined text-slate-400">chevron_right</span>
+          <span className="material-symbols-outlined text-slate-400">chevron_left</span>
         </button>
       </section>
 
       {/* Backup & Restore */}
       <section className="bg-white rounded-2xl shadow-[0_2px_8px_rgba(0,0,0,0.04)] border border-slate-100 p-6 flex flex-col gap-5">
         <div>
-          <h2 className="text-sm font-bold text-slate-700 mb-1">Backup & Restore</h2>
-          <p className="text-xs text-slate-400">Export all your entries to a file, then import them on any device or after redeployment.</p>
+          <h2 className="text-sm font-bold text-slate-700 mb-1">גיבוי ושחזור</h2>
+          <p className="text-xs text-slate-400">ייצא את כל הרישומים שלך לקובץ, ואז ייבא אותם במכשיר אחר או לאחר עדכון.</p>
         </div>
 
         <div className="flex flex-col gap-3">
@@ -54,9 +54,9 @@ export default function SettingsPage() {
                 a.download = `salary-backup-${new Date().toISOString().slice(0, 10)}.json`;
                 a.click();
                 URL.revokeObjectURL(url);
-                setBackupMsg(`Exported ${data.entries.length} entries.`);
+                setBackupMsg(`יוצאו ${data.entries.length} רשומות.`);
               } catch (err) {
-                setBackupMsg('Export failed: ' + (err.response?.data?.error || err.message));
+                setBackupMsg('הייצוא נכשל: ' + (err.response?.data?.error || err.message));
               }
             }}
             className="flex items-center gap-3 p-4 rounded-xl border border-slate-100 hover:border-emerald-200 hover:bg-emerald-50 transition-all group"
@@ -64,9 +64,9 @@ export default function SettingsPage() {
             <div className="w-10 h-10 rounded-xl bg-emerald-50 group-hover:bg-emerald-100 flex items-center justify-center flex-shrink-0 transition-colors">
               <span className="material-symbols-outlined text-emerald-600" style={{ fontVariationSettings: "'FILL' 1" }}>download</span>
             </div>
-            <div className="text-left">
-              <p className="text-sm font-bold text-slate-800">Export Backup</p>
-              <p className="text-xs text-slate-400">Download all entries as a JSON file</p>
+            <div className="text-right">
+              <p className="text-sm font-bold text-slate-800">ייצוא גיבוי</p>
+              <p className="text-xs text-slate-400">הורד את כל הרישומים כקובץ JSON</p>
             </div>
           </button>
 
@@ -78,9 +78,9 @@ export default function SettingsPage() {
                 : <span className="material-symbols-outlined text-brand-purple" style={{ fontVariationSettings: "'FILL' 1" }}>upload</span>
               }
             </div>
-            <div className="text-left">
-              <p className="text-sm font-bold text-slate-800">Import Backup</p>
-              <p className="text-xs text-slate-400">Restore entries from a JSON backup file</p>
+            <div className="text-right">
+              <p className="text-sm font-bold text-slate-800">ייבוא גיבוי</p>
+              <p className="text-xs text-slate-400">שחזר רישומים מקובץ גיבוי JSON</p>
             </div>
             <input
               type="file"
@@ -96,9 +96,9 @@ export default function SettingsPage() {
                   const json = JSON.parse(text);
                   const entries = json.entries ?? json;
                   const { data } = await api.post('/entries/restore', { entries });
-                  setBackupMsg(`Successfully imported ${data.imported} entries.`);
+                  setBackupMsg(`יובאו בהצלחה ${data.imported} רשומות.`);
                 } catch (err) {
-                  setBackupMsg('Import failed: ' + (err.response?.data?.error || err.message));
+                  setBackupMsg('הייבוא נכשל: ' + (err.response?.data?.error || err.message));
                 } finally {
                   setRestoring(false);
                   e.target.value = '';
@@ -109,7 +109,7 @@ export default function SettingsPage() {
         </div>
 
         {backupMsg && (
-          <div className={`text-sm font-medium px-3 py-2 rounded-xl ${backupMsg.startsWith('Export failed') || backupMsg.startsWith('Import failed') ? 'bg-red-50 text-red-600' : 'bg-emerald-50 text-emerald-700'}`}>
+          <div className={`text-sm font-medium px-3 py-2 rounded-xl ${backupMsg.startsWith('הייצוא נכשל') || backupMsg.startsWith('הייבוא נכשל') ? 'bg-red-50 text-red-600' : 'bg-emerald-50 text-emerald-700'}`}>
             {backupMsg}
           </div>
         )}

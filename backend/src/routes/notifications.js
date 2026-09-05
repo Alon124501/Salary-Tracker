@@ -124,13 +124,13 @@ router.post('/', auth, adminAuth, upload.single('document'), async (req, res) =>
     const recurrence_time = req.body.recurrence_time || null;
 
     if (!title?.trim() || !content?.trim()) {
-      return res.status(400).json({ error: 'title and content are required' });
+      return res.status(400).json({ error: 'יש למלא כותרת ותוכן' });
     }
     if (!['manual', 'recurring'].includes(type)) {
-      return res.status(400).json({ error: 'type must be manual or recurring' });
+      return res.status(400).json({ error: 'הסוג חייב להיות חד-פעמי או חוזר' });
     }
     if (force_view_document && !req.file && !document_external_url) {
-      return res.status(400).json({ error: 'force_view_document requires a document file or link' });
+      return res.status(400).json({ error: 'נדרש קובץ מסמך או קישור כאשר נדרשת פתיחת מסמך' });
     }
 
     let isActive     = true;
@@ -138,14 +138,14 @@ router.post('/', auth, adminAuth, upload.single('document'), async (req, res) =>
 
     if (type === 'recurring') {
       if (!recurrence_days?.length || !recurrence_time) {
-        return res.status(400).json({ error: 'recurrence_days and recurrence_time required for recurring' });
+        return res.status(400).json({ error: 'נדרשים ימי חזרה ושעה עבור התראה חוזרת' });
       }
       scheduledFor = computeNextOccurrence(recurrence_days, recurrence_time);
-      if (!scheduledFor) return res.status(400).json({ error: 'Could not compute next occurrence' });
+      if (!scheduledFor) return res.status(400).json({ error: 'לא ניתן היה לחשב את המועד הבא' });
       isActive = false;
     } else if (scheduled_for) {
       const d = new Date(scheduled_for);
-      if (isNaN(d.getTime())) return res.status(400).json({ error: 'Invalid scheduled_for date' });
+      if (isNaN(d.getTime())) return res.status(400).json({ error: 'תאריך התזמון אינו תקין' });
       scheduledFor = d.toISOString();
       isActive = false;
     }
@@ -181,7 +181,7 @@ router.post('/', auth, adminAuth, upload.single('document'), async (req, res) =>
 
       if (uploadErr) {
         await supabase.from('notifications').delete().eq('id', data.id);
-        return res.status(500).json({ error: 'Failed to upload document; notification not created.' });
+        return res.status(500).json({ error: 'העלאת המסמך נכשלה; ההתראה לא נוצרה.' });
       }
 
       await supabase
@@ -294,7 +294,7 @@ router.get('/admin/:id/compliance', auth, adminAuth, async (req, res) => {
       supabase.from('notification_reads').select('user_id, approved_at, document_opened_at').eq('notification_id', notifId),
     ]);
 
-    if (notifRes.error) return res.status(404).json({ error: 'Notification not found' });
+    if (notifRes.error) return res.status(404).json({ error: 'ההתראה לא נמצאה' });
     if (testersRes.error) return res.status(500).json({ error: testersRes.error.message });
 
     const readMap = Object.fromEntries(

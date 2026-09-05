@@ -20,7 +20,7 @@ router.get('/catalog', auth, asyncHandler(async (req, res) => {
 // POST /api/equipment/catalog — admin
 router.post('/catalog', auth, adminAuth, asyncHandler(async (req, res) => {
   const { name } = req.body;
-  if (!name?.trim()) return res.status(400).json({ error: 'name is required' });
+  if (!name?.trim()) return res.status(400).json({ error: 'נדרש שם' });
 
   const { data, error } = await supabase
     .from('equipment_catalog')
@@ -45,11 +45,11 @@ router.delete('/catalog/:id', auth, adminAuth, asyncHandler(async (req, res) => 
 router.post('/orders', auth, asyncHandler(async (req, res) => {
   const { items } = req.body;
   if (!Array.isArray(items) || items.length === 0)
-    return res.status(400).json({ error: 'items array is required' });
+    return res.status(400).json({ error: 'נדרש מערך פריטים' });
 
   const filtered = items.filter(i => i.quantity > 0);
   if (filtered.length === 0)
-    return res.status(400).json({ error: 'at least one item must have quantity > 0' });
+    return res.status(400).json({ error: 'לפחות פריט אחד חייב לכלול כמות גדולה מ-0' });
 
   const { data, error } = await supabase
     .from('equipment_orders')

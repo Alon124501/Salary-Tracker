@@ -7,8 +7,6 @@ const { computeNextOccurrence } = require('../utils/scheduling');
 const router = express.Router();
 
 const ADMIN_EMAIL = 'davida@mpcheck.co.il';
-const MONTH_NAMES = ['January','February','March','April','May','June',
-                     'July','August','September','October','November','December'];
 
 router.get('/monthly-receipts', async (req, res) => {
   const secret = process.env.CRON_SECRET;
@@ -34,7 +32,7 @@ router.get('/monthly-receipts', async (req, res) => {
 
   if (entriesErr) return res.status(500).json({ error: entriesErr.message });
   if (!entries || entries.length === 0) {
-    return res.json({ success: true, message: 'No receipts found, no email sent.' });
+    return res.json({ success: true, message: 'לא נמצאו קבלות, לא נשלח מייל.' });
   }
 
   // Fetch usernames for each unique user_id
@@ -75,20 +73,20 @@ router.get('/monthly-receipts', async (req, res) => {
   const gmailUser = process.env.GMAIL_USER;
   const gmailPass = process.env.GMAIL_APP_PASSWORD;
   if (!gmailUser || !gmailPass) {
-    return res.status(500).json({ error: 'GMAIL_USER or GMAIL_APP_PASSWORD not configured' });
+    return res.status(500).json({ error: 'GMAIL_USER או GMAIL_APP_PASSWORD אינם מוגדרים' });
   }
 
-  const monthName = MONTH_NAMES[month - 1];
+  const monthName = new Date(year, month - 1, 1).toLocaleString('he-IL', { month: 'long' });
   const transporter = nodemailer.createTransport({
     service: 'gmail',
     auth: { user: gmailUser, pass: gmailPass },
   });
 
   await transporter.sendMail({
-    from: `Salary Tracker <${gmailUser}>`,
+    from: `Medical Pay <${gmailUser}>`,
     to: ADMIN_EMAIL,
-    subject: `Monthly Receipts — ${monthName} ${year}`,
-    text: `All food receipts for ${monthName} ${year} are attached as a ZIP.\n\nTotal receipts: ${entries.length}`,
+    subject: `קבלות חודשיות — ${monthName} ${year}`,
+    text: `כל קבלות האוכל עבור ${monthName} ${year} מצורפות כקובץ ZIP.\n\nסך הכל קבלות: ${entries.length}`,
     attachments: [{
       filename: `receipts-${monthStr}.zip`,
       content: zipBuffer,

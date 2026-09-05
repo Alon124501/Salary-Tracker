@@ -71,7 +71,7 @@ export default function EntryPage() {
       await api.delete(`/entries/${id}/food-receipt`, { params: { path } });
       setFoodReceipts(prev => prev.filter(r => r.path !== path));
     } catch (err) {
-      setError(err.response?.data?.error || err.message || 'Failed to delete receipt');
+      setError(err.response?.data?.error || err.message || 'מחיקת הקבלה נכשלה');
     }
   }
 
@@ -81,7 +81,7 @@ export default function EntryPage() {
       await api.delete(`/entries/${id}/parking-receipt`, { params: { path } });
       setParkingReceipts(prev => prev.filter(r => r.path !== path));
     } catch (err) {
-      setError(err.response?.data?.error || err.message || 'Failed to delete receipt');
+      setError(err.response?.data?.error || err.message || 'מחיקת הקבלה נכשלה');
     }
   }
 
@@ -97,10 +97,10 @@ export default function EntryPage() {
         }
         setViewingUrl(found.signedUrl);
       } else {
-        setError('Could not load receipt image');
+        setError('לא ניתן היה לטעון את תמונת הקבלה');
       }
     } catch {
-      setError('Failed to load receipt');
+      setError('טעינת הקבלה נכשלה');
     }
   }
 
@@ -127,7 +127,7 @@ export default function EntryPage() {
       }
       navigate('/');
     } catch (err) {
-      setError(err.response?.data?.error || 'Failed to save entry');
+      setError(err.response?.data?.error || 'שמירת הרישום נכשלה');
     } finally {
       setLoading(false);
     }
@@ -143,9 +143,9 @@ export default function EntryPage() {
         {/* Editorial Header */}
         <section className="mb-8">
           <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight mb-1 font-headline">
-            {entryId ? 'Edit Entry' : 'Record Daily Stats'}
+            {entryId ? 'עריכת רישום' : 'רישום נתונים יומי'}
           </h1>
-          <p className="text-slate-500 font-medium text-sm">Capture your productivity and expenses.</p>
+          <p className="text-slate-500 font-medium text-sm">תעד את התפוקה וההוצאות שלך.</p>
         </section>
 
         <form className="space-y-6" onSubmit={handleSubmit}>
@@ -155,12 +155,12 @@ export default function EntryPage() {
 
           {/* Tests */}
           <div className="space-y-3">
-            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest px-1">Tests</h3>
+            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest px-1">בדיקות</h3>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-              <TestField label="Insurance" value={form.insurance_tests} onChange={v => set('insurance_tests', v)} />
-              <TestField label="Screening" value={form.screening_tests} onChange={v => set('screening_tests', v)} />
-              <TestField label="Mixed Screening" value={form.mixed_screening_tests} onChange={v => set('mixed_screening_tests', v)} />
-              <TestField label="Partial" value={form.partial_tests} onChange={v => set('partial_tests', v)} />
+              <TestField label="ביטוח" value={form.insurance_tests} onChange={v => set('insurance_tests', v)} />
+              <TestField label="סקר" value={form.screening_tests} onChange={v => set('screening_tests', v)} />
+              <TestField label="סקר מעורב" value={form.mixed_screening_tests} onChange={v => set('mixed_screening_tests', v)} />
+              <TestField label="חלקי" value={form.partial_tests} onChange={v => set('partial_tests', v)} />
             </div>
           </div>
 
@@ -168,7 +168,7 @@ export default function EntryPage() {
           <div className="grid grid-cols-2 gap-4">
             <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100">
               <label className="block text-xs font-bold text-slate-400 mb-2 uppercase tracking-wider">
-                Kilometers{form.kilometers >= 100 ? ' 🎯' : ''}
+                קילומטרים{form.kilometers >= 100 ? ' 🎯' : ''}
               </label>
               <input
                 type="number" inputMode="decimal" min="0" step="0.1"
@@ -179,7 +179,7 @@ export default function EntryPage() {
               />
             </div>
             <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100">
-              <label className="block text-xs font-bold text-slate-400 mb-2 uppercase tracking-wider">Office Hrs</label>
+              <label className="block text-xs font-bold text-slate-400 mb-2 uppercase tracking-wider">שעות משרד</label>
               <input
                 type="number" inputMode="decimal" min="0" step="0.5"
                 value={form.office_hours === 0 ? '' : form.office_hours}
@@ -192,7 +192,7 @@ export default function EntryPage() {
 
           {/* Expenses */}
           <div className="space-y-3">
-            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest px-1">Daily Expenses</h3>
+            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest px-1">הוצאות יומיות</h3>
             <div className="bg-white rounded-2xl overflow-hidden shadow-sm border border-slate-100">
               {/* Food */}
               <div className="p-4 flex items-center justify-between border-b border-slate-50">
@@ -201,8 +201,8 @@ export default function EntryPage() {
                     <span className="material-symbols-outlined text-orange-600" style={{ fontSize: 20 }}>restaurant</span>
                   </div>
                   <div>
-                    <p className="text-[13px] font-bold text-slate-900">Food Expense</p>
-                    <p className="text-[11px] text-slate-400">Meals and snacks</p>
+                    <p className="text-[13px] font-bold text-slate-900">הוצאות אוכל</p>
+                    <p className="text-[11px] text-slate-400">ארוחות וחטיפים</p>
                   </div>
                 </div>
                 <div className={`flex items-center gap-1 bg-[#F2F2F7] px-3 py-2 rounded-lg ${foodLocked ? 'opacity-40' : ''}`}>
@@ -218,7 +218,7 @@ export default function EntryPage() {
                 </div>
               </div>
               {foodLocked && (
-                <p className="text-[10px] text-amber-600 font-semibold px-4 pb-2 -mt-1">Add 4+ tests to unlock food expense</p>
+                <p className="text-[10px] text-amber-600 font-semibold px-4 pb-2 -mt-1">הוסף 4 בדיקות ומעלה כדי לפתוח את הוצאות האוכל</p>
               )}
               {/* Parking */}
               <div className="p-4 flex items-center justify-between border-b border-slate-50">
@@ -227,8 +227,8 @@ export default function EntryPage() {
                     <span className="material-symbols-outlined text-blue-600" style={{ fontSize: 20 }}>local_parking</span>
                   </div>
                   <div>
-                    <p className="text-[13px] font-bold text-slate-900">Parking Expense</p>
-                    <p className="text-[11px] text-slate-400">Day pass or meter</p>
+                    <p className="text-[13px] font-bold text-slate-900">הוצאות חניה</p>
+                    <p className="text-[11px] text-slate-400">כרטיס יומי או מדחן</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-1 bg-[#F2F2F7] px-3 py-2 rounded-lg">
@@ -296,8 +296,8 @@ export default function EntryPage() {
                     <span className="material-symbols-outlined text-blue-600" style={{ fontSize: 20 }}>add_a_photo</span>
                   </div>
                   <div>
-                    <p className="text-[13px] font-bold text-slate-900">Add Parking Receipt</p>
-                    <p className="text-[11px] text-slate-400">Tap to add photo(s)</p>
+                    <p className="text-[13px] font-bold text-slate-900">הוסף קבלת חניה</p>
+                    <p className="text-[11px] text-slate-400">הקש כדי להוסיף תמונות</p>
                   </div>
                   <input
                     type="file"
@@ -369,8 +369,8 @@ export default function EntryPage() {
                     <span className="material-symbols-outlined text-orange-600" style={{ fontSize: 20 }}>add_a_photo</span>
                   </div>
                   <div>
-                    <p className="text-[13px] font-bold text-slate-900">Add Food Receipt</p>
-                    <p className="text-[11px] text-slate-400">{foodLocked ? 'Add 4+ tests to unlock' : 'Tap to add photo(s)'}</p>
+                    <p className="text-[13px] font-bold text-slate-900">הוסף קבלת אוכל</p>
+                    <p className="text-[11px] text-slate-400">{foodLocked ? 'הוסף 4 בדיקות ומעלה כדי לפתוח' : 'הקש כדי להוסיף תמונות'}</p>
                   </div>
                   <input
                     type="file"
@@ -395,23 +395,23 @@ export default function EntryPage() {
           {/* Tests Today */}
           <div className="brand-gradient p-5 rounded-2xl brand-shadow flex justify-between items-center">
             <div>
-              <span className="text-white/70 text-[10px] font-bold uppercase tracking-widest block mb-1">Tests Today</span>
+              <span className="text-white/70 text-[10px] font-bold uppercase tracking-widest block mb-1">בדיקות היום</span>
               <h2 className="text-4xl font-extrabold text-white font-headline leading-none">{totalTests}</h2>
             </div>
             <div className="flex flex-col items-end gap-2">
               {totalTests > 0 && (
                 <span className="inline-flex items-center gap-1 bg-white/20 text-white px-2.5 py-1 rounded-lg text-[10px] font-bold">
                   <span className="material-symbols-outlined" style={{ fontSize: 12 }}>biotech</span>
-                  TESTS
+                  בדיקות
                 </span>
               )}
               <p className="text-white/60 text-[10px] font-medium text-right">
                 {[
-                  form.insurance_tests > 0 && `Ins: ${form.insurance_tests}`,
-                  form.screening_tests > 0 && `Scr: ${form.screening_tests}`,
-                  form.mixed_screening_tests > 0 && `Mix: ${form.mixed_screening_tests}`,
-                  form.partial_tests > 0 && `Par: ${form.partial_tests}`,
-                ].filter(Boolean).join(' · ') || 'Fill in your data'}
+                  form.insurance_tests > 0 && `ביטוח: ${form.insurance_tests}`,
+                  form.screening_tests > 0 && `סקר: ${form.screening_tests}`,
+                  form.mixed_screening_tests > 0 && `מעורב: ${form.mixed_screening_tests}`,
+                  form.partial_tests > 0 && `חלקי: ${form.partial_tests}`,
+                ].filter(Boolean).join(' · ') || 'מלא את הנתונים שלך'}
               </p>
             </div>
           </div>
@@ -425,7 +425,7 @@ export default function EntryPage() {
             className="w-full brand-gradient text-white font-bold py-4 rounded-2xl brand-shadow active:scale-[0.98] transition-all flex items-center justify-center gap-2 text-lg disabled:opacity-50"
           >
             <span className="material-symbols-outlined text-xl">save</span>
-            {loading ? 'Saving...' : 'Save Entry'}
+            {loading ? 'שומר...' : 'שמור רישום'}
           </button>
         </form>
       </main>
@@ -463,8 +463,8 @@ function CalendarPicker({ value, onChange }) {
     return { year: d.getFullYear(), month: d.getMonth() };
   });
 
-  const DAYS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
-  const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const DAYS = ['א׳', 'ב׳', 'ג׳', 'ד׳', 'ה׳', 'ו׳', 'ש׳'];
+  const MONTHS = ['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
 
   const firstDay = new Date(cursor.year, cursor.month, 1).getDay();
   const daysInMonth = new Date(cursor.year, cursor.month + 1, 0).getDate();
@@ -498,8 +498,8 @@ function CalendarPicker({ value, onChange }) {
   }
 
   const selectedLabel = selected
-    ? selected.toLocaleString('en-US', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
-    : 'No date selected';
+    ? selected.toLocaleString('he-IL', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+    : 'לא נבחר תאריך';
 
   return (
     <div className="bg-white rounded-2xl shadow-[0px_20px_40px_rgba(26,28,29,0.04)] overflow-hidden">
@@ -510,7 +510,7 @@ function CalendarPicker({ value, onChange }) {
         className="w-full px-5 pt-5 pb-4 bg-[#F9F9FB] flex items-center justify-between text-left active:bg-[#F2F2F7] transition-colors"
       >
         <div>
-          <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">Date</p>
+          <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">תאריך</p>
           <p className="text-lg font-extrabold text-slate-900 font-headline leading-tight">{selectedLabel}</p>
         </div>
         <span className={`material-symbols-outlined text-slate-400 transition-transform duration-200 ${open ? 'rotate-180' : ''}`}>
@@ -524,14 +524,14 @@ function CalendarPicker({ value, onChange }) {
       <div className="flex items-center justify-between px-5 py-3">
         <button type="button" onClick={prevMonth}
           className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-[#F2F2F7] transition-colors text-slate-500 active:scale-90">
-          <span className="material-symbols-outlined text-lg">chevron_left</span>
+          <span className="material-symbols-outlined text-lg">chevron_right</span>
         </button>
         <span className="font-headline font-extrabold text-slate-900 text-sm tracking-tight">
           {MONTHS[cursor.month]} {cursor.year}
         </span>
         <button type="button" onClick={nextMonth}
           className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-[#F2F2F7] transition-colors text-slate-500 active:scale-90">
-          <span className="material-symbols-outlined text-lg">chevron_right</span>
+          <span className="material-symbols-outlined text-lg">chevron_left</span>
         </button>
       </div>
 

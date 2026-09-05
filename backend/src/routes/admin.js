@@ -80,14 +80,14 @@ router.patch('/users/:id', asyncHandler(async (req, res) => {
   const updates = {};
   if (req.body.is_admin !== undefined) {
     if (req.params.id === req.userId)
-      return res.status(403).json({ error: 'Cannot change your own admin status' });
+      return res.status(403).json({ error: 'לא ניתן לשנות את סטטוס הניהול של עצמך' });
     updates.is_admin = req.body.is_admin === true || req.body.is_admin === 'true';
   }
   for (const key of allowed) {
     if (req.body[key] !== undefined) updates[key] = req.body[key] === '' ? null : req.body[key];
   }
   if (Object.keys(updates).length === 0)
-    return res.status(400).json({ error: 'No valid fields provided' });
+    return res.status(400).json({ error: 'לא סופקו שדות תקינים' });
 
   const { data, error } = await supabase.from('profiles').update(updates).eq('id', req.params.id).select().single();
   if (error) return res.status(500).json({ error: error.message });
@@ -97,7 +97,7 @@ router.patch('/users/:id', asyncHandler(async (req, res) => {
 // POST /api/admin/users/:id/devices — admin override, adds one device
 router.post('/users/:id/devices', asyncHandler(async (req, res) => {
   const { device_id } = req.body;
-  if (!device_id) return res.status(400).json({ error: 'device_id is required' });
+  if (!device_id) return res.status(400).json({ error: 'נדרש מזהה מכשיר' });
 
   const { error } = await supabase.from('user_devices').insert({ user_id: req.params.id, device_id });
   if (error) return res.status(500).json({ error: error.message });
@@ -115,7 +115,7 @@ router.delete('/users/:id/devices/:deviceId', asyncHandler(async (req, res) => {
 // DELETE /api/admin/users/:id — permanently delete an employee
 router.delete('/users/:id', asyncHandler(async (req, res) => {
   const { id } = req.params;
-  if (id === req.userId) return res.status(400).json({ error: 'Cannot delete your own account' });
+  if (id === req.userId) return res.status(400).json({ error: 'לא ניתן למחוק את החשבון שלך' });
 
   // Fetch document path before deletion (profile may cascade-delete with auth user)
   const { data: profile } = await supabase.from('profiles')
@@ -137,7 +137,7 @@ router.delete('/users/:id', asyncHandler(async (req, res) => {
 // GET /api/admin/reports?month=YYYY-MM
 router.get('/reports', asyncHandler(async (req, res) => {
   const { month } = req.query;
-  if (!month) return res.status(400).json({ error: 'month param required (YYYY-MM)' });
+  if (!month) return res.status(400).json({ error: 'נדרש פרמטר חודש (YYYY-MM)' });
 
   const { start, end } = monthRange(month);
 
@@ -192,14 +192,14 @@ router.get('/reports', asyncHandler(async (req, res) => {
 // POST /api/admin/reports/approve
 router.post('/reports/approve', asyncHandler(async (req, res) => {
   const { month } = req.body;
-  if (!month) return res.status(400).json({ error: 'month is required' });
+  if (!month) return res.status(400).json({ error: 'נדרש חודש' });
 
   const { data: existing } = await supabase.from('monthly_report_approvals').select('id').eq('month', month).maybeSingle();
-  if (existing) return res.status(409).json({ error: 'This month has already been approved and sent.' });
+  if (existing) return res.status(409).json({ error: 'החודש הזה כבר אושר ונשלח.' });
 
   const { start, end } = monthRange(month);
   const [year, mon] = month.split('-').map(Number);
-  const monthName = new Date(year, mon - 1).toLocaleString('en-US', { month: 'long' });
+  const monthName = new Date(year, mon - 1).toLocaleString('he-IL', { month: 'long' });
 
   const [
     { data: profiles, error: pErr },
@@ -244,14 +244,14 @@ router.post('/reports/approve', asyncHandler(async (req, res) => {
   const gmailUser = process.env.GMAIL_USER;
   const gmailPass = process.env.GMAIL_APP_PASSWORD;
   if (!gmailUser || !gmailPass)
-    return res.status(500).json({ error: 'Gmail credentials not configured on server' });
+    return res.status(500).json({ error: 'פרטי ההתחברות ל-Gmail אינם מוגדרים בשרת' });
 
   const transporter = nodemailer.createTransport({ service: 'gmail', auth: { user: gmailUser, pass: gmailPass } });
   await transporter.sendMail({
-    from: `Salary Tracker <${gmailUser}>`,
+    from: `Medical Pay <${gmailUser}>`,
     to: ACCOUNTING_EMAIL,
-    subject: `Monthly Reports Bundle — ${monthName} ${year}`,
-    text: `Please find attached all salary reports for ${monthName} ${year}.`,
+    subject: `חבילת דוחות חודשית — ${monthName} ${year}`,
+    text: `מצורפים כל דוחות השכר עבור ${monthName} ${year}.`,
     attachments: [{ filename: `reports-${month}.zip`, content: zipBuffer, contentType: 'application/zip' }],
   });
 
@@ -264,19 +264,19 @@ router.post('/reports/approve', asyncHandler(async (req, res) => {
 router.get('/users/:userId/report/excel', asyncHandler(async (req, res) => {
   const { userId } = req.params;
   const { month } = req.query;
-  if (!month) return res.status(400).json({ error: 'month param required (YYYY-MM)' });
+  if (!month) return res.status(400).json({ error: 'נדרש פרמטר חודש (YYYY-MM)' });
 
   const { start, end } = monthRange(month);
   const [year, mon] = month.split('-').map(Number);
-  const monthName = new Date(year, mon - 1).toLocaleString('en-US', { month: 'long' });
+  const monthName = new Date(year, mon - 1).toLocaleString('he-IL', { month: 'long' });
 
   const [{ data: profile }, { data: entries }] = await Promise.all([
     supabase.from('profiles').select(PROFILE_SELECT).eq('id', userId).single(),
     supabase.from('entries').select('*').eq('user_id', userId).gte('date', start).lte('date', end).order('date', { ascending: true }),
   ]);
-  if (!profile) return res.status(404).json({ error: 'User not found' });
+  if (!profile) return res.status(404).json({ error: 'משתמש לא נמצא' });
   if (!entries || entries.length === 0)
-    return res.status(404).json({ error: 'No entries for this month' });
+    return res.status(404).json({ error: 'אין רשומות לחודש זה' });
 
   const name = `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || profile.username;
   const workbook = new ExcelJS.Workbook();
@@ -284,7 +284,7 @@ router.get('/users/:userId/report/excel', asyncHandler(async (req, res) => {
   const buf = await workbook.xlsx.writeBuffer();
 
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-  res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(`${name} - ${monthName} ${year}.xlsx`)}"`);
+  res.setHeader('Content-Disposition', `attachment; filename="report.xlsx"; filename*=UTF-8''${encodeURIComponent(`${name} - ${monthName} ${year}.xlsx`)}`);
   res.send(Buffer.from(buf));
 }));
 
@@ -292,24 +292,24 @@ router.get('/users/:userId/report/excel', asyncHandler(async (req, res) => {
 router.post('/users/:userId/report/approve', asyncHandler(async (req, res) => {
   const { userId } = req.params;
   const { month } = req.body;
-  if (!month) return res.status(400).json({ error: 'month is required' });
+  if (!month) return res.status(400).json({ error: 'נדרש חודש' });
 
   const { data: existing } = await supabase.from('user_monthly_approvals')
     .select('id').eq('user_id', userId).eq('month', month).maybeSingle();
-  if (existing) return res.status(409).json({ error: 'This report has already been approved and sent.' });
+  if (existing) return res.status(409).json({ error: 'הדוח הזה כבר אושר ונשלח.' });
 
   try {
     const { start, end } = monthRange(month);
     const [year, mon] = month.split('-').map(Number);
-    const monthName = new Date(year, mon - 1).toLocaleString('en-US', { month: 'long' });
+    const monthName = new Date(year, mon - 1).toLocaleString('he-IL', { month: 'long' });
 
     const [{ data: profile }, { data: entriesRaw }] = await Promise.all([
       supabase.from('profiles').select(PROFILE_SELECT).eq('id', userId).single(),
       supabase.from('entries').select('*').eq('user_id', userId).gte('date', start).lte('date', end).order('date', { ascending: true }),
     ]);
-    if (!profile) return res.status(404).json({ error: 'User not found' });
+    if (!profile) return res.status(404).json({ error: 'משתמש לא נמצא' });
     if (!entriesRaw || entriesRaw.length === 0)
-      return res.status(404).json({ error: 'No entries for this month' });
+      return res.status(404).json({ error: 'אין רשומות לחודש זה' });
     const entries = entriesRaw || [];
 
     const name = `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || profile.username;
@@ -320,7 +320,7 @@ router.post('/users/:userId/report/approve', asyncHandler(async (req, res) => {
     const gmailUser = process.env.GMAIL_USER;
     const gmailPass = process.env.GMAIL_APP_PASSWORD;
     if (!gmailUser || !gmailPass)
-      return res.status(500).json({ error: 'Gmail credentials not configured on server' });
+      return res.status(500).json({ error: 'פרטי ההתחברות ל-Gmail אינם מוגדרים בשרת' });
 
     // Build signed URLs for receipts (7-day expiry) — avoids Gmail size limits
     const receiptPaths = entries.flatMap(e => [
@@ -336,15 +336,15 @@ router.post('/users/:userId/report/approve', asyncHandler(async (req, res) => {
     )).filter(Boolean);
 
     const receiptSection = signedUrls.length
-      ? `\n\nReceipts (links valid for 7 days):\n${signedUrls.map((r, i) => `${i + 1}. ${r.filename}\n   ${r.url}`).join('\n')}`
+      ? `\n\nקבלות (הקישורים תקפים ל-7 ימים):\n${signedUrls.map((r, i) => `${i + 1}. ${r.filename}\n   ${r.url}`).join('\n')}`
       : '';
 
     const transporter = nodemailer.createTransport({ service: 'gmail', auth: { user: gmailUser, pass: gmailPass } });
     await transporter.sendMail({
-      from: `Salary Tracker <${gmailUser}>`,
+      from: `Medical Pay <${gmailUser}>`,
       to: ACCOUNTING_EMAIL,
-      subject: `Salary Report — ${name} ${monthName} ${year}`,
-      text: `Please find attached the salary report for ${name} (${monthName} ${year}).${receiptSection}`,
+      subject: `דוח שכר — ${name} ${monthName} ${year}`,
+      text: `מצורף דוח השכר עבור ${name} (${monthName} ${year}).${receiptSection}`,
       attachments: [{
         filename: `${name} - ${monthName} ${year}.xlsx`,
         content: Buffer.from(buf),
@@ -359,7 +359,7 @@ router.post('/users/:userId/report/approve', asyncHandler(async (req, res) => {
 
     res.json({ success: true, approvedAt: approval.approved_at });
   } catch (err) {
-    const msg = typeof err?.message === 'string' ? err.message : 'Failed to approve report';
+    const msg = typeof err?.message === 'string' ? err.message : 'האישור נכשל';
     res.status(500).json({ error: msg });
   }
 }));

@@ -10,10 +10,10 @@ async function adminAuth(req, res, next) {
 
   if (error) {
     console.error('[adminAuth] profile lookup failed:', error.message);
-    return res.status(500).json({ error: 'Failed to verify admin access. Please try again.' });
+    return res.status(500).json({ error: 'אימות הרשאות הניהול נכשל. נסה שוב.' });
   }
   if (!profile?.is_admin) {
-    return res.status(403).json({ error: 'Admin access required' });
+    return res.status(403).json({ error: 'נדרשת גישת מנהל' });
   }
   next();
 }

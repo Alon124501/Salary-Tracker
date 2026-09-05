@@ -20,21 +20,21 @@ app.use('/api/auth/login', rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 10,
   standardHeaders: true, legacyHeaders: false,
-  message: { error: 'Too many login attempts. Try again in 15 minutes.' },
+  message: { error: 'יותר מדי ניסיונות התחברות. נסה שוב בעוד 15 דקות.' },
 }));
 
 app.use('/api/auth/register', rateLimit({
   windowMs: 60 * 60 * 1000, // 1 hour
   max: 5,
   standardHeaders: true, legacyHeaders: false,
-  message: { error: 'Too many registration attempts. Try again later.' },
+  message: { error: 'יותר מדי ניסיונות הרשמה. נסה שוב מאוחר יותר.' },
 }));
 
 app.use('/api/auth/forgot-password', rateLimit({
   windowMs: 60 * 60 * 1000,
   max: 5,
   standardHeaders: true, legacyHeaders: false,
-  message: { error: 'Too many password reset attempts. Try again later.' },
+  message: { error: 'יותר מדי ניסיונות איפוס סיסמה. נסה שוב מאוחר יותר.' },
 }));
 
 // ── Routes ─────────────────────────────────────────────────────────────────
@@ -59,7 +59,7 @@ app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
 // eslint-disable-next-line no-unused-vars
 app.use((err, req, res, _next) => {
   console.error(err);
-  res.status(err.status || 500).json({ error: 'Internal server error' });
+  res.status(err.status || 500).json({ error: 'שגיאת שרת פנימית' });
 });
 
 module.exports = app;

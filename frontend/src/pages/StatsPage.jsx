@@ -8,10 +8,10 @@ function currentMonth() {
 
 function monthLabel(month) {
   const [y, m] = month.split('-');
-  return new Date(y, m - 1).toLocaleString('en-US', { month: 'long', year: 'numeric' });
+  return new Date(y, m - 1).toLocaleString('he-IL', { month: 'long', year: 'numeric' });
 }
 
-const DAY_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+const DAY_LABELS = ['א׳', 'ב׳', 'ג׳', 'ד׳', 'ה׳', 'ו׳', 'ש׳'];
 
 function totalTestsFor(e) {
   return (e.insurance_tests || 0) + (e.screening_tests || 0) + (e.mixed_screening_tests || 0) + (e.partial_tests || 0);
@@ -61,8 +61,8 @@ export default function StatsPage() {
       {/* Page Header */}
       <section className="flex justify-between items-start">
         <div>
-          <h1 className="text-4xl font-extrabold tracking-tight text-slate-900 font-headline">Performance</h1>
-          <p className="text-cupertino-label text-sm mt-1 font-medium">Activity summary for {monthLabel(month)}</p>
+          <h1 className="text-4xl font-extrabold tracking-tight text-slate-900 font-headline">ביצועים</h1>
+          <p className="text-cupertino-label text-sm mt-1 font-medium">סיכום פעילות עבור {monthLabel(month)}</p>
         </div>
         <input
           type="month"
@@ -79,19 +79,19 @@ export default function StatsPage() {
         <div className="bg-white p-7 rounded-2xl shadow-sm border border-slate-100">
           <div className="flex justify-between items-start">
             <div>
-              <p className="text-cupertino-label font-bold text-[11px] uppercase tracking-[0.1em] mb-1">Monthly Test Counts</p>
+              <p className="text-cupertino-label font-bold text-[11px] uppercase tracking-[0.1em] mb-1">בדיקות חודשיות</p>
               <h2 className="text-5xl font-extrabold text-slate-900 tracking-tight font-headline">{(s.total_tests || 0).toLocaleString()}</h2>
             </div>
             <div className="flex items-center gap-1 text-brand-purple font-bold text-sm bg-purple-50 px-3 py-1 rounded-full">
               <span className="material-symbols-outlined text-xs">bar_chart</span>
-              <span>{s.days || 0} days</span>
+              <span>{s.days || 0} ימים</span>
             </div>
           </div>
           <div className="mt-8 space-y-3">
-            <StatRow label="Insurance" value={s.insurance_tests || 0} color="brand-gradient" max={s.total_tests || 1} />
-            <StatRow label="Screening" value={s.screening_tests || 0} color="bg-purple-400" max={s.total_tests || 1} />
-            <StatRow label="Mixed" value={s.mixed_screening_tests || 0} color="bg-indigo-400" max={s.total_tests || 1} />
-            <StatRow label="Partial" value={s.partial_tests || 0} color="bg-sky-400" max={s.total_tests || 1} />
+            <StatRow label="ביטוח" value={s.insurance_tests || 0} color="brand-gradient" max={s.total_tests || 1} />
+            <StatRow label="סקר" value={s.screening_tests || 0} color="bg-purple-400" max={s.total_tests || 1} />
+            <StatRow label="מעורב" value={s.mixed_screening_tests || 0} color="bg-indigo-400" max={s.total_tests || 1} />
+            <StatRow label="חלקי" value={s.partial_tests || 0} color="bg-sky-400" max={s.total_tests || 1} />
           </div>
         </div>
 
@@ -99,9 +99,9 @@ export default function StatsPage() {
         <div className="bg-white p-7 rounded-2xl shadow-sm border border-slate-100">
           <div className="flex justify-between items-start">
             <div>
-              <p className="text-cupertino-label font-bold text-[11px] uppercase tracking-[0.1em] mb-1">Distance Driven</p>
+              <p className="text-cupertino-label font-bold text-[11px] uppercase tracking-[0.1em] mb-1">מרחק נסיעה</p>
               <h2 className="text-5xl font-extrabold text-slate-900 tracking-tight font-headline">
-                {(s.kilometers || 0).toFixed(1)} <span className="text-xl font-medium text-cupertino-label">km</span>
+                {(s.kilometers || 0).toFixed(1)} <span className="text-xl font-medium text-cupertino-label">ק״מ</span>
               </h2>
             </div>
             <div className="w-12 h-12 rounded-xl bg-purple-50 flex items-center justify-center text-brand-purple">
@@ -111,7 +111,7 @@ export default function StatsPage() {
           {s.office_hours > 0 && (
             <div className="mt-2 flex items-center gap-2 text-cupertino-label text-sm">
               <span className="material-symbols-outlined text-base">corporate_fare</span>
-              <span className="font-medium">{s.office_hours} office hours this month</span>
+              <span className="font-medium">{s.office_hours} שעות משרד החודש</span>
             </div>
           )}
         </div>
@@ -120,8 +120,8 @@ export default function StatsPage() {
       {/* Weekly Activity Bar Chart */}
       <section className="bg-white p-7 rounded-2xl border border-slate-100">
         <div className="flex justify-between items-center mb-10">
-          <h3 className="text-lg font-bold text-slate-900 font-headline">Weekly Activity</h3>
-          <span className="text-brand-purple text-xs font-bold uppercase tracking-wider">Daily Tests</span>
+          <h3 className="text-lg font-bold text-slate-900 font-headline">פעילות שבועית</h3>
+          <span className="text-brand-purple text-xs font-bold uppercase tracking-wider">בדיקות יומיות</span>
         </div>
         <div className="flex items-end justify-between h-40 gap-3">
           {weekBars.map((bar, i) => {
@@ -132,7 +132,7 @@ export default function StatsPage() {
                 <div
                   className={`w-full rounded-full transition-all duration-500 ${bar.total > 0 ? 'brand-gradient' : 'bg-slate-100'}`}
                   style={{ height: `${height}%`, minHeight: bar.total > 0 ? 8 : 8 }}
-                  title={bar.total > 0 ? `${bar.total} tests` : 'No entry'}
+                  title={bar.total > 0 ? `${bar.total} בדיקות` : 'אין רישום'}
                 />
                 <span className={`text-[10px] font-bold uppercase ${isToday ? 'text-brand-purple' : 'text-cupertino-label'}`}>
                   {DAY_LABELS[bar.day]}
@@ -145,7 +145,7 @@ export default function StatsPage() {
 
       {/* Efficiency */}
       <section className="pb-8 space-y-3">
-        <h3 className="text-[11px] font-bold text-cupertino-label uppercase tracking-[0.15em] ml-1">Efficiency</h3>
+        <h3 className="text-[11px] font-bold text-cupertino-label uppercase tracking-[0.15em] me-1">יעילות</h3>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
           <div className="flex items-center justify-between p-5 bg-white rounded-2xl border border-slate-100">
             <div className="flex items-center gap-4">
@@ -153,8 +153,8 @@ export default function StatsPage() {
                 <span className="material-symbols-outlined" style={{ fontVariationSettings: "'FILL' 1" }}>bolt</span>
               </div>
               <div>
-                <p className="text-sm font-bold text-slate-900">Avg. Daily Tests</p>
-                <p className="text-[11px] text-cupertino-label font-medium">Based on work days</p>
+                <p className="text-sm font-bold text-slate-900">ממוצע בדיקות יומי</p>
+                <p className="text-[11px] text-cupertino-label font-medium">מבוסס על ימי עבודה</p>
               </div>
             </div>
             <span className="text-xl font-extrabold text-slate-900">{avgDailyTests.toFixed(1)}</span>
@@ -166,8 +166,8 @@ export default function StatsPage() {
                 <span className="material-symbols-outlined" style={{ fontVariationSettings: "'FILL' 1" }}>calendar_month</span>
               </div>
               <div>
-                <p className="text-sm font-bold text-slate-900">Work Days Logged</p>
-                <p className="text-[11px] text-cupertino-label font-medium">This month</p>
+                <p className="text-sm font-bold text-slate-900">ימי עבודה שנרשמו</p>
+                <p className="text-[11px] text-cupertino-label font-medium">החודש</p>
               </div>
             </div>
             <span className="text-xl font-extrabold text-slate-900">{s.days || 0}</span>

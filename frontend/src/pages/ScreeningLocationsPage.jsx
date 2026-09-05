@@ -5,7 +5,7 @@ const TEST_TYPES = ['early_detection', 'cardio', 'fit_wellness'];
 const TEST_LABELS = {
   early_detection: 'גילוי מוקדם',
   cardio: 'קרדיו',
-  fit_wellness: 'Fit & Wellness',
+  fit_wellness: 'כושר ורווחה',
 };
 const TEST_COLORS = {
   early_detection: 'bg-emerald-50 text-emerald-700',

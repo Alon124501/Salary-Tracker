@@ -12,12 +12,12 @@ function activityColor(shiftsPerWeek) {
 }
 
 const TABS = [
-  { id: 'directory',    label: 'Directory',    icon: 'people' },
-  { id: 'equipment',    label: 'Equipment',    icon: 'medical_services' },
-  { id: 'reports',       label: 'Reports',       icon: 'assignment' },
-  { id: 'notifications', label: 'Notifications', icon: 'notifications' },
-  { id: 'faq',           label: 'Portal',        icon: 'hub' },
-  { id: 'eq_orders',     label: 'Orders',        icon: 'inventory' },
+  { id: 'directory',    label: 'מדריך עובדים', icon: 'people' },
+  { id: 'equipment',    label: 'ציוד',          icon: 'medical_services' },
+  { id: 'reports',       label: 'דוחות',         icon: 'assignment' },
+  { id: 'notifications', label: 'התראות',        icon: 'notifications' },
+  { id: 'faq',           label: 'פורטל',         icon: 'hub' },
+  { id: 'eq_orders',     label: 'הזמנות',        icon: 'inventory' },
 ];
 
 const FAQ_CATEGORIES = [
@@ -194,14 +194,14 @@ export default function AdminDashboard() {
       await api.post('/equipment/catalog', { name: newItemName.trim() });
       setNewItemName('');
       loadEqCatalog();
-    } catch (err) { showToast(err?.response?.data?.error || 'Failed to add item'); }
+    } catch (err) { showToast(err?.response?.data?.error || 'הוספת הפריט נכשלה'); }
   }
 
   async function deleteCatalogItem(id) {
     try {
       await api.delete(`/equipment/catalog/${id}`);
       loadEqCatalog();
-    } catch (err) { showToast(err?.response?.data?.error || 'Failed to delete item'); }
+    } catch (err) { showToast(err?.response?.data?.error || 'מחיקת הפריט נכשלה'); }
   }
 
   // ── Device catalog actions ──────────────────────────────────────────────
@@ -211,14 +211,14 @@ export default function AdminDashboard() {
       await api.post('/devices/catalog', { name: newDeviceName.trim() });
       setNewDeviceName('');
       loadDeviceCatalog();
-    } catch (err) { showToast(err?.response?.data?.error || 'Failed to add device'); }
+    } catch (err) { showToast(err?.response?.data?.error || 'הוספת המכשיר נכשלה'); }
   }
 
   async function deleteDeviceCatalogItem(id) {
     try {
       await api.delete(`/devices/catalog/${id}`);
       loadDeviceCatalog();
-    } catch (err) { showToast(err?.response?.data?.error || 'Failed to delete device'); }
+    } catch (err) { showToast(err?.response?.data?.error || 'מחיקת המכשיר נכשלה'); }
   }
 
   async function deleteEmployee(user) {
@@ -228,9 +228,9 @@ export default function AdminDashboard() {
       setUsers(prev => prev.filter(u => u.id !== user.id));
       setSelectedUser(null);
       setDeleteConfirmUser(null);
-      showToast(`${user.first_name || ''} ${user.last_name || ''}`.trim() + ' has been deleted', 'success');
+      showToast(`${user.first_name || ''} ${user.last_name || ''}`.trim() + ' נמחק/ה בהצלחה', 'success');
     } catch (err) {
-      showToast(err?.response?.data?.error || 'Failed to delete employee');
+      showToast(err?.response?.data?.error || 'מחיקת העובד נכשלה');
     } finally {
       setDeletingUser(false);
     }
@@ -242,8 +242,8 @@ export default function AdminDashboard() {
       await api.delete(`/equipment/orders/${id}`);
       setEqOrders(prev => prev.filter(o => o.id !== id));
       setEqOrderModal(null);
-      showToast('Order marked as complete', 'success');
-    } catch (err) { showToast(err?.response?.data?.error || 'Failed to complete order'); }
+      showToast('ההזמנה סומנה כהושלמה', 'success');
+    } catch (err) { showToast(err?.response?.data?.error || 'השלמת ההזמנה נכשלה'); }
     finally { setCompletingOrderId(null); }
   }
 
@@ -260,7 +260,7 @@ export default function AdminDashboard() {
         const devices = hasIt ? u.devices.filter(d => d.id !== device.id) : [...u.devices, device];
         return { ...u, devices };
       }));
-    } catch (err) { showToast(err?.response?.data?.error || 'Failed to update device'); }
+    } catch (err) { showToast(err?.response?.data?.error || 'עדכון המכשיר נכשל'); }
   }
 
   // ── Echo certified toggle ──────────────────────────────────────────────
@@ -268,7 +268,7 @@ export default function AdminDashboard() {
     try {
       await api.patch(`/admin/users/${userId}`, { echo_certified: !current });
       setUsers(prev => prev.map(u => u.id === userId ? { ...u, echo_certified: !current } : u));
-    } catch (err) { showToast(err?.response?.data?.error || 'Failed to update echo certification'); }
+    } catch (err) { showToast(err?.response?.data?.error || 'עדכון הסמכת אקו נכשל'); }
   }
 
   // ── Notifications ─────────────────────────────────────────────────────
@@ -314,7 +314,7 @@ export default function AdminDashboard() {
       if (docFileInputRef.current) docFileInputRef.current.value = '';
       loadNotifications();
     } catch (err) {
-      setNotifError(err?.response?.data?.error || 'Failed to send notification. Please try again.');
+      setNotifError(err?.response?.data?.error || 'שליחת ההתראה נכשלה. נסו שוב.');
     }
     finally { setNotifSubmitting(false); }
   }
@@ -343,13 +343,13 @@ export default function AdminDashboard() {
       const res = await api.get(`/admin/users/${userId}/report/excel?month=${reportMonth}`, { responseType: 'blob' });
       const url = URL.createObjectURL(new Blob([res.data]));
       const [yr, mo] = reportMonth.split('-').map(Number);
-      const monthLabel = new Date(yr, mo - 1).toLocaleString('en-US', { month: 'long' });
+      const monthLabel = new Date(yr, mo - 1).toLocaleString('he-IL', { month: 'long' });
       const a = document.createElement('a');
       a.href = url;
       a.download = `${userName} - ${monthLabel} ${yr}.xlsx`;
       a.click();
       URL.revokeObjectURL(url);
-    } catch (err) { showToast(err?.response?.data?.error || 'Failed to download report'); }
+    } catch (err) { showToast(err?.response?.data?.error || 'הורדת הדוח נכשלה'); }
     finally { setDownloadingId(null); }
   }
 
@@ -362,7 +362,7 @@ export default function AdminDashboard() {
       const { data } = await api.post('/faq', { category: faqCategory, question: newFaqQ.trim(), answer: newFaqA.trim(), sort_order });
       setFaqItems(prev => ({ ...prev, [faqCategory]: [...prev[faqCategory], data] }));
       setNewFaqQ(''); setNewFaqA(''); setAddingFaq(false);
-    } catch (err) { showToast(err?.response?.data?.error || 'Failed to save question'); }
+    } catch (err) { showToast(err?.response?.data?.error || 'שמירת השאלה נכשלה'); }
     finally { setFaqSaving(false); }
   }
 
@@ -376,7 +376,7 @@ export default function AdminDashboard() {
         [faqCategory]: prev[faqCategory].map(x => x.id === id ? { ...x, question: editFaqQ.trim(), answer: editFaqA.trim() } : x),
       }));
       setEditingFaqId(null);
-    } catch (err) { showToast(err?.response?.data?.error || 'Failed to update question'); }
+    } catch (err) { showToast(err?.response?.data?.error || 'עדכון השאלה נכשל'); }
     finally { setFaqSaving(false); }
   }
 
@@ -416,7 +416,7 @@ export default function AdminDashboard() {
       const { data } = await api.post('/portal/credentials', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
       setAppCreds(prev => [...prev, data]);
       setNewAppName(''); setNewAppUser(''); setNewAppPass(''); setNewAppImage(null); setAddingApp(false);
-    } catch (err) { showToast(err?.response?.data?.error || 'Failed to save app'); }
+    } catch (err) { showToast(err?.response?.data?.error || 'שמירת האפליקציה נכשלה'); }
     finally { setAppSaving(false); }
   }
 
@@ -432,7 +432,7 @@ export default function AdminDashboard() {
       const { data } = await api.patch(`/portal/credentials/${id}`, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
       setAppCreds(prev => prev.map(x => x.id === id ? data : x));
       setEditingAppId(null); setEditAppImage(null);
-    } catch (err) { showToast(err?.response?.data?.error || 'Failed to update app'); }
+    } catch (err) { showToast(err?.response?.data?.error || 'עדכון האפליקציה נכשל'); }
     finally { setAppSaving(false); }
   }
 
@@ -488,7 +488,7 @@ export default function AdminDashboard() {
       setTutorialVideos(prev => [...prev, data]);
       setNewVideoTitle(''); setNewVideoDeviceId(''); setNewVideoDeviceOther('');
       setNewVideoDesc(''); setNewVideoFile(null); setNewVideoUrl(''); setAddingVideo(false);
-    } catch (err) { showToast(err?.response?.data?.error || 'Failed to save video'); }
+    } catch (err) { showToast(err?.response?.data?.error || 'שמירת הסרטון נכשלה'); }
     finally { setVideoSaving(false); }
   }
 
@@ -505,7 +505,7 @@ export default function AdminDashboard() {
       });
       setTutorialVideos(prev => prev.map(x => x.id === id ? data : x));
       setEditingVideoId(null);
-    } catch (err) { showToast(err?.response?.data?.error || 'Failed to update video'); }
+    } catch (err) { showToast(err?.response?.data?.error || 'עדכון הסרטון נכשל'); }
     finally { setVideoSaving(false); }
   }
 
@@ -562,7 +562,7 @@ export default function AdminDashboard() {
       setContacts(prev => [...prev, data]);
       setNewContact({ name: '', title: '', phone: '' });
       setAddingContact(false);
-    } catch (err) { showToast(err?.response?.data?.error || 'Failed to save contact'); }
+    } catch (err) { showToast(err?.response?.data?.error || 'שמירת איש הקשר נכשלה'); }
     finally { setContactSaving(false); }
   }
 
@@ -577,7 +577,7 @@ export default function AdminDashboard() {
       });
       setContacts(prev => prev.map(x => x.id === id ? data : x));
       setEditingContactId(null);
-    } catch (err) { showToast(err?.response?.data?.error || 'Failed to update contact'); }
+    } catch (err) { showToast(err?.response?.data?.error || 'עדכון איש הקשר נכשל'); }
     finally { setContactSaving(false); }
   }
 
@@ -604,8 +604,8 @@ export default function AdminDashboard() {
       const status = err.response?.status;
       const raw = err.response?.data?.error;
       const text = status === 409
-        ? 'Already approved and sent.'
-        : (typeof raw === 'string' ? raw : 'Failed to approve.');
+        ? 'הדוח כבר אושר ונשלח.'
+        : (typeof raw === 'string' ? raw : 'האישור נכשל.');
       setApproveMsgs(prev => ({ ...prev, [userId]: text }));
     } finally {
       setApprovingId(null);
@@ -641,7 +641,7 @@ export default function AdminDashboard() {
       await api.patch(`/admin/users/${selectedUser.id}`, updates);
       setUsers(prev => prev.map(u => u.id === selectedUser.id ? { ...u, ...updates } : u));
       setSelectedUser(null);
-    } catch (err) { showToast(err?.response?.data?.error || 'Failed to save changes'); }
+    } catch (err) { showToast(err?.response?.data?.error || 'שמירת השינויים נכשלה'); }
     finally { setDrawerSaving(false); }
   }
 
@@ -665,8 +665,8 @@ export default function AdminDashboard() {
     <div className="min-h-screen bg-slate-50 pt-16 pb-24">
       {/* Page header */}
       <div className="px-4 pt-6 pb-2">
-        <h1 className="text-xl font-extrabold text-slate-900 tracking-tight">Admin Dashboard</h1>
-        <p className="text-xs text-slate-400 mt-0.5">{users.length} employees</p>
+        <h1 className="text-xl font-extrabold text-slate-900 tracking-tight">לוח ניהול</h1>
+        <p className="text-xs text-slate-400 mt-0.5">{users.length} עובדים</p>
       </div>
 
       {/* Tabs */}
@@ -715,13 +715,13 @@ export default function AdminDashboard() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1.5 flex-wrap">
                     <p className="font-bold text-slate-800 text-sm">{name}</p>
-                    {u.is_admin && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full brand-gradient text-white">Admin</span>}
+                    {u.is_admin && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full brand-gradient text-white">מנהל</span>}
                   </div>
                   <p className="text-xs text-slate-400 mt-0.5 truncate">
                     {u.email || '—'}
                   </p>
                 </div>
-                <span className="material-symbols-outlined text-slate-300 text-xl flex-shrink-0">chevron_right</span>
+                <span className="material-symbols-outlined text-slate-300 text-xl flex-shrink-0">chevron_left</span>
               </button>
             );
           })}
@@ -733,7 +733,7 @@ export default function AdminDashboard() {
         <div className="px-4 space-y-4">
           {/* Sub-tab toggle */}
           <div className="flex gap-2">
-            {[{ id: 'grid', label: 'Grid', icon: 'grid_view' }, { id: 'catalog', label: 'Catalog', icon: 'list' }].map(st => (
+            {[{ id: 'grid', label: 'טבלה', icon: 'grid_view' }, { id: 'catalog', label: 'קטלוג', icon: 'list' }].map(st => (
               <button
                 key={st.id}
                 onClick={() => setDevSubTab(st.id)}
@@ -754,12 +754,12 @@ export default function AdminDashboard() {
               <table className="min-w-full text-xs">
                 <thead>
                   <tr className="bg-slate-50 text-[10px] uppercase tracking-wide text-slate-500 font-semibold">
-                    <th className="sticky left-0 z-10 bg-slate-50 text-left px-3 py-2.5 min-w-[140px]">Employee</th>
+                    <th className="sticky right-0 z-10 bg-slate-50 text-right px-3 py-2.5 min-w-[140px]">עובד</th>
                     {deviceCatalog.map(d => (
                       <th key={d.id} className="text-center px-3 py-2.5 min-w-[80px]">{d.name}</th>
                     ))}
-                    <th className="text-center px-3 py-2.5 min-w-[90px]">Echo Cert.</th>
-                    <th className="text-center px-3 py-2.5 min-w-[110px]">Last Reported</th>
+                    <th className="text-center px-3 py-2.5 min-w-[90px]">הסמכת אקו</th>
+                    <th className="text-center px-3 py-2.5 min-w-[110px]">דיווח אחרון</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -768,7 +768,7 @@ export default function AdminDashboard() {
                     const rowBg = i % 2 === 0 ? 'bg-white' : 'bg-slate-50/50';
                     return (
                       <tr key={u.id} className={`${rowBg} border-b border-slate-100`}>
-                        <td className={`sticky left-0 z-10 ${rowBg} px-3 py-2.5 font-semibold text-slate-800 whitespace-nowrap`}>{name}</td>
+                        <td className={`sticky right-0 z-10 ${rowBg} px-3 py-2.5 font-semibold text-slate-800 whitespace-nowrap`}>{name}</td>
                         {deviceCatalog.map(device => {
                           const has = u.devices.some(d => d.id === device.id);
                           return (
@@ -776,7 +776,7 @@ export default function AdminDashboard() {
                               <button
                                 onClick={() => toggleDevice(u.id, device, has)}
                                 className={`px-2 py-1 rounded-lg text-[11px] font-bold transition-all active:scale-95 ${has ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-600'}`}
-                              >{has ? 'Yes' : 'No'}</button>
+                              >{has ? 'כן' : 'לא'}</button>
                             </td>
                           );
                         })}
@@ -784,12 +784,12 @@ export default function AdminDashboard() {
                           <button
                             onClick={() => toggleEcho(u.id, u.echo_certified)}
                             className={`px-2 py-1 rounded-lg text-[11px] font-bold transition-all active:scale-95 ${u.echo_certified ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-600'}`}
-                          >{u.echo_certified ? 'Yes' : 'No'}</button>
+                          >{u.echo_certified ? 'כן' : 'לא'}</button>
                         </td>
-                        <td className="px-3 py-2.5 text-center text-slate-400" title="Date employee last submitted their own recap; admin edits above do not change this date">
+                        <td className="px-3 py-2.5 text-center text-slate-400" title="התאריך שבו העובד דיווח לאחרונה בעצמו; עריכות מנהל למעלה אינן משנות תאריך זה">
                           {u.last_reported
-                            ? new Date(u.last_reported).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-                            : 'Never'}
+                            ? new Date(u.last_reported).toLocaleDateString('he-IL', { month: 'short', day: 'numeric' })
+                            : 'מעולם לא'}
                         </td>
                       </tr>
                     );
@@ -808,7 +808,7 @@ export default function AdminDashboard() {
                   value={newDeviceName}
                   onChange={e => setNewDeviceName(e.target.value)}
                   onKeyDown={e => e.key === 'Enter' && addDeviceCatalogItem()}
-                  placeholder="Device name..."
+                  placeholder="שם המכשיר..."
                   className="flex-1 px-3 py-2.5 text-sm rounded-xl border border-slate-200 focus:border-brand-purple/50 focus:outline-none bg-white"
                 />
                 <button
@@ -816,7 +816,7 @@ export default function AdminDashboard() {
                   className="px-4 py-2.5 rounded-xl text-sm font-bold text-white brand-gradient active:scale-95 transition-all"
                   style={{ boxShadow: '0 4px 14px rgba(139,53,217,0.25)' }}
                 >
-                  Add
+                  הוספה
                 </button>
               </div>
               {deviceCatalogLoading ? (
@@ -827,7 +827,7 @@ export default function AdminDashboard() {
                 <div className="bg-white rounded-2xl border border-slate-100 py-10 flex flex-col items-center gap-2 text-slate-400"
                   style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
                   <span className="material-symbols-outlined text-3xl opacity-30">devices</span>
-                  <p className="text-sm">No devices in catalog yet</p>
+                  <p className="text-sm">אין עדיין מכשירים בקטלוג</p>
                 </div>
               ) : (
                 <div className="flex flex-col gap-2">
@@ -871,30 +871,30 @@ export default function AdminDashboard() {
           ) : !reportSummary || !reportSummary.summaries.some(s => s.totals.days > 0) ? (
             <div className="bg-white rounded-2xl border border-slate-100 py-12 flex flex-col items-center gap-2 text-slate-400">
               <span className="material-symbols-outlined text-4xl opacity-30">inbox</span>
-              <p className="text-sm font-medium">No entries for this month</p>
+              <p className="text-sm font-medium">אין רשומות לחודש זה</p>
             </div>
           ) : (
             <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden">
               <div className="px-4 py-3 border-b border-slate-100">
-                <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">Employee Reports</p>
+                <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">דוחות עובדים</p>
               </div>
               {reportSummary.summaries.filter(s => s.totals.days > 0).map(s => {
                 const isDownloading = downloadingId === s.user.id;
                 const isApproving  = approvingId   === s.user.id;
                 const errMsg       = approveMsgs[s.user.id];
                 const approvedAt   = s.approved?.at
-                  ? new Date(s.approved.at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+                  ? new Date(s.approved.at).toLocaleDateString('he-IL', { month: 'short', day: 'numeric' })
                   : null;
                 return (
                   <div key={s.user.id} className="px-4 py-3.5 border-b border-slate-50 last:border-0">
                     <div className="flex items-center justify-between gap-3 flex-wrap">
                       <div className="min-w-0">
                         <p className="font-bold text-slate-800 text-sm">{s.user.name}</p>
-                        <p className="text-[11px] text-slate-400 mt-0.5">{s.totals.days} day{s.totals.days !== 1 ? 's' : ''} · {s.totals.total_tests} test{s.totals.total_tests !== 1 ? 's' : ''}</p>
+                        <p className="text-[11px] text-slate-400 mt-0.5">{s.totals.days} {s.totals.days !== 1 ? 'ימים' : 'יום'} · {s.totals.total_tests} {s.totals.total_tests !== 1 ? 'בדיקות' : 'בדיקה'}</p>
                         {s.foodAudit?.overBy > 0 && (
                           <p className="text-[11px] font-bold text-amber-600 mt-1 flex items-center gap-1">
                             <span className="material-symbols-outlined text-sm">warning</span>
-                            Food: ₪{s.foodAudit.claimed.toLocaleString()} claimed / ₪{s.foodAudit.entitlement.toLocaleString()} allowed ({s.foodAudit.qualifyingDays} qualifying day{s.foodAudit.qualifyingDays !== 1 ? 's' : ''}) — over by ₪{s.foodAudit.overBy.toLocaleString()}
+                            אוכל: ₪{s.foodAudit.claimed.toLocaleString()} נתבע / ₪{s.foodAudit.entitlement.toLocaleString()} מותר ({s.foodAudit.qualifyingDays} {s.foodAudit.qualifyingDays !== 1 ? 'ימים מזכים' : 'יום מזכה'}) — חריגה של ₪{s.foodAudit.overBy.toLocaleString()}
                           </p>
                         )}
                       </div>
@@ -906,8 +906,8 @@ export default function AdminDashboard() {
                           className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-xl border border-slate-200 bg-white text-slate-600 hover:border-brand-purple/40 active:scale-95 transition-all disabled:opacity-50"
                         >
                           {isDownloading
-                            ? <><span className="material-symbols-outlined text-sm animate-spin">progress_activity</span> Downloading...</>
-                            : <><span className="material-symbols-outlined text-sm">download</span> Open Report</>
+                            ? <><span className="material-symbols-outlined text-sm animate-spin">progress_activity</span> מוריד...</>
+                            : <><span className="material-symbols-outlined text-sm">download</span> פתח דוח</>
                           }
                         </button>
 
@@ -915,7 +915,7 @@ export default function AdminDashboard() {
                         {approvedAt ? (
                           <span className="flex items-center gap-1 text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1.5 rounded-xl border border-emerald-200 whitespace-nowrap">
                             <span className="material-symbols-outlined text-sm" style={{ fontVariationSettings: "'FILL' 1" }}>check_circle</span>
-                            Approved {approvedAt}
+                            אושר {approvedAt}
                           </span>
                         ) : (
                           <button
@@ -925,8 +925,8 @@ export default function AdminDashboard() {
                             style={{ boxShadow: '0 2px 8px rgba(139,53,217,0.25)' }}
                           >
                             {isApproving
-                              ? <><span className="material-symbols-outlined text-sm animate-spin">progress_activity</span> Approving...</>
-                              : <><span className="material-symbols-outlined text-sm">send</span> Approve</>
+                              ? <><span className="material-symbols-outlined text-sm animate-spin">progress_activity</span> מאשר...</>
+                              : <><span className="material-symbols-outlined text-sm">send</span> אישור</>
                             }
                           </button>
                         )}
@@ -947,7 +947,7 @@ export default function AdminDashboard() {
         <div className="px-4 space-y-4">
           {/* Sub-tab toggle */}
           <div className="flex gap-2">
-            {[{ id: 'faq', label: 'FAQ', icon: 'quiz' }, { id: 'apps', label: 'Apps', icon: 'apps' }, { id: 'contacts', label: 'Contacts', icon: 'call' }, { id: 'videos', label: 'Videos', icon: 'smart_display' }].map(st => {
+            {[{ id: 'faq', label: 'שאלות נפוצות', icon: 'quiz' }, { id: 'apps', label: 'אפליקציות', icon: 'apps' }, { id: 'contacts', label: 'אנשי קשר', icon: 'call' }, { id: 'videos', label: 'סרטונים', icon: 'smart_display' }].map(st => {
               const active = portalSubTab === st.id;
               return (
                 <button key={st.id} onClick={() => { setPortalSubTab(st.id); setAddingFaq(false); setEditingFaqId(null); setAddingApp(false); setEditingAppId(null); setAddingContact(false); setEditingContactId(null); setAddingVideo(false); setEditingVideoId(null); }}
@@ -970,7 +970,7 @@ export default function AdminDashboard() {
                   {appCreds.length === 0 && !addingApp && (
                     <div className="bg-white rounded-2xl border border-slate-100 py-10 flex flex-col items-center gap-2 text-slate-400">
                       <span className="material-symbols-outlined text-4xl opacity-30">apps</span>
-                      <p className="text-sm font-medium">No apps yet</p>
+                      <p className="text-sm font-medium">אין עדיין אפליקציות</p>
                     </div>
                   )}
                   {appCreds.map((cred, i) => {
@@ -979,12 +979,12 @@ export default function AdminDashboard() {
                       <div key={cred.id} className="bg-white rounded-2xl border border-slate-100 p-4 space-y-3">
                         {isEditing ? (
                           <>
-                            <Field label="App Name" value={editAppName} onChange={setEditAppName} />
-                            <Field label="Username" value={editAppUser} onChange={setEditAppUser} />
-                            <Field label="Password" value={editAppPass} onChange={setEditAppPass} />
+                            <Field label="שם האפליקציה" value={editAppName} onChange={setEditAppName} />
+                            <Field label="שם משתמש" value={editAppUser} onChange={setEditAppUser} />
+                            <Field label="סיסמה" value={editAppPass} onChange={setEditAppPass} />
                             {/* Image picker */}
                             <div>
-                              <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Image</label>
+                              <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">תמונה</label>
                               <label className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all ${editAppImage ? 'border-brand-purple/40 bg-purple-50' : 'border-slate-200 hover:border-brand-purple/30'}`}>
                                 {editAppImage ? (
                                   <img src={URL.createObjectURL(editAppImage)} className="w-8 h-8 rounded-lg object-cover flex-shrink-0" alt="" />
@@ -993,15 +993,15 @@ export default function AdminDashboard() {
                                 ) : (
                                   <span className="material-symbols-outlined text-slate-400 text-xl flex-shrink-0">image</span>
                                 )}
-                                <span className="text-xs text-slate-500 flex-1">{editAppImage ? editAppImage.name : cred.image_signed_url ? 'Change image' : 'Upload image'}</span>
+                                <span className="text-xs text-slate-500 flex-1">{editAppImage ? editAppImage.name : cred.image_signed_url ? 'החלף תמונה' : 'העלה תמונה'}</span>
                                 <input type="file" accept="image/*" className="hidden" onChange={e => setEditAppImage(e.target.files[0] || null)} />
                               </label>
                             </div>
                             <div className="flex gap-2">
                               <button onClick={() => updateApp(cred.id)} disabled={appSaving || !editAppName.trim() || !editAppUser.trim() || !editAppPass.trim()}
-                                className="flex-1 py-2 rounded-xl text-sm font-bold text-white brand-gradient active:scale-95 transition-all disabled:opacity-50">Save</button>
+                                className="flex-1 py-2 rounded-xl text-sm font-bold text-white brand-gradient active:scale-95 transition-all disabled:opacity-50">שמור</button>
                               <button onClick={() => { setEditingAppId(null); setEditAppImage(null); }}
-                                className="flex-1 py-2 rounded-xl text-sm font-bold text-slate-600 bg-slate-100 active:scale-95 transition-all">Cancel</button>
+                                className="flex-1 py-2 rounded-xl text-sm font-bold text-slate-600 bg-slate-100 active:scale-95 transition-all">ביטול</button>
                             </div>
                           </>
                         ) : (
@@ -1022,7 +1022,7 @@ export default function AdminDashboard() {
                             <div className="flex-1 min-w-0 cursor-pointer" onClick={() => { setEditingAppId(cred.id); setEditAppName(cred.name); setEditAppUser(cred.username); setEditAppPass(cred.password); setEditAppImage(null); }}>
                               <p className="text-sm font-bold text-slate-800">{cred.name}</p>
                               <p className="text-xs text-slate-400 mt-0.5">{cred.username}</p>
-                              <p className="text-[10px] text-brand-purple mt-1 font-medium">Tap to edit</p>
+                              <p className="text-[10px] text-brand-purple mt-1 font-medium">הקש לעריכה</p>
                             </div>
                             <button onClick={() => deleteApp(cred.id)}
                               className="flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-lg bg-red-50 text-red-400 hover:bg-red-100 active:scale-95 transition-all">
@@ -1035,36 +1035,36 @@ export default function AdminDashboard() {
                   })}
                   {addingApp ? (
                     <div className="bg-white rounded-2xl border border-brand-purple/20 p-4 space-y-3">
-                      <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">New App</p>
-                      <Field label="App Name" value={newAppName} onChange={setNewAppName} />
-                      <Field label="Username" value={newAppUser} onChange={setNewAppUser} />
-                      <Field label="Password" value={newAppPass} onChange={setNewAppPass} />
+                      <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">אפליקציה חדשה</p>
+                      <Field label="שם האפליקציה" value={newAppName} onChange={setNewAppName} />
+                      <Field label="שם משתמש" value={newAppUser} onChange={setNewAppUser} />
+                      <Field label="סיסמה" value={newAppPass} onChange={setNewAppPass} />
                       {/* Image picker */}
                       <div>
-                        <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Image</label>
+                        <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">תמונה</label>
                         <label className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all ${newAppImage ? 'border-brand-purple/40 bg-purple-50' : 'border-slate-200 hover:border-brand-purple/30'}`}>
                           {newAppImage ? (
                             <img src={URL.createObjectURL(newAppImage)} className="w-8 h-8 rounded-lg object-cover flex-shrink-0" alt="" />
                           ) : (
                             <span className="material-symbols-outlined text-slate-400 text-xl flex-shrink-0">image</span>
                           )}
-                          <span className="text-xs text-slate-500 flex-1">{newAppImage ? newAppImage.name : 'Upload image (optional)'}</span>
+                          <span className="text-xs text-slate-500 flex-1">{newAppImage ? newAppImage.name : 'העלה תמונה (רשות)'}</span>
                           <input type="file" accept="image/*" className="hidden" onChange={e => setNewAppImage(e.target.files[0] || null)} />
                         </label>
                       </div>
                       <div className="flex gap-2">
                         <button onClick={saveApp} disabled={appSaving || !newAppName.trim() || !newAppUser.trim() || !newAppPass.trim()}
                           className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white brand-gradient active:scale-95 transition-all disabled:opacity-50">
-                          {appSaving ? 'Saving...' : 'Save'}
+                          {appSaving ? 'שומר...' : 'שמור'}
                         </button>
                         <button onClick={() => { setAddingApp(false); setNewAppName(''); setNewAppUser(''); setNewAppPass(''); setNewAppImage(null); }}
-                          className="flex-1 py-2.5 rounded-xl text-sm font-bold text-slate-600 bg-slate-100 active:scale-95 transition-all">Cancel</button>
+                          className="flex-1 py-2.5 rounded-xl text-sm font-bold text-slate-600 bg-slate-100 active:scale-95 transition-all">ביטול</button>
                       </div>
                     </div>
                   ) : (
                     <button onClick={() => { setAddingApp(true); setEditingAppId(null); }}
                       className="w-full py-3 rounded-2xl text-sm font-bold text-brand-purple border-2 border-dashed border-brand-purple/30 hover:border-brand-purple/50 bg-white active:scale-95 transition-all flex items-center justify-center gap-2">
-                      <span className="material-symbols-outlined text-base">add</span>Add App
+                      <span className="material-symbols-outlined text-base">add</span>הוספת אפליקציה
                     </button>
                   )}
                 </>
@@ -1105,7 +1105,7 @@ export default function AdminDashboard() {
               {faqItems[faqCategory].length === 0 && !addingFaq && (
                 <div className="bg-white rounded-2xl border border-slate-100 py-10 flex flex-col items-center gap-2 text-slate-400">
                   <span className="material-symbols-outlined text-4xl opacity-30">quiz</span>
-                  <p className="text-sm font-medium">No questions yet</p>
+                  <p className="text-sm font-medium">אין עדיין שאלות</p>
                 </div>
               )}
 
@@ -1120,7 +1120,7 @@ export default function AdminDashboard() {
                           value={editFaqQ}
                           onChange={e => setEditFaqQ(e.target.value)}
                           dir="rtl"
-                          placeholder="Question"
+                          placeholder="שאלה"
                           className="w-full px-3 py-2.5 text-sm rounded-xl border border-slate-200 focus:border-brand-purple/50 focus:outline-none"
                         />
                         <textarea
@@ -1128,7 +1128,7 @@ export default function AdminDashboard() {
                           onChange={e => setEditFaqA(e.target.value)}
                           dir="rtl"
                           rows={3}
-                          placeholder="Answer"
+                          placeholder="תשובה"
                           className="w-full px-3 py-2.5 text-sm rounded-xl border border-slate-200 focus:border-brand-purple/50 focus:outline-none resize-none"
                         />
                         <div className="flex gap-2">
@@ -1136,11 +1136,11 @@ export default function AdminDashboard() {
                             onClick={() => updateFaq(item.id)}
                             disabled={faqSaving || !editFaqQ.trim() || !editFaqA.trim()}
                             className="flex-1 py-2 rounded-xl text-sm font-bold text-white brand-gradient active:scale-95 transition-all disabled:opacity-50"
-                          >Save</button>
+                          >שמור</button>
                           <button
                             onClick={() => setEditingFaqId(null)}
                             className="flex-1 py-2 rounded-xl text-sm font-bold text-slate-600 bg-slate-100 active:scale-95 transition-all"
-                          >Cancel</button>
+                          >ביטול</button>
                         </div>
                       </>
                     ) : (
@@ -1170,7 +1170,7 @@ export default function AdminDashboard() {
                         >
                           <p className="text-sm font-semibold text-slate-800 leading-snug" dir="rtl">{item.question}</p>
                           <p className="text-xs text-slate-400 mt-1 leading-relaxed line-clamp-2" dir="rtl">{item.answer}</p>
-                          <p className="text-[10px] text-brand-purple mt-1.5 font-medium">Tap to edit</p>
+                          <p className="text-[10px] text-brand-purple mt-1.5 font-medium">הקש לעריכה</p>
                         </div>
 
                         {/* Delete */}
@@ -1189,12 +1189,12 @@ export default function AdminDashboard() {
               {/* Add question form / button */}
               {addingFaq ? (
                 <div className="bg-white rounded-2xl border border-brand-purple/20 p-4 space-y-3">
-                  <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">New Question</p>
+                  <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">שאלה חדשה</p>
                   <input
                     value={newFaqQ}
                     onChange={e => setNewFaqQ(e.target.value)}
                     dir="rtl"
-                    placeholder="Question..."
+                    placeholder="שאלה..."
                     className="w-full px-3 py-2.5 text-sm rounded-xl border border-slate-200 focus:border-brand-purple/50 focus:outline-none"
                   />
                   <textarea
@@ -1202,7 +1202,7 @@ export default function AdminDashboard() {
                     onChange={e => setNewFaqA(e.target.value)}
                     dir="rtl"
                     rows={3}
-                    placeholder="Answer..."
+                    placeholder="תשובה..."
                     className="w-full px-3 py-2.5 text-sm rounded-xl border border-slate-200 focus:border-brand-purple/50 focus:outline-none resize-none"
                   />
                   <div className="flex gap-2">
@@ -1211,12 +1211,12 @@ export default function AdminDashboard() {
                       disabled={faqSaving || !newFaqQ.trim() || !newFaqA.trim()}
                       className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white brand-gradient active:scale-95 transition-all disabled:opacity-50"
                     >
-                      {faqSaving ? 'Saving...' : 'Save'}
+                      {faqSaving ? 'שומר...' : 'שמור'}
                     </button>
                     <button
                       onClick={() => { setAddingFaq(false); setNewFaqQ(''); setNewFaqA(''); }}
                       className="flex-1 py-2.5 rounded-xl text-sm font-bold text-slate-600 bg-slate-100 active:scale-95 transition-all"
-                    >Cancel</button>
+                    >ביטול</button>
                   </div>
                 </div>
               ) : (
@@ -1225,7 +1225,7 @@ export default function AdminDashboard() {
                   className="w-full py-3 rounded-2xl text-sm font-bold text-brand-purple border-2 border-dashed border-brand-purple/30 hover:border-brand-purple/50 bg-white active:scale-95 transition-all flex items-center justify-center gap-2"
                 >
                   <span className="material-symbols-outlined text-base">add</span>
-                  Add Question
+                  הוספת שאלה
                 </button>
               )}
             </>
@@ -1243,7 +1243,7 @@ export default function AdminDashboard() {
                   {contacts.length === 0 && !addingContact && (
                     <div className="bg-white rounded-2xl border border-slate-100 py-10 flex flex-col items-center gap-2 text-slate-400">
                       <span className="material-symbols-outlined text-4xl opacity-30">call</span>
-                      <p className="text-sm font-medium">No contacts yet</p>
+                      <p className="text-sm font-medium">אין עדיין אנשי קשר</p>
                     </div>
                   )}
                   {contacts.map((c, i) => {
@@ -1252,14 +1252,14 @@ export default function AdminDashboard() {
                       <div key={c.id} className="bg-white rounded-2xl border border-slate-100 p-4 space-y-3">
                         {isEditing ? (
                           <>
-                            <Field label="Name" value={editContact.name} onChange={v => setEditContact(p => ({ ...p, name: v }))} />
-                            <Field label="Role / Title" value={editContact.title} onChange={v => setEditContact(p => ({ ...p, title: v }))} placeholder="e.g. HR Manager" />
-                            <Field label="Phone" value={editContact.phone} onChange={v => setEditContact(p => ({ ...p, phone: v }))} type="tel" />
+                            <Field label="שם" value={editContact.name} onChange={v => setEditContact(p => ({ ...p, name: v }))} />
+                            <Field label="תפקיד" value={editContact.title} onChange={v => setEditContact(p => ({ ...p, title: v }))} placeholder="לדוגמה: מנהל משאבי אנוש" />
+                            <Field label="טלפון" value={editContact.phone} onChange={v => setEditContact(p => ({ ...p, phone: v }))} type="tel" />
                             <div className="flex gap-2">
                               <button onClick={() => updateContact(c.id)} disabled={contactSaving || !editContact.name.trim() || !editContact.phone.trim()}
-                                className="flex-1 py-2 rounded-xl text-sm font-bold text-white brand-gradient active:scale-95 transition-all disabled:opacity-50">Save</button>
+                                className="flex-1 py-2 rounded-xl text-sm font-bold text-white brand-gradient active:scale-95 transition-all disabled:opacity-50">שמור</button>
                               <button onClick={() => setEditingContactId(null)}
-                                className="flex-1 py-2 rounded-xl text-sm font-bold text-slate-600 bg-slate-100 active:scale-95 transition-all">Cancel</button>
+                                className="flex-1 py-2 rounded-xl text-sm font-bold text-slate-600 bg-slate-100 active:scale-95 transition-all">ביטול</button>
                             </div>
                           </>
                         ) : (
@@ -1281,13 +1281,13 @@ export default function AdminDashboard() {
                               <p className="text-sm font-bold text-slate-800">{c.name}</p>
                               {c.title && <p className="text-xs text-slate-400 mt-0.5">{c.title}</p>}
                               <p className="text-xs text-slate-500 mt-0.5">{c.phone}</p>
-                              <p className="text-[10px] text-brand-purple mt-1 font-medium">Tap to edit</p>
+                              <p className="text-[10px] text-brand-purple mt-1 font-medium">הקש לעריכה</p>
                             </div>
                             <a href={`tel:${c.phone}`}
                               className="flex items-center gap-1.5 text-xs font-bold text-white brand-gradient px-3 py-1.5 rounded-xl active:scale-95 transition-all flex-shrink-0"
                               style={{ boxShadow: '0 2px 8px rgba(139,53,217,0.25)' }}>
                               <span className="material-symbols-outlined text-sm" style={{ fontVariationSettings: "'FILL' 1" }}>call</span>
-                              Call
+                              התקשר
                             </a>
                             <button onClick={() => deleteContact(c.id)}
                               className="flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-lg bg-red-50 text-red-400 hover:bg-red-100 active:scale-95 transition-all">
@@ -1300,23 +1300,23 @@ export default function AdminDashboard() {
                   })}
                   {addingContact ? (
                     <div className="bg-white rounded-2xl border border-brand-purple/20 p-4 space-y-3">
-                      <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">New Contact</p>
-                      <Field label="Name" value={newContact.name} onChange={v => setNewContact(p => ({ ...p, name: v }))} />
-                      <Field label="Role / Title" value={newContact.title} onChange={v => setNewContact(p => ({ ...p, title: v }))} placeholder="e.g. HR Manager" />
-                      <Field label="Phone" value={newContact.phone} onChange={v => setNewContact(p => ({ ...p, phone: v }))} type="tel" />
+                      <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">איש קשר חדש</p>
+                      <Field label="שם" value={newContact.name} onChange={v => setNewContact(p => ({ ...p, name: v }))} />
+                      <Field label="תפקיד" value={newContact.title} onChange={v => setNewContact(p => ({ ...p, title: v }))} placeholder="לדוגמה: מנהל משאבי אנוש" />
+                      <Field label="טלפון" value={newContact.phone} onChange={v => setNewContact(p => ({ ...p, phone: v }))} type="tel" />
                       <div className="flex gap-2">
                         <button onClick={saveContact} disabled={contactSaving || !newContact.name.trim() || !newContact.phone.trim()}
                           className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white brand-gradient active:scale-95 transition-all disabled:opacity-50">
-                          {contactSaving ? 'Saving...' : 'Save'}
+                          {contactSaving ? 'שומר...' : 'שמור'}
                         </button>
                         <button onClick={() => { setAddingContact(false); setNewContact({ name: '', title: '', phone: '' }); }}
-                          className="flex-1 py-2.5 rounded-xl text-sm font-bold text-slate-600 bg-slate-100 active:scale-95 transition-all">Cancel</button>
+                          className="flex-1 py-2.5 rounded-xl text-sm font-bold text-slate-600 bg-slate-100 active:scale-95 transition-all">ביטול</button>
                       </div>
                     </div>
                   ) : (
                     <button onClick={() => { setAddingContact(true); setEditingContactId(null); }}
                       className="w-full py-3 rounded-2xl text-sm font-bold text-brand-purple border-2 border-dashed border-brand-purple/30 hover:border-brand-purple/50 bg-white active:scale-95 transition-all flex items-center justify-center gap-2">
-                      <span className="material-symbols-outlined text-base">add</span>Add Contact
+                      <span className="material-symbols-outlined text-base">add</span>הוספת איש קשר
                     </button>
                   )}
                 </>
@@ -1334,7 +1334,7 @@ export default function AdminDashboard() {
                   {tutorialVideos.length === 0 && !addingVideo && (
                     <div className="bg-white rounded-2xl border border-slate-100 py-10 flex flex-col items-center gap-2 text-slate-400">
                       <span className="material-symbols-outlined text-4xl opacity-30">smart_display</span>
-                      <p className="text-sm font-medium">No videos yet</p>
+                      <p className="text-sm font-medium">אין עדיין סרטונים</p>
                     </div>
                   )}
                   {tutorialVideos.map((v, i) => {
@@ -1344,29 +1344,29 @@ export default function AdminDashboard() {
                       <div key={v.id} className="bg-white rounded-2xl border border-slate-100 p-4 space-y-3">
                         {isEditing ? (
                           <>
-                            <Field label="Title" value={editVideoTitle} onChange={setEditVideoTitle} />
+                            <Field label="כותרת" value={editVideoTitle} onChange={setEditVideoTitle} />
                             <div>
-                              <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Device</label>
+                              <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">מכשיר</label>
                               <select
                                 value={editVideoDeviceId}
                                 onChange={e => setEditVideoDeviceId(e.target.value)}
                                 className="w-full px-3 py-2.5 text-sm rounded-xl border border-slate-200 focus:border-brand-purple/50 focus:outline-none bg-white"
                               >
-                                <option value="">None</option>
+                                <option value="">ללא</option>
                                 {deviceCatalog.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-                                <option value="__other__">Other...</option>
+                                <option value="__other__">אחר...</option>
                               </select>
                               {editVideoDeviceId === '__other__' && (
                                 <input
                                   value={editVideoDeviceOther}
                                   onChange={e => setEditVideoDeviceOther(e.target.value)}
-                                  placeholder="Device name"
+                                  placeholder="שם המכשיר"
                                   className="mt-2 w-full px-3 py-2.5 text-sm rounded-xl border border-slate-200 focus:border-brand-purple/50 focus:outline-none bg-white"
                                 />
                               )}
                             </div>
                             <div>
-                              <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Description</label>
+                              <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">תיאור</label>
                               <textarea
                                 value={editVideoDesc}
                                 onChange={e => setEditVideoDesc(e.target.value)}
@@ -1376,9 +1376,9 @@ export default function AdminDashboard() {
                             </div>
                             <div className="flex gap-2">
                               <button onClick={() => updateVideo(v.id)} disabled={videoSaving || !editVideoTitle.trim()}
-                                className="flex-1 py-2 rounded-xl text-sm font-bold text-white brand-gradient active:scale-95 transition-all disabled:opacity-50">Save</button>
+                                className="flex-1 py-2 rounded-xl text-sm font-bold text-white brand-gradient active:scale-95 transition-all disabled:opacity-50">שמור</button>
                               <button onClick={() => setEditingVideoId(null)}
-                                className="flex-1 py-2 rounded-xl text-sm font-bold text-slate-600 bg-slate-100 active:scale-95 transition-all">Cancel</button>
+                                className="flex-1 py-2 rounded-xl text-sm font-bold text-slate-600 bg-slate-100 active:scale-95 transition-all">ביטול</button>
                             </div>
                           </>
                         ) : (
@@ -1405,7 +1405,7 @@ export default function AdminDashboard() {
                             }}>
                               <p className="text-sm font-bold text-slate-800">{v.title}</p>
                               {deviceLabel && <p className="text-xs text-slate-400 mt-0.5">{deviceLabel}</p>}
-                              <p className="text-[10px] text-brand-purple mt-1 font-medium">Tap to edit</p>
+                              <p className="text-[10px] text-brand-purple mt-1 font-medium">הקש לעריכה</p>
                             </div>
                             <button onClick={() => deleteVideo(v.id)}
                               className="flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-lg bg-red-50 text-red-400 hover:bg-red-100 active:scale-95 transition-all">
@@ -1418,30 +1418,30 @@ export default function AdminDashboard() {
                   })}
                   {addingVideo ? (
                     <div className="bg-white rounded-2xl border border-brand-purple/20 p-4 space-y-3">
-                      <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">New Video</p>
-                      <Field label="Title" value={newVideoTitle} onChange={setNewVideoTitle} />
+                      <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">סרטון חדש</p>
+                      <Field label="כותרת" value={newVideoTitle} onChange={setNewVideoTitle} />
                       <div>
-                        <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Device</label>
+                        <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">מכשיר</label>
                         <select
                           value={newVideoDeviceId}
                           onChange={e => setNewVideoDeviceId(e.target.value)}
                           className="w-full px-3 py-2.5 text-sm rounded-xl border border-slate-200 focus:border-brand-purple/50 focus:outline-none bg-white"
                         >
-                          <option value="">None</option>
+                          <option value="">ללא</option>
                           {deviceCatalog.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-                          <option value="__other__">Other...</option>
+                          <option value="__other__">אחר...</option>
                         </select>
                         {newVideoDeviceId === '__other__' && (
                           <input
                             value={newVideoDeviceOther}
                             onChange={e => setNewVideoDeviceOther(e.target.value)}
-                            placeholder="Device name"
+                            placeholder="שם המכשיר"
                             className="mt-2 w-full px-3 py-2.5 text-sm rounded-xl border border-slate-200 focus:border-brand-purple/50 focus:outline-none bg-white"
                           />
                         )}
                       </div>
                       <div>
-                        <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Description</label>
+                        <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">תיאור</label>
                         <textarea
                           value={newVideoDesc}
                           onChange={e => setNewVideoDesc(e.target.value)}
@@ -1451,7 +1451,7 @@ export default function AdminDashboard() {
                       </div>
                       {/* Upload vs Link toggle */}
                       <div className="flex gap-2">
-                        {[['upload', 'Upload File'], ['link', 'Paste Link']].map(([mode, label]) => (
+                        {[['upload', 'העלאת קובץ'], ['link', 'הדבקת קישור']].map(([mode, label]) => (
                           <button key={mode} type="button"
                             onClick={() => setNewVideoSourceType(mode)}
                             className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all active:scale-95 ${
@@ -1463,29 +1463,29 @@ export default function AdminDashboard() {
                       {newVideoSourceType === 'upload' ? (
                         <label className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all ${newVideoFile ? 'border-brand-purple/40 bg-purple-50' : 'border-slate-200 hover:border-brand-purple/30'}`}>
                           <span className="material-symbols-outlined text-slate-400 text-xl flex-shrink-0">movie</span>
-                          <span className="text-xs text-slate-500 flex-1">{newVideoFile ? newVideoFile.name : 'Choose video file (max 200MB)'}</span>
+                          <span className="text-xs text-slate-500 flex-1">{newVideoFile ? newVideoFile.name : 'בחר קובץ וידאו (עד 200MB)'}</span>
                           <input type="file" accept="video/*" className="hidden" onChange={e => setNewVideoFile(e.target.files[0] || null)} />
                         </label>
                       ) : (
-                        <Field label="Video URL" value={newVideoUrl} onChange={setNewVideoUrl} placeholder="https://youtube.com/..." />
+                        <Field label="קישור לסרטון" value={newVideoUrl} onChange={setNewVideoUrl} placeholder="https://youtube.com/..." />
                       )}
                       <div className="flex gap-2">
                         <button onClick={saveVideo}
                           disabled={videoSaving || !newVideoTitle.trim() || (newVideoSourceType === 'upload' ? !newVideoFile : !newVideoUrl.trim()) || (newVideoFile && newVideoFile.size > 200 * 1024 * 1024)}
                           className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white brand-gradient active:scale-95 transition-all disabled:opacity-50">
-                          {videoSaving ? 'Saving...' : 'Save'}
+                          {videoSaving ? 'שומר...' : 'שמור'}
                         </button>
                         <button onClick={() => { setAddingVideo(false); setNewVideoTitle(''); setNewVideoDeviceId(''); setNewVideoDeviceOther(''); setNewVideoDesc(''); setNewVideoFile(null); setNewVideoUrl(''); }}
-                          className="flex-1 py-2.5 rounded-xl text-sm font-bold text-slate-600 bg-slate-100 active:scale-95 transition-all">Cancel</button>
+                          className="flex-1 py-2.5 rounded-xl text-sm font-bold text-slate-600 bg-slate-100 active:scale-95 transition-all">ביטול</button>
                       </div>
                       {newVideoFile && newVideoFile.size > 200 * 1024 * 1024 && (
-                        <p className="text-xs font-semibold text-red-500">File exceeds 200MB limit</p>
+                        <p className="text-xs font-semibold text-red-500">הקובץ חורג מהמגבלה של 200MB</p>
                       )}
                     </div>
                   ) : (
                     <button onClick={() => { setAddingVideo(true); setEditingVideoId(null); }}
                       className="w-full py-3 rounded-2xl text-sm font-bold text-brand-purple border-2 border-dashed border-brand-purple/30 hover:border-brand-purple/50 bg-white active:scale-95 transition-all flex items-center justify-center gap-2">
-                      <span className="material-symbols-outlined text-base">add</span>Add Video
+                      <span className="material-symbols-outlined text-base">add</span>הוספת סרטון
                     </button>
                   )}
                 </>
@@ -1501,31 +1501,31 @@ export default function AdminDashboard() {
 
           {/* Create notification form */}
           <div className="bg-white rounded-2xl border border-slate-100 shadow-card p-5 space-y-4">
-            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">New Notification</p>
+            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">התראה חדשה</p>
             <div>
-              <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Title</label>
+              <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">כותרת</label>
               <input
                 value={notifForm.title}
                 onChange={e => setNotifForm(p => ({ ...p, title: e.target.value }))}
-                placeholder="Notification title"
+                placeholder="כותרת ההתראה"
                 className="w-full px-3 py-2.5 text-sm rounded-xl border border-slate-200 focus:border-brand-purple/50 focus:outline-none bg-white"
               />
             </div>
             <div>
-              <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Content</label>
+              <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">תוכן</label>
               <textarea
                 value={notifForm.content}
                 onChange={e => setNotifForm(p => ({ ...p, content: e.target.value }))}
                 rows={4}
-                placeholder="Notification body..."
+                placeholder="תוכן ההתראה..."
                 className="w-full px-3 py-2.5 text-sm rounded-xl border border-slate-200 focus:border-brand-purple/50 focus:outline-none bg-white resize-none"
               />
             </div>
             {/* Send timing */}
             <div>
-              <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-2">When to Send</label>
+              <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-2">מתי לשלוח</label>
               <div className="flex gap-2">
-                {[['now', 'Send Now'], ['schedule', 'Schedule']].map(([mode, label]) => (
+                {[['now', 'שליחה מיידית'], ['schedule', 'תזמון']].map(([mode, label]) => (
                   <button
                     key={mode}
                     type="button"
@@ -1559,15 +1559,15 @@ export default function AdminDashboard() {
                 <div className={`w-10 h-6 rounded-full transition-colors ${notifForm.isRecurring ? 'brand-gradient' : 'bg-slate-200'}`} />
                 <div className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-transform ${notifForm.isRecurring ? 'translate-x-5' : 'translate-x-1'}`} />
               </div>
-              <span className="text-sm font-semibold text-slate-700">Repeat Weekly</span>
+              <span className="text-sm font-semibold text-slate-700">חזרה שבועית</span>
             </label>
 
             {notifForm.isRecurring && (
-              <div className="space-y-3 pl-4 border-l-2 border-brand-purple/20">
+              <div className="space-y-3 pr-4 border-r-2 border-brand-purple/20">
                 <div>
-                  <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-2">Repeat on</label>
+                  <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-2">חזרה בימים</label>
                   <div className="flex gap-1.5 flex-wrap">
-                    {['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map((day, i) => {
+                    {['א׳','ב׳','ג׳','ד׳','ה׳','ו׳','ש׳'].map((day, i) => {
                       const active = notifForm.recurrence_days.includes(i);
                       return (
                         <button
@@ -1588,7 +1588,7 @@ export default function AdminDashboard() {
                   </div>
                 </div>
                 <div>
-                  <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Time (Israel)</label>
+                  <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">שעה (ישראל)</label>
                   <input
                     type="time"
                     value={notifForm.recurrence_time}
@@ -1611,14 +1611,14 @@ export default function AdminDashboard() {
                 <div className={`w-10 h-6 rounded-full transition-colors ${notifForm.requires_approval ? 'brand-gradient' : 'bg-slate-200'}`} />
                 <div className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-transform ${notifForm.requires_approval ? 'translate-x-5' : 'translate-x-1'}`} />
               </div>
-              <span className="text-sm font-semibold text-slate-700">Requires Tester Approval</span>
+              <span className="text-sm font-semibold text-slate-700">דורש אישור מהעובד</span>
             </label>
 
             {/* Document Attachment */}
             <div>
-              <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-2">Document Attachment <span className="normal-case font-normal">(optional)</span></label>
+              <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-2">צירוף מסמך <span className="normal-case font-normal">(רשות)</span></label>
               <div className="flex gap-2">
-                {[['none', 'None'], ['upload', 'Upload File'], ['link', 'Paste Link']].map(([mode, label]) => (
+                {[['none', 'ללא'], ['upload', 'העלאת קובץ'], ['link', 'הדבקת קישור']].map(([mode, label]) => (
                   <button
                     key={mode}
                     type="button"
@@ -1646,7 +1646,7 @@ export default function AdminDashboard() {
                   >
                     <span className="material-symbols-outlined text-slate-400 text-lg">upload_file</span>
                     <span className={`text-sm ${notifForm.documentFile ? 'text-slate-700 font-semibold' : 'text-slate-400'}`}>
-                      {notifForm.documentFile ? notifForm.documentFile.name : 'Choose PDF or Word document'}
+                      {notifForm.documentFile ? notifForm.documentFile.name : 'בחר מסמך PDF או Word'}
                     </span>
                   </button>
                 </div>
@@ -1677,7 +1677,7 @@ export default function AdminDashboard() {
                     <div className={`w-10 h-6 rounded-full transition-colors ${notifForm.force_view_document ? 'brand-gradient' : 'bg-slate-200'}`} />
                     <div className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-transform ${notifForm.force_view_document ? 'translate-x-5' : 'translate-x-1'}`} />
                   </div>
-                  <span className="text-sm font-semibold text-slate-700">Force user to open document before approving</span>
+                  <span className="text-sm font-semibold text-slate-700">חייב את העובד לפתוח את המסמך לפני האישור</span>
                 </label>
               )}
             </div>
@@ -1689,8 +1689,8 @@ export default function AdminDashboard() {
               style={{ boxShadow: '0 4px 14px rgba(139,53,217,0.25)' }}
             >
               {notifSubmitting
-                ? <><span className="material-symbols-outlined text-sm animate-spin">progress_activity</span> Sending...</>
-                : <><span className="material-symbols-outlined text-sm">send</span> Send Notification</>
+                ? <><span className="material-symbols-outlined text-sm animate-spin">progress_activity</span> שולח...</>
+                : <><span className="material-symbols-outlined text-sm">send</span> שליחת התראה</>
               }
             </button>
             {notifError && (
@@ -1700,7 +1700,7 @@ export default function AdminDashboard() {
 
           {/* Notifications list */}
           <div>
-            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Sent Notifications</p>
+            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">התראות שנשלחו</p>
             {notifLoading ? (
               <div className="flex justify-center py-10">
                 <span className="material-symbols-outlined text-3xl text-slate-300 animate-spin">progress_activity</span>
@@ -1708,7 +1708,7 @@ export default function AdminDashboard() {
             ) : notifList.length === 0 ? (
               <div className="bg-white rounded-2xl border border-slate-100 py-10 flex flex-col items-center gap-2 text-slate-400">
                 <span className="material-symbols-outlined text-4xl opacity-30">notifications_off</span>
-                <p className="text-sm font-medium">No notifications yet</p>
+                <p className="text-sm font-medium">אין עדיין התראות</p>
               </div>
             ) : (
               <div className="space-y-2">
@@ -1719,32 +1719,32 @@ export default function AdminDashboard() {
                         <div className="flex items-center gap-2 flex-wrap mb-1">
                           <p className="font-bold text-slate-800 text-sm">{n.title}</p>
                           <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${n.type === 'recurring' ? 'bg-amber-100 text-amber-700' : 'bg-sky-100 text-sky-700'}`}>
-                            {n.type}
+                            {n.type === 'recurring' ? 'חוזר' : 'חד פעמי'}
                           </span>
                           {n.requires_approval && (
-                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-violet-100 text-violet-700">approval required</span>
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-violet-100 text-violet-700">דורש אישור</span>
                           )}
                           {(n.document_file_name || n.document_external_url) && (
                             <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 flex items-center gap-0.5">
                               <span className="material-symbols-outlined text-xs">attach_file</span>
-                              {n.document_file_name || 'link'}
+                              {n.document_file_name || 'קישור'}
                             </span>
                           )}
                           <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${n.is_active ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-400'}`}>
-                            {n.is_active ? 'active' : 'inactive'}
+                            {n.is_active ? 'פעיל' : 'לא פעיל'}
                           </span>
                         </div>
                         <p className="text-xs text-slate-400 line-clamp-2">{n.content}</p>
                         <div className="flex flex-col gap-0.5 mt-1.5">
-                          <p className="text-[10px] text-slate-300">Created {new Date(n.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</p>
+                          <p className="text-[10px] text-slate-300">נוצר {new Date(n.created_at).toLocaleDateString('he-IL', { month: 'short', day: 'numeric', year: 'numeric' })}</p>
                           {n.scheduled_for && !n.is_active && (
                             <p className="text-[10px] text-amber-500 font-semibold">
-                              Sends {new Date(n.scheduled_for).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                              נשלח {new Date(n.scheduled_for).toLocaleString('he-IL', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                             </p>
                           )}
                           {n.recurrence_days?.length > 0 && n.recurrence_time && (
                             <p className="text-[10px] text-violet-500 font-semibold">
-                              Repeats {['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].filter((_, i) => n.recurrence_days.includes(i)).join(', ')} at {n.recurrence_time}
+                              חוזר בימים {['א׳','ב׳','ג׳','ד׳','ה׳','ו׳','ש׳'].filter((_, i) => n.recurrence_days.includes(i)).join(', ')} בשעה {n.recurrence_time}
                             </p>
                           )}
                         </div>
@@ -1756,7 +1756,7 @@ export default function AdminDashboard() {
                             className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-xl border border-slate-200 bg-white text-slate-600 hover:border-brand-purple/40 active:scale-95 transition-all"
                           >
                             <span className="material-symbols-outlined text-sm">bar_chart</span>
-                            Compliance
+                            עמידה בדרישה
                           </button>
                         )}
                         {n.is_active && (
@@ -1765,7 +1765,7 @@ export default function AdminDashboard() {
                             className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-xl border border-red-100 bg-red-50 text-red-500 hover:bg-red-100 active:scale-95 transition-all"
                           >
                             <span className="material-symbols-outlined text-sm">visibility_off</span>
-                            Deactivate
+                            השבתה
                           </button>
                         )}
                       </div>
@@ -1785,11 +1785,11 @@ export default function AdminDashboard() {
             <div className="px-5 py-4 flex items-center justify-between flex-shrink-0 border-b border-slate-100">
               <div className="min-w-0 flex-1">
                 <h2 className="text-base font-extrabold text-slate-900 truncate">
-                  {complianceModal.loading ? 'Loading...' : complianceModal.notification?.title}
+                  {complianceModal.loading ? 'טוען...' : complianceModal.notification?.title}
                 </h2>
-                <p className="text-xs text-slate-400 mt-0.5">Tester approval status</p>
+                <p className="text-xs text-slate-400 mt-0.5">סטטוס אישור עובדים</p>
               </div>
-              <button onClick={() => setComplianceModal(null)} className="w-8 h-8 flex items-center justify-center rounded-xl bg-slate-100 text-slate-500 ml-3 flex-shrink-0">
+              <button onClick={() => setComplianceModal(null)} className="w-8 h-8 flex items-center justify-center rounded-xl bg-slate-100 text-slate-500 ms-3 flex-shrink-0">
                 <span className="material-symbols-outlined text-base">close</span>
               </button>
             </div>
@@ -1802,7 +1802,7 @@ export default function AdminDashboard() {
                 {(complianceModal.compliance || []).length === 0 ? (
                   <div className="flex flex-col items-center gap-2 py-10 text-slate-400">
                     <span className="material-symbols-outlined text-4xl opacity-30">group</span>
-                    <p className="text-sm font-medium">No testers found</p>
+                    <p className="text-sm font-medium">לא נמצאו עובדים</p>
                   </div>
                 ) : (
                   <div>
@@ -1820,24 +1820,24 @@ export default function AdminDashboard() {
                               {t.approved_at ? (
                                 <span className="flex items-center gap-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1.5 rounded-xl border border-emerald-100 whitespace-nowrap">
                                   <span className="material-symbols-outlined text-sm" style={{ fontVariationSettings: "'FILL' 1" }}>check_circle</span>
-                                  {new Date(t.approved_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                                  {new Date(t.approved_at).toLocaleDateString('he-IL', { month: 'short', day: 'numeric' })}
                                 </span>
                               ) : (
                                 <span className="flex items-center gap-1.5 text-xs font-bold text-slate-400 bg-slate-100 px-2.5 py-1.5 rounded-xl whitespace-nowrap">
                                   <span className="material-symbols-outlined text-sm">schedule</span>
-                                  Pending
+                                  ממתין
                                 </span>
                               )}
                               {hasDocument && (
                                 t.document_opened_at ? (
                                   <span className="flex items-center gap-1 text-xs font-bold text-blue-700 bg-blue-50 px-2.5 py-1.5 rounded-xl border border-blue-100 whitespace-nowrap">
                                     <span className="material-symbols-outlined text-sm" style={{ fontVariationSettings: "'FILL' 1" }}>visibility</span>
-                                    Opened {new Date(t.document_opened_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                                    נפתח {new Date(t.document_opened_at).toLocaleDateString('he-IL', { month: 'short', day: 'numeric' })}
                                   </span>
                                 ) : (
                                   <span className="flex items-center gap-1 text-xs font-bold text-slate-400 bg-slate-100 px-2.5 py-1.5 rounded-xl whitespace-nowrap">
                                     <span className="material-symbols-outlined text-sm">visibility_off</span>
-                                    Not opened
+                                    לא נפתח
                                   </span>
                                 )
                               )}
@@ -1859,7 +1859,7 @@ export default function AdminDashboard() {
         <div className="px-4 space-y-4">
           {/* Sub-tab toggle */}
           <div className="flex gap-2">
-            {[{ id: 'catalog', label: 'Catalog', icon: 'list' }, { id: 'orders', label: 'Orders', icon: 'inventory' }].map(st => (
+            {[{ id: 'catalog', label: 'קטלוג', icon: 'list' }, { id: 'orders', label: 'הזמנות', icon: 'inventory' }].map(st => (
               <button
                 key={st.id}
                 onClick={() => setEqSubTab(st.id)}
@@ -1883,7 +1883,7 @@ export default function AdminDashboard() {
                   value={newItemName}
                   onChange={e => setNewItemName(e.target.value)}
                   onKeyDown={e => e.key === 'Enter' && addCatalogItem()}
-                  placeholder="Item name..."
+                  placeholder="שם הפריט..."
                   className="flex-1 px-3 py-2.5 text-sm rounded-xl border border-slate-200 focus:border-brand-purple/50 focus:outline-none bg-white"
                 />
                 <button
@@ -1891,7 +1891,7 @@ export default function AdminDashboard() {
                   className="px-4 py-2.5 rounded-xl text-sm font-bold text-white brand-gradient active:scale-95 transition-all"
                   style={{ boxShadow: '0 4px 14px rgba(139,53,217,0.25)' }}
                 >
-                  Add
+                  הוספה
                 </button>
               </div>
               {eqCatalogLoading ? (
@@ -1902,7 +1902,7 @@ export default function AdminDashboard() {
                 <div className="bg-white rounded-2xl border border-slate-100 py-10 flex flex-col items-center gap-2 text-slate-400"
                   style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
                   <span className="material-symbols-outlined text-3xl opacity-30">list</span>
-                  <p className="text-sm">No items in catalog yet</p>
+                  <p className="text-sm">אין עדיין פריטים בקטלוג</p>
                 </div>
               ) : (
                 <div className="flex flex-col gap-2">
@@ -1934,7 +1934,7 @@ export default function AdminDashboard() {
                 <div className="bg-white rounded-2xl border border-slate-100 py-10 flex flex-col items-center gap-2 text-slate-400"
                   style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
                   <span className="material-symbols-outlined text-3xl opacity-30">inventory</span>
-                  <p className="text-sm">No orders yet</p>
+                  <p className="text-sm">אין עדיין הזמנות</p>
                 </div>
               ) : (
                 <div className="flex flex-col gap-2">
@@ -1952,11 +1952,11 @@ export default function AdminDashboard() {
                         <div>
                           <p className="text-sm font-bold text-slate-800">{name}</p>
                           <p className="text-xs text-slate-400 mt-0.5">
-                            {itemCount} item{itemCount !== 1 ? 's' : ''} · {new Date(order.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                            {itemCount} {itemCount !== 1 ? 'פריטים' : 'פריט'} · {new Date(order.created_at).toLocaleDateString('he-IL', { month: 'short', day: 'numeric', year: 'numeric' })}
                           </p>
                         </div>
                         <span className={`text-xs font-bold px-2.5 py-1 rounded-xl ${order.status === 'completed' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
-                          {order.status === 'completed' ? 'Completed' : 'Pending'}
+                          {order.status === 'completed' ? 'הושלם' : 'ממתין'}
                         </span>
                       </button>
                     );
@@ -1980,7 +1980,7 @@ export default function AdminDashboard() {
                   return <h2 className="text-base font-extrabold text-slate-900">{name}</h2>;
                 })()}
                 <p className="text-xs text-slate-400 mt-0.5">
-                  {new Date(eqOrderModal.created_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+                  {new Date(eqOrderModal.created_at).toLocaleDateString('he-IL', { month: 'long', day: 'numeric', year: 'numeric' })}
                 </p>
               </div>
               <button onClick={() => setEqOrderModal(null)} className="w-8 h-8 flex items-center justify-center rounded-xl bg-slate-100 text-slate-500">
@@ -2002,7 +2002,7 @@ export default function AdminDashboard() {
                 className="w-full py-3 rounded-2xl text-sm font-bold text-white brand-gradient active:scale-[0.98] transition-all disabled:opacity-50"
                 style={{ boxShadow: '0 4px 14px rgba(139,53,217,0.3)' }}
               >
-                {completingOrderId === eqOrderModal.id ? 'Saving...' : 'Mark as Complete'}
+                {completingOrderId === eqOrderModal.id ? 'שומר...' : 'סימון כהושלם'}
               </button>
             </div>
           </div>
@@ -2021,7 +2021,7 @@ export default function AdminDashboard() {
                   <h2 className="text-base font-extrabold text-slate-900">
                     {`${selectedUser.first_name || ''} ${selectedUser.last_name || ''}`.trim() || selectedUser.username}
                   </h2>
-                  {selectedUser.is_admin && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full brand-gradient text-white">Admin</span>}
+                  {selectedUser.is_admin && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full brand-gradient text-white">מנהל</span>}
                 </div>
                 <p className="text-xs text-slate-400 mt-0.5">{selectedUser.username}</p>
               </div>
@@ -2031,27 +2031,27 @@ export default function AdminDashboard() {
             </div>
             <div className="overflow-y-auto flex-1 px-5 py-4 space-y-5">
               <section>
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-3">Personal</p>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-3">פרטים אישיים</p>
                 <div className="space-y-3">
                   <div className="grid grid-cols-2 gap-3">
-                    <Field label="First Name" value={drawerEdits.first_name} onChange={v => setDrawerEdits(p => ({...p, first_name: v}))} />
-                    <Field label="Last Name" value={drawerEdits.last_name} onChange={v => setDrawerEdits(p => ({...p, last_name: v}))} />
+                    <Field label="שם פרטי" value={drawerEdits.first_name} onChange={v => setDrawerEdits(p => ({...p, first_name: v}))} />
+                    <Field label="שם משפחה" value={drawerEdits.last_name} onChange={v => setDrawerEdits(p => ({...p, last_name: v}))} />
                   </div>
-                  <Field label="Email" value={drawerEdits.email} onChange={v => setDrawerEdits(p => ({...p, email: v}))} type="email" />
-                  <Field label="ID Number" value={drawerEdits.id_number} onChange={v => setDrawerEdits(p => ({...p, id_number: v}))} />
-                  <Field label="Phone" value={drawerEdits.phone} onChange={v => setDrawerEdits(p => ({...p, phone: v}))} type="tel" />
+                  <Field label="אימייל" value={drawerEdits.email} onChange={v => setDrawerEdits(p => ({...p, email: v}))} type="email" />
+                  <Field label="תעודת זהות" value={drawerEdits.id_number} onChange={v => setDrawerEdits(p => ({...p, id_number: v}))} />
+                  <Field label="טלפון" value={drawerEdits.phone} onChange={v => setDrawerEdits(p => ({...p, phone: v}))} type="tel" />
                   <Field label="כתובת מגורים" value={drawerEdits.address} onChange={v => setDrawerEdits(p => ({...p, address: v}))} dir="rtl" placeholder="רחוב, עיר" />
                 </div>
               </section>
               <section>
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-3">Work</p>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-3">עבודה</p>
                 <div className="space-y-3">
-                  <Field label="Shirt Size" value={drawerEdits.shirt_size} onChange={v => setDrawerEdits(p => ({...p, shirt_size: v}))} placeholder="M" />
-                  <Field label="Pants Size" value={drawerEdits.pants_size} onChange={v => setDrawerEdits(p => ({...p, pants_size: v}))} placeholder="M" />
+                  <Field label="מידת חולצה" value={drawerEdits.shirt_size} onChange={v => setDrawerEdits(p => ({...p, shirt_size: v}))} placeholder="M" />
+                  <Field label="מידת מכנס" value={drawerEdits.pants_size} onChange={v => setDrawerEdits(p => ({...p, pants_size: v}))} placeholder="M" />
                   {selectedUser.profession_document_signed_url && (
                     <a href={selectedUser.profession_document_signed_url} target="_blank" rel="noopener noreferrer"
                       className="flex items-center gap-2 text-xs font-semibold text-brand-purple">
-                      <span className="material-symbols-outlined text-sm">description</span>View Profession Document
+                      <span className="material-symbols-outlined text-sm">description</span>צפייה במסמך המקצוע
                     </a>
                   )}
                 </div>
@@ -2064,40 +2064,40 @@ export default function AdminDashboard() {
                 </div>
               </section>
               <section>
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-3">Uniform</p>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-3">מדים</p>
                 <div className="grid grid-cols-2 gap-3">
-                  <Field label="Size" value={drawerEdits.clothing_size} onChange={v => setDrawerEdits(p => ({...p, clothing_size: v}))} placeholder="M" />
-                  <Field label="Sets" value={String(drawerEdits.uniform_sets)} onChange={v => setDrawerEdits(p => ({...p, uniform_sets: v}))} type="number" />
+                  <Field label="מידה" value={drawerEdits.clothing_size} onChange={v => setDrawerEdits(p => ({...p, clothing_size: v}))} placeholder="M" />
+                  <Field label="כמות ערכות" value={String(drawerEdits.uniform_sets)} onChange={v => setDrawerEdits(p => ({...p, uniform_sets: v}))} type="number" />
                 </div>
               </section>
               <section>
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-3">Permissions</p>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-3">הרשאות</p>
                 <label className={`flex items-center gap-3 p-4 rounded-2xl select-none ${selectedUser.id === currentUserId ? 'opacity-40 pointer-events-none bg-slate-50' : 'bg-red-50 cursor-pointer'}`}>
                   <div
                     className={`w-12 h-6 rounded-full transition-colors flex items-center px-0.5 ${drawerEdits.is_admin ? 'bg-red-500' : 'bg-slate-200'}`}
                     onClick={() => {
                       if (selectedUser.id === currentUserId) return;
-                      if (!drawerEdits.is_admin && !confirm(`Grant full admin access to ${selectedUser.first_name || selectedUser.username}?`)) return;
+                      if (!drawerEdits.is_admin && !confirm(`להעניק ל${selectedUser.first_name || selectedUser.username} הרשאות מנהל מלאות?`)) return;
                       setDrawerEdits(p => ({ ...p, is_admin: !p.is_admin }));
                     }}
                   >
                     <div className={`w-5 h-5 rounded-full bg-white shadow transition-transform ${drawerEdits.is_admin ? 'translate-x-6' : 'translate-x-0'}`} />
                   </div>
                   <div>
-                    <p className="text-sm font-semibold text-slate-800">Admin Access</p>
+                    <p className="text-sm font-semibold text-slate-800">הרשאת ניהול</p>
                     <p className="text-xs text-slate-400">
-                      {selectedUser.id === currentUserId ? 'Cannot change your own status' : 'Full access to admin dashboard'}
+                      {selectedUser.id === currentUserId ? 'לא ניתן לשנות את הסטטוס שלך' : 'גישה מלאה ללוח הניהול'}
                     </p>
                   </div>
                 </label>
               </section>
 
               <section>
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-3">Equipment</p>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-3">ציוד</p>
                 <div className="flex flex-wrap gap-2">
                   {selectedUser.devices.length === 0 && (
                     <span className="text-xs font-bold px-2.5 py-1 rounded-xl border bg-slate-50 text-slate-400 border-slate-200">
-                      No devices reported
+                      לא דווח ציוד
                     </span>
                   )}
                   {selectedUser.devices.map(d => (
@@ -2106,7 +2106,7 @@ export default function AdminDashboard() {
                     </span>
                   ))}
                   <span className={`text-xs font-bold px-2.5 py-1 rounded-xl border ${selectedUser.echo_certified ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-slate-50 text-slate-400 border-slate-200'}`}>
-                    Echo Certified
+                    מוסמך אקו
                   </span>
                 </div>
               </section>
@@ -2118,7 +2118,7 @@ export default function AdminDashboard() {
                   className="flex items-center gap-1.5 px-4 py-3 rounded-2xl text-sm font-bold text-red-600 bg-red-50 hover:bg-red-100 active:scale-[0.98] transition-all"
                 >
                   <span className="material-symbols-outlined text-base">delete</span>
-                  Delete
+                  מחיקה
                 </button>
               )}
               <button
@@ -2127,7 +2127,7 @@ export default function AdminDashboard() {
                 className="flex-1 py-3 rounded-2xl text-sm font-bold text-white brand-gradient active:scale-[0.98] transition-all disabled:opacity-50"
                 style={{ boxShadow: '0 4px 14px rgba(139,53,217,0.3)' }}
               >
-                {drawerSaving ? 'Saving...' : 'Save Changes'}
+                {drawerSaving ? 'שומר...' : 'שמור שינויים'}
               </button>
             </div>
           </div>
@@ -2142,13 +2142,13 @@ export default function AdminDashboard() {
             <div className="w-12 h-12 bg-red-100 rounded-2xl flex items-center justify-center mb-4">
               <span className="material-symbols-outlined text-red-600" style={{ fontVariationSettings: "'FILL' 1" }}>warning</span>
             </div>
-            <h3 className="text-lg font-bold text-slate-800 mb-1">Delete Employee</h3>
+            <h3 className="text-lg font-bold text-slate-800 mb-1">מחיקת עובד</h3>
             <p className="text-sm text-slate-500 mb-6">
-              This will permanently delete{' '}
+              פעולה זו תמחק לצמיתות את{' '}
               <span className="font-bold text-slate-700">
                 {`${deleteConfirmUser.first_name || ''} ${deleteConfirmUser.last_name || ''}`.trim() || deleteConfirmUser.username}
               </span>{' '}
-              and all their data. This cannot be undone.
+              ואת כל הנתונים שלו/שלה. לא ניתן לבטל פעולה זו.
             </p>
             <div className="flex gap-3">
               <button
@@ -2156,14 +2156,14 @@ export default function AdminDashboard() {
                 disabled={deletingUser}
                 className="flex-1 px-4 py-2.5 rounded-2xl text-sm font-bold bg-slate-100 text-slate-600 hover:bg-slate-200 transition-all disabled:opacity-50"
               >
-                Cancel
+                ביטול
               </button>
               <button
                 onClick={() => deleteEmployee(deleteConfirmUser)}
                 disabled={deletingUser}
                 className="flex-1 px-4 py-2.5 rounded-2xl text-sm font-bold bg-red-500 text-white hover:bg-red-600 transition-all disabled:opacity-50"
               >
-                {deletingUser ? 'Deleting…' : 'Delete'}
+                {deletingUser ? 'מוחק…' : 'מחיקה'}
               </button>
             </div>
           </div>

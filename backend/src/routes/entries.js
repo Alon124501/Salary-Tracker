@@ -73,7 +73,7 @@ router.get('/', asyncHandler(async (req, res) => {
 // GET /api/entries/summary?month=YYYY-MM
 router.get('/summary', asyncHandler(async (req, res) => {
   const { month } = req.query;
-  if (!month) return res.status(400).json({ error: 'month param required (YYYY-MM)' });
+  if (!month) return res.status(400).json({ error: 'נדרש פרמטר חודש (YYYY-MM)' });
 
   const { start, end } = monthRange(month);
   const { data: rows, error } = await supabase.from('entries').select('*')
@@ -113,7 +113,7 @@ router.post('/', asyncHandler(async (req, res) => {
   const parsed = EntryBodySchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
   const { date, ...fields } = parsed.data;
-  if (!date) return res.status(400).json({ error: 'date is required' });
+  if (!date) return res.status(400).json({ error: 'נדרש תאריך' });
 
   const { data: existing } = await supabase.from('entries')
     .select('food_expense').eq('user_id', req.userId).eq('date', date).maybeSingle();
@@ -131,14 +131,14 @@ router.post('/', asyncHandler(async (req, res) => {
 
 // PUT /api/entries/:id/receipt
 router.put('/:id/receipt', upload.single('receipt'), asyncHandler(async (req, res) => {
-  if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+  if (!req.file) return res.status(400).json({ error: 'לא הועלה קובץ' });
 
   const { data: entry, error: fetchErr } = await supabase.from('entries')
     .select('id, date')
     .eq('id', req.params.id)
     .eq('user_id', req.userId)
     .single();
-  if (fetchErr || !entry) return res.status(404).json({ error: 'Entry not found' });
+  if (fetchErr || !entry) return res.status(404).json({ error: 'הרשומה לא נמצאה' });
 
   const ext = req.file.originalname.split('.').pop();
   const month = entry.date.slice(0, 7);
@@ -159,14 +159,14 @@ router.put('/:id/receipt', upload.single('receipt'), asyncHandler(async (req, re
 
 // POST /api/entries/:id/food-receipt
 router.post('/:id/food-receipt', upload.single('food_receipt'), asyncHandler(async (req, res) => {
-  if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+  if (!req.file) return res.status(400).json({ error: 'לא הועלה קובץ' });
 
   const { data: entry, error: fetchErr } = await supabase.from('entries')
     .select('id, date, food_receipt_urls, insurance_tests, screening_tests, mixed_screening_tests, partial_tests')
     .eq('id', req.params.id).eq('user_id', req.userId).single();
-  if (fetchErr || !entry) return res.status(404).json({ error: 'Entry not found' });
+  if (fetchErr || !entry) return res.status(404).json({ error: 'הרשומה לא נמצאה' });
   if (totalTestsFor(entry) < FOOD_BONUS_TEST_THRESHOLD) {
-    return res.status(400).json({ error: 'Add at least 4 tests for this day before uploading a food receipt' });
+    return res.status(400).json({ error: 'יש להוסיף לפחות 4 בדיקות ליום זה לפני העלאת קבלת אוכל' });
   }
 
   const ext = req.file.originalname.split('.').pop();
@@ -195,7 +195,7 @@ router.get('/:id/food-receipts', asyncHandler(async (req, res) => {
   const { data: entry, error: fetchErr } = await supabase.from('entries')
     .select('food_receipt_urls')
     .eq('id', req.params.id).eq('user_id', req.userId).single();
-  if (fetchErr || !entry) return res.status(404).json({ error: 'Entry not found' });
+  if (fetchErr || !entry) return res.status(404).json({ error: 'הרשומה לא נמצאה' });
 
   const paths = entry.food_receipt_urls || [];
   const receipts = await Promise.all(paths.map(async path => {
@@ -209,15 +209,15 @@ router.get('/:id/food-receipts', asyncHandler(async (req, res) => {
 // DELETE /api/entries/:id/food-receipt
 router.delete('/:id/food-receipt', asyncHandler(async (req, res) => {
   const path = req.query.path;
-  if (!path) return res.status(400).json({ error: 'path is required' });
+  if (!path) return res.status(400).json({ error: 'נדרש נתיב קובץ' });
 
   const { data: entry, error: fetchErr } = await supabase.from('entries')
     .select('food_receipt_urls')
     .eq('id', req.params.id).eq('user_id', req.userId).single();
-  if (fetchErr || !entry) return res.status(404).json({ error: 'Entry not found' });
+  if (fetchErr || !entry) return res.status(404).json({ error: 'הרשומה לא נמצאה' });
 
   const currentUrls = entry.food_receipt_urls || [];
-  if (!currentUrls.includes(path)) return res.status(404).json({ error: 'Receipt not found' });
+  if (!currentUrls.includes(path)) return res.status(404).json({ error: 'הקבלה לא נמצאה' });
 
   await supabase.storage.from('receipts').remove([path]);
 
@@ -231,12 +231,12 @@ router.delete('/:id/food-receipt', asyncHandler(async (req, res) => {
 
 // POST /api/entries/:id/parking-receipt
 router.post('/:id/parking-receipt', upload.single('parking_receipt'), asyncHandler(async (req, res) => {
-  if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+  if (!req.file) return res.status(400).json({ error: 'לא הועלה קובץ' });
 
   const { data: entry, error: fetchErr } = await supabase.from('entries')
     .select('id, date, parking_receipt_urls')
     .eq('id', req.params.id).eq('user_id', req.userId).single();
-  if (fetchErr || !entry) return res.status(404).json({ error: 'Entry not found' });
+  if (fetchErr || !entry) return res.status(404).json({ error: 'הרשומה לא נמצאה' });
 
   const ext = req.file.originalname.split('.').pop();
   const month = entry.date.slice(0, 7);
@@ -264,7 +264,7 @@ router.get('/:id/parking-receipts', asyncHandler(async (req, res) => {
   const { data: entry, error: fetchErr } = await supabase.from('entries')
     .select('parking_receipt_urls')
     .eq('id', req.params.id).eq('user_id', req.userId).single();
-  if (fetchErr || !entry) return res.status(404).json({ error: 'Entry not found' });
+  if (fetchErr || !entry) return res.status(404).json({ error: 'הרשומה לא נמצאה' });
 
   const paths = entry.parking_receipt_urls || [];
   const receipts = await Promise.all(paths.map(async path => {
@@ -278,15 +278,15 @@ router.get('/:id/parking-receipts', asyncHandler(async (req, res) => {
 // DELETE /api/entries/:id/parking-receipt
 router.delete('/:id/parking-receipt', asyncHandler(async (req, res) => {
   const path = req.query.path;
-  if (!path) return res.status(400).json({ error: 'path is required' });
+  if (!path) return res.status(400).json({ error: 'נדרש נתיב קובץ' });
 
   const { data: entry, error: fetchErr } = await supabase.from('entries')
     .select('parking_receipt_urls')
     .eq('id', req.params.id).eq('user_id', req.userId).single();
-  if (fetchErr || !entry) return res.status(404).json({ error: 'Entry not found' });
+  if (fetchErr || !entry) return res.status(404).json({ error: 'הרשומה לא נמצאה' });
 
   const currentUrls = entry.parking_receipt_urls || [];
-  if (!currentUrls.includes(path)) return res.status(404).json({ error: 'Receipt not found' });
+  if (!currentUrls.includes(path)) return res.status(404).json({ error: 'הקבלה לא נמצאה' });
 
   await supabase.storage.from('receipts').remove([path]);
 
@@ -302,7 +302,7 @@ router.delete('/:id/parking-receipt', asyncHandler(async (req, res) => {
 router.put('/:id', asyncHandler(async (req, res) => {
   const { data: entry, error: fetchErr } = await supabase.from('entries').select('*')
     .eq('id', req.params.id).eq('user_id', req.userId).single();
-  if (fetchErr || !entry) return res.status(404).json({ error: 'Entry not found' });
+  if (fetchErr || !entry) return res.status(404).json({ error: 'הרשומה לא נמצאה' });
 
   const parsed = PutBodySchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
@@ -331,7 +331,7 @@ router.put('/:id', asyncHandler(async (req, res) => {
 router.delete('/:id', asyncHandler(async (req, res) => {
   const { data: entry, error: fetchErr } = await supabase.from('entries').select('id')
     .eq('id', req.params.id).eq('user_id', req.userId).single();
-  if (fetchErr || !entry) return res.status(404).json({ error: 'Entry not found' });
+  if (fetchErr || !entry) return res.status(404).json({ error: 'הרשומה לא נמצאה' });
 
   const { error } = await supabase.from('entries').delete().eq('id', entry.id);
   if (error) return res.status(500).json({ error: error.message });
@@ -341,7 +341,7 @@ router.delete('/:id', asyncHandler(async (req, res) => {
 // POST /api/entries/restore
 router.post('/restore', asyncHandler(async (req, res) => {
   const { entries } = req.body;
-  if (!Array.isArray(entries)) return res.status(400).json({ error: 'entries array required' });
+  if (!Array.isArray(entries)) return res.status(400).json({ error: 'נדרש מערך רשומות' });
 
   const rows = entries.filter(e => e.date).map(e => ({
     user_id: req.userId,

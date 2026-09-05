@@ -7,16 +7,16 @@ function buildSheet(sheet, entries, profile = {}, title = '') {
   const numCols = 9;
 
   sheet.columns = [
-    { header: 'Date',              key: 'date',   width: 14 },
-    { header: 'Insurance Tests',   key: 'ins',    width: 16 },
-    { header: 'Screening Tests',   key: 'scr',    width: 16 },
-    { header: 'Mixed Screening',   key: 'mix',    width: 16 },
-    { header: 'Partial Tests',     key: 'par',    width: 14 },
-    { header: 'Total Tests',       key: 'total',  width: 14 },
-    { header: 'Kilometers',        key: 'km',     width: 12 },
-    { header: 'Office Hours',      key: 'hrs',    width: 14 },
-    { header: 'Food (₪)',          key: 'food',   width: 12 },
-    { header: 'Parking (₪)',       key: 'parking', width: 12 },
+    { header: 'תאריך',           key: 'date',   width: 14 },
+    { header: 'בדיקות ביטוח',     key: 'ins',    width: 16 },
+    { header: 'בדיקות סקר',       key: 'scr',    width: 16 },
+    { header: 'סקר מעורב',        key: 'mix',    width: 16 },
+    { header: 'בדיקות חלקיות',    key: 'par',    width: 14 },
+    { header: 'סה"כ בדיקות',      key: 'total',  width: 14 },
+    { header: 'קילומטרים',        key: 'km',     width: 12 },
+    { header: 'שעות משרד',        key: 'hrs',    width: 14 },
+    { header: 'אוכל (₪)',         key: 'food',   width: 12 },
+    { header: 'חניה (₪)',         key: 'parking', width: 12 },
   ];
 
   sheet.getRow(1).eachCell(cell => {
@@ -61,7 +61,7 @@ function buildSheet(sheet, entries, profile = {}, title = '') {
   sheet.addRow({});
 
   // TOTAL count row
-  const totalsRow = sheet.addRow({ date: 'TOTAL', ...sums });
+  const totalsRow = sheet.addRow({ date: 'סה"כ', ...sums });
   totalsRow.eachCell(cell => {
     cell.font = { bold: true };
     cell.fill = totalFill;
@@ -70,7 +70,7 @@ function buildSheet(sheet, entries, profile = {}, title = '') {
 
   // Grand total tests row
   sheet.addRow({});
-  const grandTotalRow = sheet.addRow({ date: 'TOTAL TESTS', total: sums.total });
+  const grandTotalRow = sheet.addRow({ date: 'סה"כ בדיקות', total: sums.total });
   grandTotalRow.height = 26;
   for (let col = 1; col <= numCols; col++) {
     const cell = grandTotalRow.getCell(col);

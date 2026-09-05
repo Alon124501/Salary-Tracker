@@ -106,7 +106,7 @@ export default function Dashboard() {
   }
 
   async function deleteEntry(id) {
-    if (!confirm('Delete this entry?')) return;
+    if (!confirm('למחוק רישום זה?')) return;
     await api.delete(`/entries/${id}`);
     loadData();
   }
@@ -133,14 +133,14 @@ export default function Dashboard() {
             className="flex items-center gap-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-full hover:bg-emerald-100 transition-colors"
           >
             <span className="material-symbols-outlined text-sm">download</span>
-            Export Excel
+            ייצוא לאקסל
           </button>
           <button
             onClick={downloadZip}
             className="flex items-center gap-1.5 text-xs font-semibold text-action-blue bg-blue-50 px-3 py-1.5 rounded-full hover:bg-blue-100 transition-colors"
           >
             <span className="material-symbols-outlined text-sm">download</span>
-            Download Report
+            הורדת דוח
           </button>
         </div>
       </div>
@@ -163,15 +163,15 @@ export default function Dashboard() {
                         <span className="material-symbols-outlined text-blue-500 text-base" style={{ fontVariationSettings: "'FILL' 1" }}>description</span>
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-xs font-semibold text-slate-700 truncate">{n.document_file_name || 'Attached Document'}</p>
-                        <p className="text-[10px] text-slate-400">{n.document_opened_at ? 'Opened' : 'Not yet opened'}</p>
+                        <p className="text-xs font-semibold text-slate-700 truncate">{n.document_file_name || 'מסמך מצורף'}</p>
+                        <p className="text-[10px] text-slate-400">{n.document_opened_at ? 'נפתח' : 'טרם נפתח'}</p>
                       </div>
                       <button
                         onClick={() => openDocument(n)}
                         className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-xl bg-blue-500 text-white active:scale-95 transition-all flex-shrink-0"
                       >
                         <span className="material-symbols-outlined text-sm">open_in_new</span>
-                        View
+                        צפייה
                       </button>
                     </div>
                   )}
@@ -184,8 +184,8 @@ export default function Dashboard() {
                     >
                       <span className="material-symbols-outlined text-sm" style={{ fontVariationSettings: "'FILL' 1" }}>check_circle</span>
                       {n.force_view_document && !!n.document_url && !n.document_opened_at
-                        ? 'Open document first to approve'
-                        : 'I have read and approved this document'}
+                        ? 'יש לפתוח את המסמך לפני האישור'
+                        : 'קראתי ואישרתי את המסמך'}
                     </button>
                   )}
                 </div>
@@ -199,7 +199,7 @@ export default function Dashboard() {
       <section>
         <h2 className="flex items-center gap-2 text-2xl font-extrabold text-on-background tracking-tight mb-5 font-headline">
           <span className="material-symbols-outlined text-brand-purple" style={{ fontVariationSettings: "'FILL' 1" }}>summarize</span>
-          Monthly Summary
+          סיכום חודשי
         </h2>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
 
@@ -207,7 +207,7 @@ export default function Dashboard() {
           <div className="col-span-2 lg:col-span-4 brand-gradient p-6 rounded-2xl text-white brand-shadow">
             <div className="flex justify-between items-start mb-5">
               <div>
-                <p className="text-xs font-semibold uppercase tracking-widest opacity-80 mb-2">Total Tests</p>
+                <p className="text-xs font-semibold uppercase tracking-widest opacity-80 mb-2">סה״כ בדיקות</p>
                 <h3 className="text-5xl font-extrabold tracking-tight font-headline leading-none">{s.totalTests || 0}</h3>
               </div>
               <div className="bg-white/20 p-2.5 rounded-xl">
@@ -217,12 +217,12 @@ export default function Dashboard() {
             <div className="flex items-center gap-4 pt-4 border-t border-white/20">
               <div className="flex items-center gap-1.5 text-xs font-semibold opacity-90">
                 <span className="material-symbols-outlined text-sm">calendar_month</span>
-                {s.days || 0} work days
+                {s.days || 0} ימי עבודה
               </div>
               {s.expenses > 0 && (
                 <div className="flex items-center gap-1.5 text-xs font-semibold opacity-90">
                   <span className="material-symbols-outlined text-sm">receipt_long</span>
-                  {(s.expenses || 0).toFixed(0)} ₪ expenses
+                  {(s.expenses || 0).toFixed(0)} ₪ הוצאות
                 </div>
               )}
             </div>
@@ -233,8 +233,8 @@ export default function Dashboard() {
             <div className="w-9 h-9 rounded-xl bg-violet-50 flex items-center justify-center mb-3">
               <span className="material-symbols-outlined text-brand-purple text-lg" style={{ fontVariationSettings: "'FILL' 1" }}>directions_car</span>
             </div>
-            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">KM Travel</p>
-            <div className="text-2xl font-bold text-slate-900 font-headline">{(s.kilometers || 0).toFixed(0)} <span className="text-sm font-normal text-slate-400">km</span></div>
+            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">נסועה בק״מ</p>
+            <div className="text-2xl font-bold text-slate-900 font-headline">{(s.kilometers || 0).toFixed(0)} <span className="text-sm font-normal text-slate-400">ק״מ</span></div>
           </div>
 
           {/* Expenses */}
@@ -242,7 +242,7 @@ export default function Dashboard() {
             <div className="w-9 h-9 rounded-xl bg-red-50 flex items-center justify-center mb-3">
               <span className="material-symbols-outlined text-red-500 text-lg" style={{ fontVariationSettings: "'FILL' 1" }}>receipt_long</span>
             </div>
-            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">Expenses</p>
+            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">הוצאות</p>
             <div className="text-2xl font-bold text-red-500 font-headline">{(s.expenses || 0).toFixed(0)} <span className="text-sm font-normal text-slate-400">₪</span></div>
           </div>
 
@@ -251,8 +251,8 @@ export default function Dashboard() {
             <div className="w-9 h-9 rounded-xl bg-amber-50 flex items-center justify-center mb-3">
               <span className="material-symbols-outlined text-amber-500 text-lg" style={{ fontVariationSettings: "'FILL' 1" }}>corporate_fare</span>
             </div>
-            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">Office</p>
-            <div className="text-2xl font-bold text-slate-900 font-headline">{(s.office_hours || 0).toFixed(0)} <span className="text-sm font-normal text-slate-400">hrs</span></div>
+            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">משרד</p>
+            <div className="text-2xl font-bold text-slate-900 font-headline">{(s.office_hours || 0).toFixed(0)} <span className="text-sm font-normal text-slate-400">שעות</span></div>
           </div>
 
           {/* Screening */}
@@ -260,7 +260,7 @@ export default function Dashboard() {
             <div className="w-9 h-9 rounded-xl bg-sky-50 flex items-center justify-center mb-3">
               <span className="material-symbols-outlined text-sky-500 text-lg" style={{ fontVariationSettings: "'FILL' 1" }}>medical_services</span>
             </div>
-            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">Screening</p>
+            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">סקר</p>
             <div className="text-2xl font-bold text-slate-900 font-headline">{(s.screening_tests || 0) + (s.mixed_screening_tests || 0)}</div>
           </div>
 
@@ -269,7 +269,7 @@ export default function Dashboard() {
             <div className="w-9 h-9 rounded-xl bg-emerald-50 flex items-center justify-center mb-3">
               <span className="material-symbols-outlined text-emerald-500 text-lg" style={{ fontVariationSettings: "'FILL' 1" }}>syringe</span>
             </div>
-            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">Insurance</p>
+            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">ביטוח</p>
             <div className="text-2xl font-bold text-slate-900 font-headline">{s.insurance_tests || 0}</div>
           </div>
 
@@ -278,7 +278,7 @@ export default function Dashboard() {
             <div className="w-9 h-9 rounded-xl bg-fuchsia-50 flex items-center justify-center mb-3">
               <span className="material-symbols-outlined text-fuchsia-500 text-lg" style={{ fontVariationSettings: "'FILL' 1" }}>science</span>
             </div>
-            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">Partial</p>
+            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">חלקי</p>
             <div className="text-2xl font-bold text-slate-900 font-headline">{s.partial_tests || 0}</div>
           </div>
         </div>
@@ -288,23 +288,23 @@ export default function Dashboard() {
       <section>
         <h2 className="flex items-center gap-2 text-2xl font-extrabold text-on-background tracking-tight mb-5 font-headline">
           <span className="material-symbols-outlined text-brand-purple" style={{ fontVariationSettings: "'FILL' 1" }}>event_note</span>
-          Daily Entries
+          רישומים יומיים
         </h2>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
           {entries.length === 0 ? (
             <div className="col-span-2 flex flex-col items-center justify-center py-16 gap-3 text-slate-400">
               <span className="material-symbols-outlined text-5xl opacity-30">event_busy</span>
-              <p className="text-sm font-medium">No entries for this month</p>
+              <p className="text-sm font-medium">אין רישומים לחודש זה</p>
               <button
                 onClick={() => navigate('/entry')}
                 className="mt-1 text-xs font-semibold text-brand-purple border border-brand-purple/30 bg-purple-50 px-4 py-2 rounded-full hover:bg-purple-100 transition-colors"
               >
-                Add your first entry
+                הוסף רישום ראשון
               </button>
             </div>
           ) : [...entries].sort((a, b) => b.date.localeCompare(a.date)).map(e => {
             const [y, m, d] = e.date.split('-');
-            const monthName = new Date(y, m - 1).toLocaleString('en-US', { month: 'short' });
+            const monthName = new Date(y, m - 1).toLocaleString('he-IL', { month: 'short' });
             const tests = totalTests(e);
             return (
               <div
@@ -322,32 +322,32 @@ export default function Dashboard() {
                       {tests > 0 && (
                         <span className="flex items-center gap-0.5">
                           <span className="material-symbols-outlined leading-none" style={{ fontSize: 12 }}>biotech</span>
-                          {tests} test{tests !== 1 ? 's' : ''}
+                          {tests} {tests === 1 ? 'בדיקה' : 'בדיקות'}
                         </span>
                       )}
                       {tests > 0 && e.kilometers > 0 && <span className="opacity-40">·</span>}
                       {e.kilometers > 0 && (
                         <span className="flex items-center gap-0.5">
                           <span className="material-symbols-outlined leading-none" style={{ fontSize: 12 }}>route</span>
-                          {e.kilometers} km
+                          {e.kilometers} ק״מ
                         </span>
                       )}
                       {tests === 0 && e.kilometers === 0 && (
-                        <span className="flex items-center gap-0.5 italic opacity-60">no data</span>
+                        <span className="flex items-center gap-0.5 italic opacity-60">אין נתונים</span>
                       )}
                     </p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
                   <button
-                    title="Edit"
+                    title="עריכה"
                     className="w-9 h-9 flex items-center justify-center text-slate-300 hover:text-brand-purple hover:bg-purple-50 rounded-xl transition-all"
                     onClick={() => navigate(`/entry/${e.date}`)}
                   >
                     <span className="material-symbols-outlined text-base">edit</span>
                   </button>
                   <button
-                    title="Delete"
+                    title="מחיקה"
                     className="w-9 h-9 flex items-center justify-center text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"
                     onClick={() => deleteEntry(e.id)}
                   >
@@ -363,15 +363,15 @@ export default function Dashboard() {
       {/* FAB — mobile only */}
       <button
         onClick={() => navigate('/entry')}
-        className="lg:hidden fixed bottom-28 right-6 w-14 h-14 brand-gradient text-white rounded-full brand-shadow flex items-center justify-center active:scale-90 transition-transform z-40"
+        className="lg:hidden fixed bottom-28 left-6 w-14 h-14 brand-gradient text-white rounded-full brand-shadow flex items-center justify-center active:scale-90 transition-transform z-40"
       >
         <span className="material-symbols-outlined text-3xl">add</span>
       </button>
 
       {showRecapModal && (
         <DeviceRecapModal
-          title="Weekly Equipment Recap"
-          subtitle="Please confirm which devices you currently have this week to continue."
+          title="סיכום ציוד שבועי"
+          subtitle="אנא אשר אילו מכשירים ברשותך השבוע כדי להמשיך."
           onSubmitted={handleRecapSubmitted}
         />
       )}

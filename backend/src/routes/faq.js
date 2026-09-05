@@ -24,7 +24,7 @@ router.get('/', async (req, res) => {
 router.post('/', auth, adminAuth, async (req, res) => {
   const { category, question, answer, sort_order } = req.body;
   if (!category || !question || !answer)
-    return res.status(400).json({ error: 'category, question, and answer are required' });
+    return res.status(400).json({ error: 'יש למלא קטגוריה, שאלה ותשובה' });
 
   const { data, error } = await supabase
     .from('faq_items')
@@ -39,7 +39,7 @@ router.post('/', auth, adminAuth, async (req, res) => {
 router.post('/reorder', auth, adminAuth, async (req, res) => {
   const { items } = req.body;
   if (!Array.isArray(items) || items.length === 0)
-    return res.status(400).json({ error: 'items array is required' });
+    return res.status(400).json({ error: 'נדרש מערך פריטים' });
 
   const { error } = await supabase
     .from('faq_items')

@@ -4,11 +4,11 @@ import api from '../api.js';
 import { clearCache } from '../hooks/useFetch.js';
 
 const navItems = [
-  { path: '/', icon: 'home', label: 'Home' },
-  { path: '/stats', icon: 'insights', label: 'Stats' },
-  { path: '/entry', icon: 'add_circle', label: 'Entry' },
+  { path: '/', icon: 'home', label: 'בית' },
+  { path: '/stats', icon: 'insights', label: 'סטטיסטיקה' },
+  { path: '/entry', icon: 'add_circle', label: 'דיווח' },
   { path: '/screening-locations', icon: 'business', label: 'סקר' },
-  { path: '/portal', icon: 'hub', label: 'Portal' },
+  { path: '/portal', icon: 'hub', label: 'פורטל' },
 ];
 
 export default function Navbar() {
@@ -72,10 +72,10 @@ export default function Navbar() {
         </div>
 
         {/* Right: greeting + settings + logout */}
-        <div className="flex items-center gap-2 ml-auto flex-shrink-0">
+        <div className="flex items-center gap-2 me-auto flex-shrink-0">
           {displayName && (
             <span className="text-sm font-semibold text-slate-600 hidden sm:block">
-              Hi, <span className="brand-gradient-text">{displayName}</span>
+              שלום, <span className="brand-gradient-text">{displayName}</span>
             </span>
           )}
           {isAdmin && (
@@ -86,7 +86,7 @@ export default function Navbar() {
                   ? 'brand-gradient text-white'
                   : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'
               }`}
-              title="Admin"
+              title="מנהל"
               style={location.pathname === '/admin' ? { boxShadow: '0 4px 14px rgba(139,53,217,0.35)' } : {}}
             >
               <span
@@ -102,7 +102,7 @@ export default function Navbar() {
                 ? 'brand-gradient text-white'
                 : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'
             }`}
-            title="Settings"
+            title="הגדרות"
             style={location.pathname === '/settings' ? { boxShadow: '0 4px 14px rgba(139,53,217,0.35)' } : {}}
           >
             <span
@@ -113,7 +113,7 @@ export default function Navbar() {
           <button
             onClick={logout}
             className="flex items-center justify-center w-9 h-9 rounded-xl text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all duration-200 active:scale-95"
-            title="Log out"
+            title="התנתקות"
           >
             <span className="material-symbols-outlined text-[20px]">logout</span>
           </button>

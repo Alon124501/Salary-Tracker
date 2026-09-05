@@ -18,13 +18,13 @@ async function sendRecapEmail(name, deviceNames) {
     return;
   }
   const transporter = nodemailer.createTransport({ service: 'gmail', auth: { user: gmailUser, pass: gmailPass } });
-  const list = deviceNames.length ? deviceNames.join(', ') : '(no devices reported)';
+  const list = deviceNames.length ? deviceNames.join(', ') : '(לא דווח על ציוד)';
   try {
     await transporter.sendMail({
-      from: `Salary Tracker <${gmailUser}>`,
+      from: `Medical Pay <${gmailUser}>`,
       to: RECAP_EMAILS,
-      subject: `Equipment recap — ${name}`,
-      text: `${name} reported their equipment: ${list}`,
+      subject: `סיכום ציוד — ${name}`,
+      text: `${name} דיווח/ה על הציוד: ${list}`,
     });
   } catch (err) {
     console.error('[devices] Failed to send recap email:', err.message);
@@ -45,7 +45,7 @@ router.get('/catalog', auth, asyncHandler(async (req, res) => {
 // POST /api/devices/catalog — admin
 router.post('/catalog', auth, adminAuth, asyncHandler(async (req, res) => {
   const { name } = req.body;
-  if (!name?.trim()) return res.status(400).json({ error: 'name is required' });
+  if (!name?.trim()) return res.status(400).json({ error: 'נדרש שם' });
 
   const { data, error } = await supabase
     .from('device_catalog')
@@ -88,7 +88,7 @@ router.get('/mine', auth, asyncHandler(async (req, res) => {
 // POST /api/devices/report — authenticated employee
 router.post('/report', auth, asyncHandler(async (req, res) => {
   const { deviceIds } = req.body;
-  if (!Array.isArray(deviceIds)) return res.status(400).json({ error: 'deviceIds array is required' });
+  if (!Array.isArray(deviceIds)) return res.status(400).json({ error: 'נדרש מערך מזהי מכשירים' });
 
   const [{ data: profile, error: pErr }, { data: catalog, error: cErr }] = await Promise.all([
     supabase.from('profiles').select('first_name, last_name, username').eq('id', req.userId).single(),

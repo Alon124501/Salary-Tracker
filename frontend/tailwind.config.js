@@ -23,8 +23,8 @@ export default {
         'outline-variant': '#e5e5ea',
       },
       fontFamily: {
-        headline: ['Manrope', 'sans-serif'],
-        body: ['Inter', 'sans-serif'],
+        headline: ['Heebo', 'sans-serif'],
+        body: ['Heebo', 'sans-serif'],
       },
       borderRadius: {
         DEFAULT: '0.5rem',

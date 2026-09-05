@@ -29,7 +29,7 @@ router.get('/credentials', auth, async (req, res) => {
 router.post('/credentials', auth, adminAuth, upload.single('image'), async (req, res) => {
   const { name, username, password, sort_order } = req.body;
   if (!name || !username || !password)
-    return res.status(400).json({ error: 'name, username, and password are required' });
+    return res.status(400).json({ error: 'יש למלא שם, שם משתמש וסיסמה' });
 
   let image_url = null;
   if (req.file) {
@@ -53,7 +53,7 @@ router.post('/credentials', auth, adminAuth, upload.single('image'), async (req,
 router.post('/credentials/reorder', auth, adminAuth, async (req, res) => {
   const { items } = req.body;
   if (!Array.isArray(items) || items.length === 0)
-    return res.status(400).json({ error: 'items array is required' });
+    return res.status(400).json({ error: 'נדרש מערך פריטים' });
 
   const { error } = await supabase
     .from('app_credentials')

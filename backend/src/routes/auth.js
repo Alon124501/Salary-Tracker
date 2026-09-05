@@ -27,7 +27,7 @@ const RegisterSchema = z.object({
   first_name: z.string().min(1).max(50),
   last_name:  z.string().min(1).max(50),
   email:      z.string().email(),
-  id_number:  z.string().refine(isValidIsraeliId, 'Invalid Israeli ID number'),
+  id_number:  z.string().refine(isValidIsraeliId, 'תעודת זהות לא תקינה'),
   phone:      z.string().max(20).optional(),
   address:    z.string().max(200).optional(),
   shirt_size: z.string().max(20).optional(),
@@ -65,7 +65,7 @@ router.post('/register', asyncHandler(async (req, res) => {
 
   const { data: existingId } = await supabase.from('profiles').select('id').eq('id_number', id_number).maybeSingle();
   if (existingId) {
-    return res.status(409).json({ error: 'This ID number is already registered' });
+    return res.status(409).json({ error: 'תעודת הזהות הזו כבר רשומה במערכת' });
   }
 
   const { data, error } = await supabase.auth.admin.createUser({
@@ -108,13 +108,13 @@ router.post('/register', asyncHandler(async (req, res) => {
 router.post('/login', asyncHandler(async (req, res) => {
   const parsed = LoginSchema.safeParse(req.body);
   if (!parsed.success) {
-    return res.status(400).json({ error: 'Email and password are required' });
+    return res.status(400).json({ error: 'יש להזין אימייל וסיסמה' });
   }
   const { email, password } = parsed.data;
 
   const { data, error } = await supabaseAuth.auth.signInWithPassword({ email, password });
   if (error) {
-    return res.status(401).json({ error: 'Invalid credentials' });
+    return res.status(401).json({ error: 'פרטי ההתחברות שגויים' });
   }
 
   const { data: profile } = await supabase.from('profiles').select('username').eq('id', data.user.id).maybeSingle();
@@ -127,7 +127,7 @@ router.get('/me', auth, asyncHandler(async (req, res) => {
     .select('username, payment_type, global_salary, first_name, last_name, profession, district, email, id_number, phone, vehicle_type_color, vehicle_number, shifts_per_week, shirt_size, pants_size, address, is_admin, mileage_rate, insurance_rate, screening_rate, mixed_screening_rate, partial_rate, hourly_rate, km_bonus_enabled, km_bonus_threshold, km_bonus_amount')
     .eq('id', req.userId)
     .single();
-  if (error || !user) return res.status(404).json({ error: 'User not found' });
+  if (error || !user) return res.status(404).json({ error: 'משתמש לא נמצא' });
   res.json(user);
 }));
 
@@ -135,7 +135,7 @@ router.patch('/profile', auth, asyncHandler(async (req, res) => {
   const { first_name, last_name, email, id_number, vehicle_type_color, vehicle_number, shirt_size, pants_size, address } = req.body;
 
   if (id_number !== undefined && !isValidIsraeliId(id_number)) {
-    return res.status(400).json({ error: 'Invalid Israeli ID number' });
+    return res.status(400).json({ error: 'תעודת זהות לא תקינה' });
   }
 
   const updates = {
@@ -157,9 +157,9 @@ router.patch('/profile', auth, asyncHandler(async (req, res) => {
 
 router.patch('/password', auth, asyncHandler(async (req, res) => {
   const { newPassword, confirmPassword } = req.body;
-  if (!newPassword || !confirmPassword) return res.status(400).json({ error: 'Both fields are required' });
-  if (newPassword !== confirmPassword) return res.status(400).json({ error: 'Passwords do not match' });
-  if (newPassword.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters' });
+  if (!newPassword || !confirmPassword) return res.status(400).json({ error: 'יש למלא את שני השדות' });
+  if (newPassword !== confirmPassword) return res.status(400).json({ error: 'הסיסמאות אינן תואמות' });
+  if (newPassword.length < 6) return res.status(400).json({ error: 'הסיסמה חייבת לכלול לפחות 6 תווים' });
 
   const { error } = await supabase.auth.admin.updateUserById(req.userId, { password: newPassword });
   if (error) return res.status(500).json({ error: error.message });
@@ -168,7 +168,7 @@ router.patch('/password', auth, asyncHandler(async (req, res) => {
 
 router.post('/forgot-password', asyncHandler(async (req, res) => {
   const { email } = req.body;
-  if (!email) return res.status(400).json({ error: 'Email is required' });
+  if (!email) return res.status(400).json({ error: 'נדרשת כתובת אימייל' });
 
   const { data: profile } = await supabase.from('profiles').select('id').eq('email', email).maybeSingle();
 
@@ -187,32 +187,32 @@ router.post('/forgot-password', asyncHandler(async (req, res) => {
     await transporter.sendMail({
       from:    `"Medical Pay" <${process.env.GMAIL_USER}>`,
       to:      email,
-      subject: 'Reset your Medical Pay password',
-      html:    `<p>Click the link below to reset your password. It expires in 1 hour.</p><p><a href="${resetLink}">${resetLink}</a></p>`,
-      text:    `Reset your password here (expires in 1 hour): ${resetLink}`,
+      subject: 'איפוס הסיסמה שלך ב-Medical Pay',
+      html:    `<p>לחץ על הקישור הבא כדי לאפס את הסיסמה שלך. הקישור בתוקף לשעה אחת.</p><p><a href="${resetLink}">${resetLink}</a></p>`,
+      text:    `איפוס הסיסמה שלך (בתוקף לשעה אחת): ${resetLink}`,
     });
   }
 
   // Always return the same message to prevent email enumeration
-  res.json({ message: 'If that email is registered, a reset link has been sent.' });
+  res.json({ message: 'אם כתובת האימייל רשומה במערכת, נשלח אליה קישור לאיפוס הסיסמה.' });
 }));
 
 router.post('/reset-password', asyncHandler(async (req, res) => {
   const { token, newPassword } = req.body;
-  if (!token || !newPassword) return res.status(400).json({ error: 'Token and new password are required' });
-  if (newPassword.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters' });
+  if (!token || !newPassword) return res.status(400).json({ error: 'נדרשים קוד אימות וסיסמה חדשה' });
+  if (newPassword.length < 6) return res.status(400).json({ error: 'הסיסמה חייבת לכלול לפחות 6 תווים' });
 
   const { data: row } = await supabase.from('password_reset_tokens')
     .select('user_id, expires_at').eq('token', token).maybeSingle();
   if (!row || new Date(row.expires_at) < new Date()) {
-    return res.status(400).json({ error: 'Invalid or expired reset link' });
+    return res.status(400).json({ error: 'הקישור לאיפוס הסיסמה אינו תקין או שפג תוקפו' });
   }
 
   const { error: updateErr } = await supabase.auth.admin.updateUserById(row.user_id, { password: newPassword });
   if (updateErr) return res.status(500).json({ error: updateErr.message });
 
   await supabase.from('password_reset_tokens').delete().eq('token', token);
-  res.json({ message: 'Password updated' });
+  res.json({ message: 'הסיסמה עודכנה בהצלחה' });
 }));
 
 module.exports = router;

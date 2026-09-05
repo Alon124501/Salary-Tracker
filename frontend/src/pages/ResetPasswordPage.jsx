@@ -20,13 +20,13 @@ export default function ResetPasswordPage() {
     return (
       <div className="bg-background font-body text-on-surface antialiased flex flex-col items-center justify-center p-6 min-h-dvh text-center">
         <span className="material-symbols-outlined text-5xl text-red-400 mb-4">link_off</span>
-        <h1 className="font-headline font-bold text-xl mb-2">Invalid Reset Link</h1>
-        <p className="text-cupertino-label text-sm mb-6">This link is missing a token. Please request a new password reset.</p>
+        <h1 className="font-headline font-bold text-xl mb-2">קישור לא תקין</h1>
+        <p className="text-cupertino-label text-sm mb-6">לקישור זה חסר אסימון. אנא בקש איפוס סיסמה חדש.</p>
         <button
           onClick={() => navigate('/login')}
           className="brand-gradient text-white font-semibold px-8 py-4 rounded-cupertino brand-shadow active:scale-[0.98] transition-all duration-200"
         >
-          Back to Sign In
+          חזרה להתחברות
         </button>
       </div>
     );
@@ -36,13 +36,13 @@ export default function ResetPasswordPage() {
     return (
       <div className="bg-background font-body text-on-surface antialiased flex flex-col items-center justify-center p-6 min-h-dvh text-center">
         <span className="material-symbols-outlined text-5xl text-action-blue mb-4">check_circle</span>
-        <h1 className="font-headline font-bold text-xl mb-2">Password Updated!</h1>
-        <p className="text-cupertino-label text-sm mb-6">You can now sign in with your new password.</p>
+        <h1 className="font-headline font-bold text-xl mb-2">הסיסמה עודכנה!</h1>
+        <p className="text-cupertino-label text-sm mb-6">כעת תוכל להתחבר עם הסיסמה החדשה שלך.</p>
         <button
           onClick={() => navigate('/login')}
           className="brand-gradient text-white font-semibold px-8 py-4 rounded-cupertino brand-shadow active:scale-[0.98] transition-all duration-200"
         >
-          Back to Sign In
+          חזרה להתחברות
         </button>
       </div>
     );
@@ -52,11 +52,11 @@ export default function ResetPasswordPage() {
     e.preventDefault();
     setError('');
     if (newPassword !== confirm) {
-      setError('Passwords do not match');
+      setError('הסיסמאות אינן תואמות');
       return;
     }
     if (newPassword.length < 6) {
-      setError('Password must be at least 6 characters');
+      setError('הסיסמה חייבת לכלול לפחות 6 תווים');
       return;
     }
     setStatus('loading');
@@ -64,7 +64,7 @@ export default function ResetPasswordPage() {
       await api.post('/auth/reset-password', { token, newPassword });
       setStatus('done');
     } catch (err) {
-      setError(err.response?.data?.error || 'Something went wrong');
+      setError(err.response?.data?.error || 'משהו השתבש');
       setStatus('');
     }
   }
@@ -79,15 +79,15 @@ export default function ResetPasswordPage() {
           <h1 className="font-headline font-extrabold text-3xl tracking-tight text-black">
             Medical <span className="brand-gradient-text">Pay</span>
           </h1>
-          <p className="mt-3 font-semibold text-lg">Set New Password</p>
-          <p className="mt-1 text-cupertino-label text-sm">Enter a new password for your account.</p>
+          <p className="mt-3 font-semibold text-lg">הגדרת סיסמה חדשה</p>
+          <p className="mt-1 text-cupertino-label text-sm">הזן סיסמה חדשה עבור החשבון שלך.</p>
         </header>
 
         <form className="w-full space-y-4" onSubmit={handleSubmit}>
           <div className="relative">
             <input
-              className={inputBase + ' pr-14'}
-              placeholder="New Password"
+              className={inputBase + ' pl-14'}
+              placeholder="סיסמה חדשה"
               type={showNew ? 'text' : 'password'}
               value={newPassword}
               onChange={e => setNewPassword(e.target.value)}
@@ -97,7 +97,7 @@ export default function ResetPasswordPage() {
             <button
               type="button"
               onClick={() => setShowNew(v => !v)}
-              className="absolute right-4 top-1/2 -translate-y-1/2 text-cupertino-label hover:text-on-surface transition-colors outline-none"
+              className="absolute left-4 top-1/2 -translate-y-1/2 text-cupertino-label hover:text-on-surface transition-colors outline-none"
             >
               <span className="material-symbols-outlined text-xl">
                 {showNew ? 'visibility_off' : 'visibility'}
@@ -107,8 +107,8 @@ export default function ResetPasswordPage() {
 
           <div className="relative">
             <input
-              className={inputBase + ' pr-14'}
-              placeholder="Confirm Password"
+              className={inputBase + ' pl-14'}
+              placeholder="אימות סיסמה"
               type={showConfirm ? 'text' : 'password'}
               value={confirm}
               onChange={e => setConfirm(e.target.value)}
@@ -117,7 +117,7 @@ export default function ResetPasswordPage() {
             <button
               type="button"
               onClick={() => setShowConfirm(v => !v)}
-              className="absolute right-4 top-1/2 -translate-y-1/2 text-cupertino-label hover:text-on-surface transition-colors outline-none"
+              className="absolute left-4 top-1/2 -translate-y-1/2 text-cupertino-label hover:text-on-surface transition-colors outline-none"
             >
               <span className="material-symbols-outlined text-xl">
                 {showConfirm ? 'visibility_off' : 'visibility'}
@@ -134,7 +134,7 @@ export default function ResetPasswordPage() {
             disabled={status === 'loading'}
             className="w-full brand-gradient text-white font-semibold py-4 rounded-cupertino brand-shadow active:scale-[0.98] transition-all duration-200 text-lg mt-2 disabled:opacity-50"
           >
-            {status === 'loading' ? 'Updating...' : 'Update Password'}
+            {status === 'loading' ? 'מעדכן...' : 'עדכן סיסמה'}
           </button>
         </form>
 
@@ -143,7 +143,7 @@ export default function ResetPasswordPage() {
           onClick={() => navigate('/login')}
           className="mt-6 text-sm text-cupertino-label hover:text-on-surface transition-colors"
         >
-          Back to Sign In
+          חזרה להתחברות
         </button>
       </div>
 

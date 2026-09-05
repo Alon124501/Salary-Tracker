@@ -54,9 +54,9 @@ function AppLayout({ children }) {
   if (blocked) {
     return (
       <DeviceRecapModal
-        title="Select Your Equipment"
-        subtitle="Please confirm which devices you currently have to continue."
-        submitLabel="Continue"
+        title="בחר את הציוד שלך"
+        subtitle="אנא אשר אילו מכשירים ברשותך כעת כדי להמשיך."
+        submitLabel="המשך"
         onSubmitted={() => setBlocked(false)}
       />
     );

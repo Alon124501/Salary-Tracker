@@ -113,14 +113,14 @@ export default function Login() {
   function handleNext() {
     setError('');
     if (step === 1) {
-      if (!email) return setError('Email is required');
-      if (password.length < 6) return setError('Password must be at least 6 characters');
-      if (password !== confirm) return setError('Passwords do not match');
+      if (!email) return setError('נדרשת כתובת אימייל');
+      if (password.length < 6) return setError('הסיסמה חייבת לכלול לפחות 6 תווים');
+      if (password !== confirm) return setError('הסיסמאות אינן תואמות');
       setStep(2);
     } else if (step === 2) {
-      if (!firstName || !lastName) return setError('Full name is required');
-      if (!isValidIsraeliId(idNumber)) return setError('Invalid Israeli ID number');
-      if (phoneNumber.length !== 9) return setError('Phone number must be exactly 9 digits');
+      if (!firstName || !lastName) return setError('נדרש שם מלא');
+      if (!isValidIsraeliId(idNumber)) return setError('תעודת זהות לא תקינה');
+      if (phoneNumber.length !== 9) return setError('מספר הטלפון חייב לכלול 9 ספרות בדיוק');
       setStep(3);
     }
   }
@@ -157,7 +157,7 @@ export default function Login() {
       navigate('/');
     } catch (err) {
       const raw = err.response?.data?.error;
-      setError(typeof raw === 'string' ? raw : raw?.message || 'Something went wrong');
+      setError(typeof raw === 'string' ? raw : raw?.message || 'משהו השתבש');
     } finally {
       setLoading(false);
     }
@@ -186,7 +186,7 @@ export default function Login() {
   const inputBase = "w-full px-5 py-4 bg-cupertino-grey border-none rounded-cupertino focus:ring-1 focus:ring-action-blue transition-all font-medium text-on-surface placeholder:text-cupertino-label/60";
   const selectBase = inputBase + " appearance-none cursor-pointer";
 
-  const stepTitle = step === 1 ? 'Account' : step === 2 ? 'Personal Info' : 'Vehicle & Sizes';
+  const stepTitle = step === 1 ? 'חשבון' : step === 2 ? 'פרטים אישיים' : 'רכב ומידות';
 
   return (
     <div className="bg-background font-body text-on-surface antialiased flex flex-col items-center justify-center p-6 min-h-dvh">
@@ -204,7 +204,7 @@ export default function Login() {
           <h1 className="font-headline font-extrabold text-3xl tracking-tight text-black">
             Medical <span className="brand-gradient-text">Pay</span>
           </h1>
-          <p className="mt-2 text-cupertino-label font-medium text-sm">Track your medical salary with ease</p>
+          <p className="mt-2 text-cupertino-label font-medium text-sm">מעקב קל אחר השכר שלך</p>
         </header>
 
         {/* Form */}
@@ -229,7 +229,7 @@ export default function Login() {
                   ))}
                 </div>
                 <p className="text-xs text-cupertino-label font-medium">
-                  {stepTitle} · Step {step} of 3
+                  {stepTitle} · שלב {step} מתוך 3
                 </p>
               </div>
             )}
@@ -238,7 +238,7 @@ export default function Login() {
             {(mode === 'login' || step === 1) && (
               <input
                 className={inputBase}
-                placeholder="Email Address"
+                placeholder="כתובת אימייל"
                 type="email"
                 value={email}
                 onChange={e => setEmail(e.target.value)}
@@ -250,8 +250,8 @@ export default function Login() {
             {(mode === 'login' || step === 1) && (
               <div className="relative">
                 <input
-                  className={inputBase + ' pr-14'}
-                  placeholder="Password"
+                  className={inputBase + ' pl-14'}
+                  placeholder="סיסמה"
                   type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={e => setPassword(e.target.value)}
@@ -260,7 +260,7 @@ export default function Login() {
                 <button
                   type="button"
                   onClick={() => setShowPassword(v => !v)}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 text-cupertino-label hover:text-on-surface transition-colors outline-none"
+                  className="absolute left-4 top-1/2 -translate-y-1/2 text-cupertino-label hover:text-on-surface transition-colors outline-none"
                 >
                   <span className="material-symbols-outlined text-xl">
                     {showPassword ? 'visibility_off' : 'visibility'}
@@ -275,7 +275,7 @@ export default function Login() {
                   className="text-sm text-action-blue font-medium cursor-pointer hover:opacity-75 transition-opacity"
                   onClick={() => { setShowForgotModal(true); setForgotEmail(''); setForgotStatus(''); }}
                 >
-                  Forgot Password?
+                  שכחת סיסמה?
                 </span>
               </div>
             )}
@@ -283,8 +283,8 @@ export default function Login() {
             {mode === 'register' && step === 1 && (
               <div className="relative">
                 <input
-                  className={inputBase + ' pr-14'}
-                  placeholder="Confirm Password"
+                  className={inputBase + ' pl-14'}
+                  placeholder="אימות סיסמה"
                   type={showConfirm ? 'text' : 'password'}
                   value={confirm}
                   onChange={e => setConfirm(e.target.value)}
@@ -292,7 +292,7 @@ export default function Login() {
                 <button
                   type="button"
                   onClick={() => setShowConfirm(v => !v)}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 text-cupertino-label hover:text-on-surface transition-colors outline-none"
+                  className="absolute left-4 top-1/2 -translate-y-1/2 text-cupertino-label hover:text-on-surface transition-colors outline-none"
                 >
                   <span className="material-symbols-outlined text-xl">
                     {showConfirm ? 'visibility_off' : 'visibility'}
@@ -307,7 +307,7 @@ export default function Login() {
                 <div className="grid grid-cols-2 gap-3">
                   <input
                     className={inputBase}
-                    placeholder="First Name"
+                    placeholder="שם פרטי"
                     type="text"
                     value={firstName}
                     onChange={e => setFirstName(e.target.value)}
@@ -315,7 +315,7 @@ export default function Login() {
                   />
                   <input
                     className={inputBase}
-                    placeholder="Last Name"
+                    placeholder="שם משפחה"
                     type="text"
                     value={lastName}
                     onChange={e => setLastName(e.target.value)}
@@ -343,13 +343,13 @@ export default function Login() {
                         <option key={c.label} value={c.value}>{c.label}</option>
                       ))}
                     </select>
-                    <span className="material-symbols-outlined absolute right-2 top-1/2 -translate-y-1/2 text-cupertino-label pointer-events-none text-xl">
+                    <span className="material-symbols-outlined absolute left-2 top-1/2 -translate-y-1/2 text-cupertino-label pointer-events-none text-xl">
                       expand_more
                     </span>
                   </div>
                   <input
                     className={inputBase + ' flex-1'}
-                    placeholder="Phone (9 digits)"
+                    placeholder="טלפון (9 ספרות)"
                     type="tel"
                     inputMode="numeric"
                     maxLength={9}
@@ -380,12 +380,12 @@ export default function Login() {
                       onChange={e => setShirtSize(e.target.value)}
                       autoFocus
                     >
-                      <option value="">Shirt Size</option>
+                      <option value="">מידת חולצה</option>
                       {SIZES.map(s => (
                         <option key={s} value={s}>{s}</option>
                       ))}
                     </select>
-                    <span className="material-symbols-outlined absolute right-4 top-1/2 -translate-y-1/2 text-cupertino-label pointer-events-none text-xl">
+                    <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-cupertino-label pointer-events-none text-xl">
                       expand_more
                     </span>
                   </div>
@@ -395,12 +395,12 @@ export default function Login() {
                       value={pantsSize}
                       onChange={e => setPantsSize(e.target.value)}
                     >
-                      <option value="">Pants Size</option>
+                      <option value="">מידת מכנסיים</option>
                       {SIZES.map(s => (
                         <option key={s} value={s}>{s}</option>
                       ))}
                     </select>
-                    <span className="material-symbols-outlined absolute right-4 top-1/2 -translate-y-1/2 text-cupertino-label pointer-events-none text-xl">
+                    <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-cupertino-label pointer-events-none text-xl">
                       expand_more
                     </span>
                   </div>
@@ -440,7 +440,7 @@ export default function Login() {
                     onClick={() => { setError(''); setStep(s => s - 1); }}
                     className="w-full bg-cupertino-grey text-on-surface font-semibold py-4 rounded-cupertino transition-all duration-200 active:scale-[0.98]"
                   >
-                    ← Back
+                    → חזרה
                   </button>
                 )}
                 <button
@@ -448,7 +448,7 @@ export default function Login() {
                   disabled={loading}
                   className="w-full brand-gradient text-white font-semibold py-4 rounded-cupertino brand-shadow active:scale-[0.98] transition-all duration-200 disabled:opacity-50"
                 >
-                  {loading ? 'Please wait...' : step < 3 ? 'Next →' : 'Create Account'}
+                  {loading ? 'רגע בבקשה...' : step < 3 ? '← הבא' : 'צור חשבון'}
                 </button>
               </div>
             ) : (
@@ -457,7 +457,7 @@ export default function Login() {
                 disabled={loading}
                 className="w-full brand-gradient text-white font-semibold py-4 rounded-cupertino brand-shadow active:scale-[0.98] transition-all duration-200 text-lg mt-2 disabled:opacity-50"
               >
-                {loading ? 'Please wait...' : 'Sign In'}
+                {loading ? 'רגע בבקשה...' : 'התחברות'}
               </button>
             )}
           </form>
@@ -466,12 +466,12 @@ export default function Login() {
           <div className="flex flex-col items-center gap-4">
             <div className="w-full h-px bg-outline-variant my-2"></div>
             <p className="text-cupertino-label text-sm">
-              {mode === 'login' ? "New here?" : 'Already have an account?'}
+              {mode === 'login' ? "חדש כאן?" : 'כבר יש לך חשבון?'}
               <span
-                className="font-semibold brand-gradient-text ml-1 cursor-pointer hover:opacity-80 transition-opacity"
+                className="font-semibold brand-gradient-text mr-1 cursor-pointer hover:opacity-80 transition-opacity"
                 onClick={() => switchMode(mode === 'login' ? 'register' : 'login')}
               >
-                {mode === 'login' ? 'Create Account' : 'Sign In'}
+                {mode === 'login' ? 'צור חשבון' : 'התחברות'}
               </span>
             </p>
           </div>
@@ -481,9 +481,9 @@ export default function Login() {
         <footer className="mt-24 text-center">
           <div className="flex items-center justify-center gap-2 mb-4 opacity-30">
             <span className="material-symbols-outlined text-sm">lock</span>
-            <span className="text-[10px] font-bold tracking-widest uppercase">End-to-End Encrypted</span>
+            <span className="text-[10px] font-bold tracking-widest uppercase">הצפנה מקצה לקצה</span>
           </div>
-          <p className="text-[10px] text-cupertino-label font-medium tracking-tight">© 2025 SalaryTracker</p>
+          <p className="text-[10px] text-cupertino-label font-medium tracking-tight">© 2025 Medical Pay</p>
         </footer>
       </div>
 
@@ -500,24 +500,24 @@ export default function Login() {
             <button
               type="button"
               onClick={() => setShowForgotModal(false)}
-              className="absolute right-4 top-4 text-cupertino-label hover:text-on-surface transition-colors outline-none"
+              className="absolute left-4 top-4 text-cupertino-label hover:text-on-surface transition-colors outline-none"
             >
               <span className="material-symbols-outlined text-xl">close</span>
             </button>
 
-            <h2 className="font-headline font-bold text-xl mb-1">Reset Password</h2>
-            <p className="text-cupertino-label text-sm mb-6">Enter your email and we'll send you a reset link.</p>
+            <h2 className="font-headline font-bold text-xl mb-1">איפוס סיסמה</h2>
+            <p className="text-cupertino-label text-sm mb-6">הזן את כתובת האימייל שלך ונשלח לך קישור לאיפוס.</p>
 
             {forgotStatus === 'sent' ? (
               <div className="text-center space-y-4">
                 <span className="material-symbols-outlined text-5xl text-action-blue">mark_email_read</span>
-                <p className="font-medium text-on-surface">Check your inbox — a reset link has been sent.</p>
+                <p className="font-medium text-on-surface">בדוק את תיבת הדואר שלך — קישור לאיפוס נשלח.</p>
                 <button
                   type="button"
                   onClick={() => setShowForgotModal(false)}
                   className="w-full brand-gradient text-white font-semibold py-4 rounded-cupertino brand-shadow active:scale-[0.98] transition-all duration-200"
                 >
-                  Done
+                  סיום
                 </button>
               </div>
             ) : (
@@ -536,7 +536,7 @@ export default function Login() {
               >
                 <input
                   className={inputBase}
-                  placeholder="Email Address"
+                  placeholder="כתובת אימייל"
                   type="email"
                   value={forgotEmail}
                   onChange={e => setForgotEmail(e.target.value)}
@@ -544,14 +544,14 @@ export default function Login() {
                   autoFocus
                 />
                 {forgotStatus === 'error' && (
-                  <p className="text-red-500 text-sm font-medium text-center">Something went wrong. Try again.</p>
+                  <p className="text-red-500 text-sm font-medium text-center">משהו השתבש. נסה שוב.</p>
                 )}
                 <button
                   type="submit"
                   disabled={forgotStatus === 'loading'}
                   className="w-full brand-gradient text-white font-semibold py-4 rounded-cupertino brand-shadow active:scale-[0.98] transition-all duration-200 disabled:opacity-50"
                 >
-                  {forgotStatus === 'loading' ? 'Sending...' : 'Send Reset Link'}
+                  {forgotStatus === 'loading' ? 'שולח...' : 'שלח קישור לאיפוס'}
                 </button>
               </form>
             )}

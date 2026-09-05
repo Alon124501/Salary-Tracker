@@ -21,7 +21,7 @@ function monthRange(month) {
 // GET /api/report/excel?month=YYYY-MM
 router.get('/excel', async (req, res) => {
   const { month } = req.query;
-  if (!month) return res.status(400).json({ error: 'month param required (YYYY-MM)' });
+  if (!month) return res.status(400).json({ error: 'נדרש פרמטר חודש (YYYY-MM)' });
 
   const { data: user, error: userErr } = await supabase.from('profiles')
     .select(PROFILE_SELECT).eq('id', req.userId).single();
@@ -33,7 +33,7 @@ router.get('/excel', async (req, res) => {
   if (entriesErr) return res.status(500).json({ error: entriesErr.message });
 
   const [year, monthNum] = month.split('-').map(Number);
-  const monthName = new Date(year, monthNum - 1).toLocaleString('en-US', { month: 'long' });
+  const monthName = new Date(year, monthNum - 1).toLocaleString('he-IL', { month: 'long' });
   const name = `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.username;
   const title = `${name} — ${monthName} ${year}`;
   const filename = `${name} - ${monthName} ${year}.xlsx`;
@@ -44,7 +44,7 @@ router.get('/excel', async (req, res) => {
     buildSheet(sheet, entries || [], user, title);
 
     const buffer = await workbook.xlsx.writeBuffer();
-    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(filename)}"`);
+    res.setHeader('Content-Disposition', `attachment; filename="report.xlsx"; filename*=UTF-8''${encodeURIComponent(filename)}`);
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.send(buffer);
   } catch (err) {
@@ -56,7 +56,7 @@ router.get('/excel', async (req, res) => {
 // GET /api/report/download-zip?month=YYYY-MM
 router.get('/download-zip', async (req, res) => {
   const { month } = req.query;
-  if (!month) return res.status(400).json({ error: 'month param required (YYYY-MM)' });
+  if (!month) return res.status(400).json({ error: 'נדרש פרמטר חודש (YYYY-MM)' });
 
   const { data: report, error: reportErr } = await supabase.from('equipment_reports')
     .select('id').eq('user_id', req.userId).eq('week', currentWeek()).maybeSingle();
@@ -73,7 +73,7 @@ router.get('/download-zip', async (req, res) => {
   if (entriesErr) return res.status(500).json({ error: entriesErr.message });
 
   const [year, monthNum] = month.split('-').map(Number);
-  const monthName = new Date(year, monthNum - 1).toLocaleString('en-US', { month: 'long' });
+  const monthName = new Date(year, monthNum - 1).toLocaleString('he-IL', { month: 'long' });
   const name = `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.username;
   const title = `${name} — ${monthName} ${year}`;
 
@@ -84,7 +84,7 @@ router.get('/download-zip', async (req, res) => {
     const excelBuffer = await workbook.xlsx.writeBuffer();
 
     const filename = `${name} - ${monthName} ${year}.zip`;
-    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(filename)}"`);
+    res.setHeader('Content-Disposition', `attachment; filename="report.zip"; filename*=UTF-8''${encodeURIComponent(filename)}`);
     res.setHeader('Content-Type', 'application/zip');
 
     const archive = archiver('zip', { zlib: { level: 6 } });
