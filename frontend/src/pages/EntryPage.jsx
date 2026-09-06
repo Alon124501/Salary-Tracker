@@ -161,8 +161,8 @@ export default function EntryPage() {
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
               <TestField label="ביטוח" value={form.insurance_tests} onChange={v => set('insurance_tests', v)} />
               <TestField label="סקר" value={form.screening_tests} onChange={v => set('screening_tests', v)} />
-              <TestField label="סקר מעורב" value={form.mixed_screening_tests} onChange={v => set('mixed_screening_tests', v)} />
-              <TestField label="חלקי" value={form.partial_tests} onChange={v => set('partial_tests', v)} />
+              <TestField label="סקר משולב" value={form.mixed_screening_tests} onChange={v => set('mixed_screening_tests', v)} />
+              <TestField label="השלמה" value={form.partial_tests} onChange={v => set('partial_tests', v)} />
             </div>
           </div>
 
@@ -419,8 +419,8 @@ export default function EntryPage() {
                 {[
                   form.insurance_tests > 0 && `ביטוח: ${form.insurance_tests}`,
                   form.screening_tests > 0 && `סקר: ${form.screening_tests}`,
-                  form.mixed_screening_tests > 0 && `מעורב: ${form.mixed_screening_tests}`,
-                  form.partial_tests > 0 && `חלקי: ${form.partial_tests}`,
+                  form.mixed_screening_tests > 0 && `משולב: ${form.mixed_screening_tests}`,
+                  form.partial_tests > 0 && `השלמה: ${form.partial_tests}`,
                 ].filter(Boolean).join(' · ') || 'מלא את הנתונים שלך'}
               </p>
             </div>
