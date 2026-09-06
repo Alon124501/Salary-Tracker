@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-route
 import { ToastProvider } from './context/ToastContext.jsx';
 import api from './api.js';
 import DeviceRecapModal from './components/DeviceRecapModal.jsx';
+import { registerAndSubscribe } from './push.js';
 
 function ScrollToTop() {
   const { pathname } = useLocation();
@@ -35,6 +36,8 @@ function AdminRoute({ children }) {
 function AppLayout({ children }) {
   const [checking, setChecking] = useState(true);
   const [blocked, setBlocked] = useState(false);
+
+  useEffect(() => { registerAndSubscribe(); }, []);
 
   useEffect(() => {
     let cancelled = false;

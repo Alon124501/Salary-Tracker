@@ -1,5 +1,6 @@
 import { useNavigate, useLocation } from 'react-router-dom';
 import { clearCache } from '../hooks/useFetch.js';
+import { unsubscribePush } from '../push.js';
 
 const items = [
   { path: '/', icon: 'home', label: 'בית' },
@@ -14,10 +15,12 @@ export default function BottomNav() {
   const location = useLocation();
 
   function logout() {
-    clearCache();
-    localStorage.removeItem('token');
-    localStorage.removeItem('username');
-    window.location.href = '/login';
+    unsubscribePush().finally(() => {
+      clearCache();
+      localStorage.removeItem('token');
+      localStorage.removeItem('username');
+      window.location.href = '/login';
+    });
   }
 
   return (

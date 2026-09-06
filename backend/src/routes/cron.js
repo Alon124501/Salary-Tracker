@@ -3,6 +3,7 @@ const archiver = require('archiver');
 const nodemailer = require('nodemailer');
 const supabase = require('../supabase');
 const { computeNextOccurrence } = require('../utils/scheduling');
+const { sendPushToAll } = require('../lib/webPush');
 
 const router = express.Router();
 
@@ -122,6 +123,7 @@ router.get('/process-notifications', async (req, res) => {
   await supabase.from('notifications').update({ is_active: true }).in('id', dueIds).eq('is_active', false);
 
   for (const n of due) {
+    sendPushToAll({ title: n.title, body: n.content?.slice(0, 120) });
     if (!n.recurrence_days?.length || !n.recurrence_time) continue;
 
     // Use both contains + containedBy for exact array equality (not a superset check)

@@ -4,6 +4,7 @@ const auth      = require('../middleware/auth');
 const adminAuth = require('../middleware/adminAuth');
 const supabase  = require('../supabase');
 const { computeNextOccurrence } = require('../utils/scheduling');
+const { sendPushToAll } = require('../lib/webPush');
 
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
@@ -31,6 +32,7 @@ router.get('/', auth, async (req, res) => {
       await supabase.from('notifications').update({ is_active: true }).in('id', dueIds).eq('is_active', false);
 
       for (const n of due) {
+        sendPushToAll({ title: n.title, body: n.content?.slice(0, 120) });
         if (!n.recurrence_days?.length || !n.recurrence_time) continue;
         // Use both contains + containedBy to get exact array equality (not a superset check)
         const { data: existing } = await supabase
@@ -168,6 +170,10 @@ router.post('/', auth, adminAuth, upload.single('document'), async (req, res) =>
       .single();
 
     if (error) return res.status(500).json({ error: error.message });
+
+    if (isActive) {
+      sendPushToAll({ title: data.title, body: data.content?.slice(0, 120) });
+    }
 
     // Upload document file if provided, then patch the row with the storage path.
     // On upload failure we delete the just-created row to avoid a notification

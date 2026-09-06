@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api.js';
 import DeviceRecapModal from '../components/DeviceRecapModal.jsx';
+import { pushSupported, requestPermissionAndSubscribe, unsubscribePush } from '../push.js';
 
 function currentMonth() {
   const d = new Date();
@@ -13,9 +14,11 @@ function totalTests(e) {
 }
 
 function logout() {
-  localStorage.removeItem('token');
-  localStorage.removeItem('username');
-  window.location.href = '/login';
+  unsubscribePush().finally(() => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('username');
+    window.location.href = '/login';
+  });
 }
 
 export default function Dashboard() {
@@ -25,6 +28,9 @@ export default function Dashboard() {
   const [summary, setSummary] = useState(null);
   const [notifications, setNotifications] = useState([]);
   const [showRecapModal, setShowRecapModal] = useState(false);
+  const [showPushBanner, setShowPushBanner] = useState(
+    pushSupported() && Notification.permission === 'default' && localStorage.getItem('pushBannerDismissed') !== '1'
+  );
 
   useEffect(() => { loadData(); }, [month]);
 
@@ -105,6 +111,16 @@ export default function Dashboard() {
     } catch { /* silent */ }
   }
 
+  async function enablePush() {
+    await requestPermissionAndSubscribe();
+    setShowPushBanner(false);
+  }
+
+  function dismissPushBanner() {
+    localStorage.setItem('pushBannerDismissed', '1');
+    setShowPushBanner(false);
+  }
+
   async function deleteEntry(id) {
     if (!confirm('למחוק רישום זה?')) return;
     await api.delete(`/entries/${id}`);
@@ -144,6 +160,31 @@ export default function Dashboard() {
           </button>
         </div>
       </div>
+
+      {/* Push notifications opt-in banner */}
+      {showPushBanner && (
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-card p-4 flex items-center gap-3">
+          <div className="w-9 h-9 rounded-xl bg-violet-50 flex items-center justify-center flex-shrink-0">
+            <span className="material-symbols-outlined text-brand-purple text-lg" style={{ fontVariationSettings: "'FILL' 1" }}>notifications_active</span>
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="font-bold text-slate-800 text-sm">קבל התראות ישירות לטלפון</p>
+            <p className="text-xs text-slate-400 mt-0.5">אשר קבלת התראות כדי לא לפספס עדכונים חשובים</p>
+          </div>
+          <button
+            onClick={enablePush}
+            className="text-xs font-bold px-3 py-2 rounded-xl brand-gradient text-white active:scale-95 transition-all flex-shrink-0"
+          >
+            הפעל
+          </button>
+          <button
+            onClick={dismissPushBanner}
+            className="w-8 h-8 flex items-center justify-center text-slate-300 hover:text-slate-500 flex-shrink-0"
+          >
+            <span className="material-symbols-outlined text-lg">close</span>
+          </button>
+        </div>
+      )}
 
       {/* Notification Feed */}
       {notifications.length > 0 && (
