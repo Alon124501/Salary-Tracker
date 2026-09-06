@@ -99,6 +99,13 @@ export default function Dashboard() {
     } catch { /* silent */ }
   }
 
+  async function dismissNotification(id) {
+    try {
+      await api.post(`/notifications/${id}/dismiss`);
+      setNotifications(prev => prev.filter(n => n.id !== id));
+    } catch { /* silent */ }
+  }
+
   async function openDocument(notif) {
     window.open(notif.document_url, '_blank', 'noopener,noreferrer');
     try {
@@ -196,7 +203,18 @@ export default function Dashboard() {
                   <span className="material-symbols-outlined text-brand-purple text-base" style={{ fontVariationSettings: "'FILL' 1" }}>notifications</span>
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="font-bold text-slate-800 text-sm">{n.title}</p>
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="font-bold text-slate-800 text-sm">{n.title}</p>
+                    {!n.requires_approval && (
+                      <button
+                        onClick={() => dismissNotification(n.id)}
+                        title="הסתר התראה"
+                        className="w-6 h-6 flex-shrink-0 flex items-center justify-center text-slate-300 hover:text-slate-500 -mt-0.5 -me-0.5"
+                      >
+                        <span className="material-symbols-outlined text-base">close</span>
+                      </button>
+                    )}
+                  </div>
                   <p className="text-sm text-slate-500 mt-1 whitespace-pre-wrap">{n.content}</p>
                   {n.document_url && (
                     <div className="mt-3 flex items-center gap-3 p-3 bg-slate-50 rounded-xl border border-slate-100">

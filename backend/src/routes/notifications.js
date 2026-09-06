@@ -71,16 +71,16 @@ router.get('/', auth, async (req, res) => {
     const notifIds = notifs.map(n => n.id);
     const { data: reads } = await supabase
       .from('notification_reads')
-      .select('notification_id, approved_at, document_opened_at')
+      .select('notification_id, approved_at, document_opened_at, dismissed_at')
       .eq('user_id', req.userId)
       .in('notification_id', notifIds);
 
     const readMap = Object.fromEntries(
-      (reads || []).map(r => [r.notification_id, { approved_at: r.approved_at, document_opened_at: r.document_opened_at }])
+      (reads || []).map(r => [r.notification_id, { approved_at: r.approved_at, document_opened_at: r.document_opened_at, dismissed_at: r.dismissed_at }])
     );
 
     const visible = notifs
-      .filter(n => !n.requires_approval || !readMap[n.id]?.approved_at)
+      .filter(n => !readMap[n.id]?.dismissed_at && (!n.requires_approval || !readMap[n.id]?.approved_at))
       .map(n => ({
         ...n,
         approved_at: readMap[n.id]?.approved_at || null,
@@ -237,6 +237,31 @@ router.post('/:id/approve', auth, async (req, res) => {
       .from('notification_reads')
       .upsert(
         { notification_id: req.params.id, user_id: req.userId, approved_at: new Date().toISOString() },
+        { onConflict: 'notification_id,user_id' }
+      );
+
+    if (error) return res.status(500).json({ error: error.message });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/notifications/:id/dismiss — tester hides a non-approval notification
+// from their own feed only; other users and the notification itself are untouched.
+router.post('/:id/dismiss', auth, async (req, res) => {
+  try {
+    const { data: notif, error: fetchErr } = await supabase
+      .from('notifications').select('requires_approval').eq('id', req.params.id).single();
+    if (fetchErr || !notif) return res.status(404).json({ error: 'ההתראה לא נמצאה' });
+    if (notif.requires_approval) {
+      return res.status(400).json({ error: 'לא ניתן להסתיר התראה הדורשת אישור' });
+    }
+
+    const { error } = await supabase
+      .from('notification_reads')
+      .upsert(
+        { notification_id: req.params.id, user_id: req.userId, dismissed_at: new Date().toISOString() },
         { onConflict: 'notification_id,user_id' }
       );
 
