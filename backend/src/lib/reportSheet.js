@@ -4,7 +4,7 @@ function buildSheet(sheet, entries, profile = {}, title = '') {
   const centerAlign = { horizontal: 'center', vertical: 'middle' };
   const stripeFill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF9FAFB' } };
   const totalFill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF0F2F5' } };
-  const numCols = 9;
+  const numCols = 10;
 
   sheet.columns = [
     { header: 'תאריך',           key: 'date',   width: 14 },
@@ -13,6 +13,7 @@ function buildSheet(sheet, entries, profile = {}, title = '') {
     { header: 'סקר מעורב',        key: 'mix',    width: 16 },
     { header: 'בדיקות חלקיות',    key: 'par',    width: 14 },
     { header: 'סה"כ בדיקות',      key: 'total',  width: 14 },
+    { header: 'ביטולים',          key: 'canc',   width: 12 },
     { header: 'קילומטרים',        key: 'km',     width: 12 },
     { header: 'שעות משרד',        key: 'hrs',    width: 14 },
     { header: 'אוכל (₪)',         key: 'food',   width: 12 },
@@ -26,7 +27,7 @@ function buildSheet(sheet, entries, profile = {}, title = '') {
   });
   sheet.getRow(1).height = 22;
 
-  const sums = { ins: 0, scr: 0, mix: 0, par: 0, total: 0, km: 0, hrs: 0, food: 0, parking: 0 };
+  const sums = { ins: 0, scr: 0, mix: 0, par: 0, total: 0, canc: 0, km: 0, hrs: 0, food: 0, parking: 0 };
 
   for (let i = 0; i < entries.length; i++) {
     const e = entries[i];
@@ -36,6 +37,7 @@ function buildSheet(sheet, entries, profile = {}, title = '') {
     const dataRow = sheet.addRow({
       date: e.date, ins: e.insurance_tests, scr: e.screening_tests,
       mix: e.mixed_screening_tests, par: e.partial_tests, total,
+      canc: e.cancellations,
       km: e.kilometers, hrs: e.office_hours,
       food: e.food_expense, parking: e.parking_expense,
     });
@@ -51,6 +53,7 @@ function buildSheet(sheet, entries, profile = {}, title = '') {
     sums.mix     += e.mixed_screening_tests || 0;
     sums.par     += e.partial_tests         || 0;
     sums.total   += total;
+    sums.canc    += e.cancellations         || 0;
     sums.km      += e.kilometers            || 0;
     sums.hrs     += e.office_hours          || 0;
     sums.food    += e.food_expense          || 0;

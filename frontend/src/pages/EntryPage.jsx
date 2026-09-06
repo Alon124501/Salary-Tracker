@@ -10,6 +10,7 @@ const defaultForm = {
   date: today(),
   insurance_tests: 0, screening_tests: 0, mixed_screening_tests: 0, partial_tests: 0,
   kilometers: 0, office_hours: 0, food_expense: 0, parking_expense: 0,
+  cancellations: 0,
 };
 
 export default function EntryPage() {
@@ -42,6 +43,7 @@ export default function EntryPage() {
           office_hours: existing.office_hours,
           food_expense: existing.food_expense,
           parking_expense: existing.parking_expense,
+          cancellations: existing.cancellations,
         });
         setEntryId(existing.id);
         if (existing.food_receipt_urls?.length > 0) {
@@ -161,6 +163,14 @@ export default function EntryPage() {
               <TestField label="סקר" value={form.screening_tests} onChange={v => set('screening_tests', v)} />
               <TestField label="סקר מעורב" value={form.mixed_screening_tests} onChange={v => set('mixed_screening_tests', v)} />
               <TestField label="חלקי" value={form.partial_tests} onChange={v => set('partial_tests', v)} />
+            </div>
+          </div>
+
+          {/* Cancellations — not a test type, tracked separately */}
+          <div className="space-y-3">
+            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest px-1">ביטולים</h3>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+              <TestField label="ביטולים" value={form.cancellations} onChange={v => set('cancellations', v)} />
             </div>
           </div>
 
