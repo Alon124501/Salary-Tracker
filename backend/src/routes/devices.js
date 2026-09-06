@@ -8,7 +8,7 @@ const { currentWeek } = require('../lib/equipmentWeek');
 
 const router = express.Router();
 
-const RECAP_EMAILS = ['alonm@mpcheck.co.il', 'davida@mpcheck.co.il'];
+const RECAP_EMAILS = ['alonm@mpcheck.co.il'];
 
 async function sendRecapEmail(name, deviceNames) {
   const gmailUser = process.env.GMAIL_USER;

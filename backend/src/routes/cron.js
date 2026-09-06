@@ -6,7 +6,7 @@ const { computeNextOccurrence } = require('../utils/scheduling');
 
 const router = express.Router();
 
-const ADMIN_EMAIL = 'davida@mpcheck.co.il';
+const ADMIN_EMAIL = 'alonm@mpcheck.co.il';
 
 router.get('/monthly-receipts', async (req, res) => {
   const secret = process.env.CRON_SECRET;
