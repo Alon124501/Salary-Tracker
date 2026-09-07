@@ -1954,6 +1954,9 @@ export default function AdminDashboard() {
                           <p className="text-xs text-slate-400 mt-0.5">
                             {itemCount} {itemCount !== 1 ? 'פריטים' : 'פריט'} · {new Date(order.created_at).toLocaleDateString('he-IL', { month: 'short', day: 'numeric', year: 'numeric' })}
                           </p>
+                          <p className="text-xs font-semibold text-brand-purple mt-0.5">
+                            נדרש: {order.needed_date ? new Date(order.needed_date).toLocaleDateString('he-IL', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}
+                          </p>
                         </div>
                         <span className={`text-xs font-bold px-2.5 py-1 rounded-xl ${order.status === 'completed' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
                           {order.status === 'completed' ? 'הושלם' : 'ממתין'}
@@ -1980,7 +1983,10 @@ export default function AdminDashboard() {
                   return <h2 className="text-base font-extrabold text-slate-900">{name}</h2>;
                 })()}
                 <p className="text-xs text-slate-400 mt-0.5">
-                  {new Date(eqOrderModal.created_at).toLocaleDateString('he-IL', { month: 'long', day: 'numeric', year: 'numeric' })}
+                  נשלח: {new Date(eqOrderModal.created_at).toLocaleDateString('he-IL', { month: 'long', day: 'numeric', year: 'numeric' })}
+                </p>
+                <p className="text-xs font-semibold text-brand-purple mt-0.5">
+                  תאריך נדרש: {eqOrderModal.needed_date ? new Date(eqOrderModal.needed_date).toLocaleDateString('he-IL', { month: 'long', day: 'numeric', year: 'numeric' }) : '—'}
                 </p>
               </div>
               <button onClick={() => setEqOrderModal(null)} className="w-8 h-8 flex items-center justify-center rounded-xl bg-slate-100 text-slate-500">

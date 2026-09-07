@@ -43,7 +43,7 @@ router.delete('/catalog/:id', auth, adminAuth, asyncHandler(async (req, res) => 
 
 // POST /api/equipment/orders — authenticated employee
 router.post('/orders', auth, asyncHandler(async (req, res) => {
-  const { items } = req.body;
+  const { items, needed_date } = req.body;
   if (!Array.isArray(items) || items.length === 0)
     return res.status(400).json({ error: 'נדרש מערך פריטים' });
 
@@ -51,9 +51,12 @@ router.post('/orders', auth, asyncHandler(async (req, res) => {
   if (filtered.length === 0)
     return res.status(400).json({ error: 'לפחות פריט אחד חייב לכלול כמות גדולה מ-0' });
 
+  if (typeof needed_date !== 'string' || !needed_date.trim() || isNaN(Date.parse(needed_date)))
+    return res.status(400).json({ error: 'נדרש תאריך תקין' });
+
   const { data, error } = await supabase
     .from('equipment_orders')
-    .insert({ user_id: req.userId, items: filtered })
+    .insert({ user_id: req.userId, items: filtered, needed_date })
     .select()
     .single();
   if (error) return res.status(500).json({ error: error.message });
@@ -64,7 +67,7 @@ router.post('/orders', auth, asyncHandler(async (req, res) => {
 router.get('/orders', auth, adminAuth, asyncHandler(async (req, res) => {
   const { data, error } = await supabase
     .from('equipment_orders')
-    .select('id, user_id, items, status, created_at, completed_at, profiles(first_name, last_name, username)')
+    .select('id, user_id, items, needed_date, status, created_at, completed_at, profiles(first_name, last_name, username)')
     .order('created_at', { ascending: false });
   if (error) return res.status(500).json({ error: error.message });
   res.json(data || []);

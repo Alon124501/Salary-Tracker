@@ -82,8 +82,8 @@ export default function PortalPage() {
   const { data: eqCatalog = [], loading: eqCatalogLoading } =
     useFetch('/equipment/catalog', { enabled: tab === 'equipment' });
   const [eqQty, setEqQty] = useState({});
+  const [eqNeededDate, setEqNeededDate] = useState('');
   const [eqSubmitting, setEqSubmitting] = useState(false);
-  const [eqSuccess, setEqSuccess] = useState(false);
 
   // Tutorial videos state
   const { data: videos = [], loading: videosLoading } =
@@ -100,13 +100,13 @@ export default function PortalPage() {
     const items = eqCatalog
       .filter(item => (eqQty[item.id] || 0) > 0)
       .map(item => ({ catalog_id: item.id, name: item.name, quantity: eqQty[item.id] }));
-    if (items.length === 0) return;
+    if (items.length === 0 || !eqNeededDate) return;
     setEqSubmitting(true);
     try {
-      await api.post('/equipment/orders', { items });
+      await api.post('/equipment/orders', { items, needed_date: eqNeededDate });
       setEqQty({});
-      setEqSuccess(true);
-      setTimeout(() => setEqSuccess(false), 3000);
+      setEqNeededDate('');
+      showToast('ההזמנה נשלחה', 'success');
     } catch (err) { showToast(err?.response?.data?.error || 'שליחת ההזמנה נכשלה'); }
     finally { setEqSubmitting(false); }
   }
@@ -245,12 +245,6 @@ export default function PortalPage() {
                   <span className="material-symbols-outlined text-brand-purple text-lg" style={{ fontVariationSettings: "'FILL' 1" }}>inventory</span>
                   הזמנת ציוד
                 </h2>
-                {eqSuccess && (
-                  <div className="mb-4 flex items-center gap-2 bg-emerald-50 border border-emerald-200 text-emerald-700 text-sm font-semibold px-4 py-3 rounded-2xl">
-                    <span className="material-symbols-outlined text-lg" style={{ fontVariationSettings: "'FILL' 1" }}>check_circle</span>
-                    ההזמנה נשלחה בהצלחה!
-                  </div>
-                )}
                 {eqCatalogLoading ? (
                   <div className="flex justify-center py-10">
                     <span className="material-symbols-outlined text-3xl text-slate-300 animate-spin">progress_activity</span>
@@ -282,9 +276,20 @@ export default function PortalPage() {
                         </div>
                       ))}
                     </div>
+                    <div className="bg-white rounded-2xl border border-slate-100 px-4 py-3.5 mb-5"
+                      style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
+                      <label className="text-sm font-semibold text-slate-800 block mb-2">תאריך נדרש *</label>
+                      <input
+                        type="date"
+                        value={eqNeededDate}
+                        onChange={e => setEqNeededDate(e.target.value)}
+                        required
+                        className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-purple/30"
+                      />
+                    </div>
                     <button
                       onClick={submitOrder}
-                      disabled={eqSubmitting || Object.values(eqQty).every(v => !v)}
+                      disabled={eqSubmitting || Object.values(eqQty).every(v => !v) || !eqNeededDate}
                       className="w-full py-3 rounded-2xl text-sm font-bold text-white brand-gradient active:scale-[0.98] transition-all disabled:opacity-40"
                       style={{ boxShadow: '0 4px 14px rgba(139,53,217,0.3)' }}
                     >
