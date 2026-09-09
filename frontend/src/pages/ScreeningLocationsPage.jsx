@@ -20,7 +20,7 @@ function localDateStr(d) {
 const EMPTY_COMPANY_FORM = { name: '', requires_vouchers: false };
 const EMPTY_BRANCH_FORM = {
   name: '', contacts: [],
-  requires_echo_bed: false, test_types: [], registration_url: '',
+  requires_echo_bed: false, test_types: [], registration_url: '', address: '',
 };
 
 function whatsappLink(phone) {
@@ -28,6 +28,10 @@ function whatsappLink(phone) {
   const digits = phone.replace(/\D/g, '');
   const normalized = digits.startsWith('0') ? '972' + digits.slice(1) : digits;
   return `https://wa.me/${normalized}`;
+}
+
+function wazeLink(address) {
+  return `https://waze.com/ul?q=${encodeURIComponent(address)}&navigate=yes`;
 }
 
 function CompanyAvatar({ company, size = 'lg' }) {
@@ -259,6 +263,7 @@ export default function ScreeningLocationsPage() {
       requires_echo_bed: !!branch.requires_echo_bed,
       test_types: branch.test_types || [],
       registration_url: branch.registration_url || '',
+      address: branch.address || '',
     });
     setBranchFormError('');
     setShowBranchForm(true);
@@ -299,6 +304,7 @@ export default function ScreeningLocationsPage() {
       fd.append('requires_echo_bed', branchForm.requires_echo_bed ? 'true' : 'false');
       fd.append('test_types', JSON.stringify(branchForm.test_types));
       fd.append('registration_url', branchForm.registration_url.trim());
+      fd.append('address', branchForm.address.trim());
 
       const headers = { 'Content-Type': 'multipart/form-data' };
       if (editingBranch) {
@@ -661,6 +667,20 @@ export default function ScreeningLocationsPage() {
 
               {activeTab === 'details' && (<>
 
+                {/* Waze navigation */}
+                {selectedBranch.address && (
+                  <a
+                    href={wazeLink(selectedBranch.address)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center justify-center gap-2.5 w-full py-3.5 rounded-2xl font-bold text-white text-sm transition-opacity active:opacity-80"
+                    style={{ backgroundColor: '#33CCFF' }}
+                  >
+                    <span className="material-symbols-outlined text-base">near_me</span>
+                    נווט עם Waze
+                  </a>
+                )}
+
                 {/* Contacts */}
                 {selectedBranch.contacts?.map((contact, i) => (
                   <div key={i} className="space-y-3">
@@ -764,7 +784,7 @@ export default function ScreeningLocationsPage() {
                   </div>
                 )}
 
-                {!selectedBranch.contacts?.length && !selectedBranch.test_types?.length && !selectedBranch.registration_url && (
+                {!selectedBranch.contacts?.length && !selectedBranch.test_types?.length && !selectedBranch.registration_url && !selectedBranch.address && (
                   <p className="text-sm text-slate-400 text-center py-4">אין פרטים נוספים לסניף זה</p>
                 )}
               </>)}
@@ -1207,6 +1227,16 @@ export default function ScreeningLocationsPage() {
                   dir="ltr"
                   value={branchForm.registration_url}
                   onChange={e => setBranchForm(p => ({ ...p, registration_url: e.target.value }))}
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1.5">כתובת</label>
+                <input
+                  className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-purple/30"
+                  placeholder="רחוב, עיר"
+                  value={branchForm.address}
+                  onChange={e => setBranchForm(p => ({ ...p, address: e.target.value }))}
                 />
               </div>
 

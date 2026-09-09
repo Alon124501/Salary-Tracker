@@ -122,7 +122,7 @@ router.get('/companies/:id/branches', async (req, res) => {
 
 // POST /api/screening/companies/:id/branches  (admin)
 router.post('/companies/:id/branches', adminAuth, upload.none(), async (req, res) => {
-  const { name, contacts, requires_echo_bed, test_types, registration_url } = req.body;
+  const { name, contacts, requires_echo_bed, test_types, registration_url, address } = req.body;
   if (!name?.trim()) return res.status(400).json({ error: 'נדרש שם סניף' });
 
   let parsedContacts;
@@ -143,6 +143,7 @@ router.post('/companies/:id/branches', adminAuth, upload.none(), async (req, res
       requires_echo_bed: requires_echo_bed === 'true' || requires_echo_bed === true,
       test_types: Array.isArray(test_types) ? test_types : (test_types ? JSON.parse(test_types) : []),
       registration_url: registration_url?.trim() || null,
+      address: address?.trim() || null,
     })
     .select()
     .single();
@@ -152,7 +153,7 @@ router.post('/companies/:id/branches', adminAuth, upload.none(), async (req, res
 
 // PUT /api/screening/branches/:id  (admin)
 router.put('/branches/:id', adminAuth, upload.none(), async (req, res) => {
-  const { name, contacts, requires_echo_bed, test_types, registration_url } = req.body;
+  const { name, contacts, requires_echo_bed, test_types, registration_url, address } = req.body;
   if (!name?.trim()) return res.status(400).json({ error: 'נדרש שם סניף' });
 
   let parsedContacts;
@@ -170,6 +171,7 @@ router.put('/branches/:id', adminAuth, upload.none(), async (req, res) => {
     requires_echo_bed: requires_echo_bed === 'true' || requires_echo_bed === true,
     test_types: Array.isArray(test_types) ? test_types : (test_types ? JSON.parse(test_types) : []),
     registration_url: registration_url?.trim() || null,
+    address: address?.trim() || null,
   };
 
   const { data, error } = await supabase
