@@ -120,9 +120,23 @@ router.get('/companies/:id/branches', async (req, res) => {
   res.json(data);
 });
 
+async function parseValidDeviceIds(required_device_ids) {
+  const ids = Array.isArray(required_device_ids)
+    ? required_device_ids
+    : (required_device_ids ? JSON.parse(required_device_ids) : []);
+  if (!ids.length) return [];
+  const { data: catalog, error } = await supabase.from('device_catalog').select('id');
+  if (error) {
+    console.error('[screening] failed to load device_catalog for validation:', error.message);
+    return [];
+  }
+  const validIds = new Set((catalog || []).map(c => c.id));
+  return ids.filter(id => validIds.has(id));
+}
+
 // POST /api/screening/companies/:id/branches  (admin)
 router.post('/companies/:id/branches', adminAuth, upload.none(), async (req, res) => {
-  const { name, contacts, requires_echo_bed, test_types, registration_url, address } = req.body;
+  const { name, contacts, test_types, registration_url, address, required_device_ids } = req.body;
   if (!name?.trim()) return res.status(400).json({ error: 'נדרש שם סניף' });
 
   let parsedContacts;
@@ -140,7 +154,7 @@ router.post('/companies/:id/branches', adminAuth, upload.none(), async (req, res
       company_id: req.params.id,
       name: name.trim(),
       contacts: parsedContacts,
-      requires_echo_bed: requires_echo_bed === 'true' || requires_echo_bed === true,
+      required_device_ids: await parseValidDeviceIds(required_device_ids),
       test_types: Array.isArray(test_types) ? test_types : (test_types ? JSON.parse(test_types) : []),
       registration_url: registration_url?.trim() || null,
       address: address?.trim() || null,
@@ -153,7 +167,7 @@ router.post('/companies/:id/branches', adminAuth, upload.none(), async (req, res
 
 // PUT /api/screening/branches/:id  (admin)
 router.put('/branches/:id', adminAuth, upload.none(), async (req, res) => {
-  const { name, contacts, requires_echo_bed, test_types, registration_url, address } = req.body;
+  const { name, contacts, test_types, registration_url, address, required_device_ids } = req.body;
   if (!name?.trim()) return res.status(400).json({ error: 'נדרש שם סניף' });
 
   let parsedContacts;
@@ -168,7 +182,7 @@ router.put('/branches/:id', adminAuth, upload.none(), async (req, res) => {
   const updates = {
     name: name.trim(),
     contacts: parsedContacts,
-    requires_echo_bed: requires_echo_bed === 'true' || requires_echo_bed === true,
+    required_device_ids: await parseValidDeviceIds(required_device_ids),
     test_types: Array.isArray(test_types) ? test_types : (test_types ? JSON.parse(test_types) : []),
     registration_url: registration_url?.trim() || null,
     address: address?.trim() || null,

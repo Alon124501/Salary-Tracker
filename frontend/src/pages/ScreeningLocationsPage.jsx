@@ -20,7 +20,7 @@ function localDateStr(d) {
 const EMPTY_COMPANY_FORM = { name: '', requires_vouchers: false };
 const EMPTY_BRANCH_FORM = {
   name: '', contacts: [],
-  requires_echo_bed: false, test_types: [], registration_url: '', address: '',
+  required_device_ids: [], test_types: [], registration_url: '', address: '',
 };
 
 function whatsappLink(phone) {
@@ -67,6 +67,7 @@ export default function ScreeningLocationsPage() {
   const [companies, setCompanies] = useState([]);
   const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [deviceCatalog, setDeviceCatalog] = useState([]);
 
   // Branches sheet
   const [selectedCompany, setSelectedCompany] = useState(null);
@@ -130,6 +131,10 @@ export default function ScreeningLocationsPage() {
       .then(res => setCompanies(res.data))
       .catch(() => {})
       .finally(() => setLoading(false));
+
+    api.get('/devices/catalog')
+      .then(res => setDeviceCatalog(res.data))
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -260,7 +265,7 @@ export default function ScreeningLocationsPage() {
     setBranchForm({
       name: branch.name,
       contacts: branch.contacts || [],
-      requires_echo_bed: !!branch.requires_echo_bed,
+      required_device_ids: branch.required_device_ids || [],
       test_types: branch.test_types || [],
       registration_url: branch.registration_url || '',
       address: branch.address || '',
@@ -293,6 +298,15 @@ export default function ScreeningLocationsPage() {
     }));
   }
 
+  function toggleRequiredDevice(id) {
+    setBranchForm(prev => ({
+      ...prev,
+      required_device_ids: prev.required_device_ids.includes(id)
+        ? prev.required_device_ids.filter(d => d !== id)
+        : [...prev.required_device_ids, id],
+    }));
+  }
+
   async function submitBranch() {
     if (!branchForm.name.trim()) { setBranchFormError('שם הסניף הוא שדה חובה'); return; }
     setBranchSubmitting(true);
@@ -301,7 +315,7 @@ export default function ScreeningLocationsPage() {
       const fd = new FormData();
       fd.append('name', branchForm.name.trim());
       fd.append('contacts', JSON.stringify(branchForm.contacts.filter(c => c.name.trim() || c.phone.trim())));
-      fd.append('requires_echo_bed', branchForm.requires_echo_bed ? 'true' : 'false');
+      fd.append('required_device_ids', JSON.stringify(branchForm.required_device_ids));
       fd.append('test_types', JSON.stringify(branchForm.test_types));
       fd.append('registration_url', branchForm.registration_url.trim());
       fd.append('address', branchForm.address.trim());
@@ -723,24 +737,25 @@ export default function ScreeningLocationsPage() {
                   </div>
                 ))}
 
-                {/* Echo bed badge */}
-                <div
-                  className={`flex items-center gap-3 p-4 rounded-2xl ${
-                    selectedBranch.requires_echo_bed
-                      ? 'bg-red-50 border border-red-100'
-                      : 'bg-emerald-50 border border-emerald-100'
-                  }`}
-                >
-                  <span
-                    className={`material-symbols-outlined text-xl ${selectedBranch.requires_echo_bed ? 'text-red-500' : 'text-emerald-500'}`}
-                    style={{ fontVariationSettings: "'FILL' 1" }}
-                  >
-                    {selectedBranch.requires_echo_bed ? 'bed' : 'check_circle'}
-                  </span>
-                  <p className={`font-bold text-sm ${selectedBranch.requires_echo_bed ? 'text-red-700' : 'text-emerald-700'}`}>
-                    {selectedBranch.requires_echo_bed ? 'נדרשת מיטת אקו לב' : 'אין צורך במיטת אקו לב'}
-                  </p>
-                </div>
+                {/* Required devices */}
+                {selectedBranch.required_device_ids?.length > 0 && (
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-3">מכשירים נדרשים</p>
+                    <div className="flex flex-wrap gap-2">
+                      {selectedBranch.required_device_ids.map(id => {
+                        const device = deviceCatalog.find(d => d.id === id);
+                        return device ? (
+                          <span
+                            key={id}
+                            className="bg-purple-50 text-brand-purple font-semibold text-xs px-3 py-1.5 rounded-full"
+                          >
+                            {device.name}
+                          </span>
+                        ) : null;
+                      })}
+                    </div>
+                  </div>
+                )}
 
                 {/* Test types */}
                 {selectedBranch.test_types?.length > 0 && (
@@ -784,7 +799,7 @@ export default function ScreeningLocationsPage() {
                   </div>
                 )}
 
-                {!selectedBranch.contacts?.length && !selectedBranch.test_types?.length && !selectedBranch.registration_url && !selectedBranch.address && (
+                {!selectedBranch.contacts?.length && !selectedBranch.test_types?.length && !selectedBranch.registration_url && !selectedBranch.address && !selectedBranch.required_device_ids?.length && (
                   <p className="text-sm text-slate-400 text-center py-4">אין פרטים נוספים לסניף זה</p>
                 )}
               </>)}
@@ -1181,19 +1196,31 @@ export default function ScreeningLocationsPage() {
                 )}
               </div>
 
-              {/* Echo bed toggle */}
-              <label className="flex items-center gap-3 p-4 bg-slate-50 rounded-2xl cursor-pointer select-none">
-                <div
-                  className={`w-12 h-6 rounded-full transition-colors flex items-center px-0.5 ${branchForm.requires_echo_bed ? 'bg-brand-purple' : 'bg-slate-200'}`}
-                  onClick={() => setBranchForm(p => ({ ...p, requires_echo_bed: !p.requires_echo_bed }))}
-                >
-                  <div className={`w-5 h-5 rounded-full bg-white shadow transition-transform ${branchForm.requires_echo_bed ? 'translate-x-6' : 'translate-x-0'}`} />
-                </div>
+              {/* Required devices */}
+              {deviceCatalog.length > 0 && (
                 <div>
-                  <p className="text-sm font-semibold text-slate-800">מיטת אקו לב</p>
-                  <p className="text-xs text-slate-400">נדרשת מיטה לבדיקה</p>
+                  <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">מכשירים נדרשים</p>
+                  <div className="space-y-2">
+                    {deviceCatalog.map(device => (
+                      <label key={device.id} className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl cursor-pointer select-none hover:bg-slate-100 transition-colors">
+                        <div
+                          className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-colors ${
+                            branchForm.required_device_ids.includes(device.id)
+                              ? 'bg-brand-purple border-brand-purple'
+                              : 'border-slate-300 bg-white'
+                          }`}
+                          onClick={() => toggleRequiredDevice(device.id)}
+                        >
+                          {branchForm.required_device_ids.includes(device.id) && (
+                            <span className="material-symbols-outlined text-white text-xs">check</span>
+                          )}
+                        </div>
+                        <span className="text-sm font-medium text-slate-700">{device.name}</span>
+                      </label>
+                    ))}
+                  </div>
                 </div>
-              </label>
+              )}
 
               {/* Test types */}
               <div>
