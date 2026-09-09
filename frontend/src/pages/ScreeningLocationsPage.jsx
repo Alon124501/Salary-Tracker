@@ -330,8 +330,9 @@ export default function ScreeningLocationsPage() {
       });
       setSelectedCompany(data);
       setCompanies(prev => prev.map(c => c.id === data.id ? data : c));
-    } catch {
-      alert('שגיאה בהעלאת החוברת');
+    } catch (err) {
+      const msg = err.response?.data?.error;
+      alert(typeof msg === 'string' ? msg : 'שגיאה בהעלאת החוברת');
     } finally {
       setBrochureUploading(false);
     }
@@ -378,8 +379,9 @@ export default function ScreeningLocationsPage() {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
       setVouchers(prev => [data, ...prev]);
-    } catch {
-      alert('שגיאה בהעלאת השובר');
+    } catch (err) {
+      const msg = err.response?.data?.error;
+      alert(typeof msg === 'string' ? msg : 'שגיאה בהעלאת השובר');
     } finally {
       setVoucherUploading(false);
     }
@@ -398,8 +400,14 @@ export default function ScreeningLocationsPage() {
       a.download = `vouchers-${voucherDate}.zip`;
       a.click();
       setTimeout(() => URL.revokeObjectURL(url), 10000);
-    } catch {
-      alert('שגיאה בהורדת השוברים');
+    } catch (err) {
+      let msg;
+      if (err.response?.data instanceof Blob) {
+        try { msg = JSON.parse(await err.response.data.text())?.error; } catch {}
+      } else {
+        msg = err.response?.data?.error;
+      }
+      alert(typeof msg === 'string' ? msg : 'שגיאה בהורדת השוברים');
     } finally {
       setVoucherDownloading(false);
     }
