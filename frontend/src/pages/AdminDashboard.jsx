@@ -147,6 +147,8 @@ export default function AdminDashboard() {
   const pendingOrdersCount = eqOrders.filter(o => o.status === 'pending').length;
   const [newItemName, setNewItemName] = useState('');
   const [eqSubTab, setEqSubTab] = useState('catalog');
+  const [editingItemId, setEditingItemId] = useState(null);
+  const [editingItemName, setEditingItemName] = useState('');
   const [eqOrderModal, setEqOrderModal] = useState(null);
   const [completingOrderId, setCompletingOrderId] = useState(null);
 
@@ -202,6 +204,16 @@ export default function AdminDashboard() {
       await api.delete(`/equipment/catalog/${id}`);
       loadEqCatalog();
     } catch (err) { showToast(err?.response?.data?.error || 'מחיקת הפריט נכשלה'); }
+  }
+
+  async function renameCatalogItem(id) {
+    if (!editingItemName.trim()) return;
+    try {
+      await api.put(`/equipment/catalog/${id}`, { name: editingItemName.trim() });
+      setEditingItemId(null);
+      setEditingItemName('');
+      loadEqCatalog();
+    } catch (err) { showToast(err?.response?.data?.error || 'עדכון הפריט נכשל'); }
   }
 
   // ── Device catalog actions ──────────────────────────────────────────────
@@ -1909,13 +1921,53 @@ export default function AdminDashboard() {
                   {eqCatalog.map(item => (
                     <div key={item.id} className="bg-white rounded-2xl border border-slate-100 px-4 py-3.5 flex items-center justify-between"
                       style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
-                      <p className="text-sm font-semibold text-slate-800">{item.name}</p>
-                      <button
-                        onClick={() => deleteCatalogItem(item.id)}
-                        className="w-8 h-8 flex items-center justify-center rounded-xl text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all"
-                      >
-                        <span className="material-symbols-outlined text-base">delete</span>
-                      </button>
+                      {editingItemId === item.id ? (
+                        <>
+                          <input
+                            type="text"
+                            autoFocus
+                            value={editingItemName}
+                            onChange={e => setEditingItemName(e.target.value)}
+                            onKeyDown={e => {
+                              if (e.key === 'Enter') renameCatalogItem(item.id);
+                              if (e.key === 'Escape') { setEditingItemId(null); setEditingItemName(''); }
+                            }}
+                            className="flex-1 me-2 px-3 py-1.5 text-sm rounded-xl border border-brand-purple/50 focus:outline-none bg-white"
+                          />
+                          <div className="flex items-center gap-1 shrink-0">
+                            <button
+                              onClick={() => renameCatalogItem(item.id)}
+                              className="w-8 h-8 flex items-center justify-center rounded-xl text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 transition-all"
+                            >
+                              <span className="material-symbols-outlined text-base">check</span>
+                            </button>
+                            <button
+                              onClick={() => { setEditingItemId(null); setEditingItemName(''); }}
+                              className="w-8 h-8 flex items-center justify-center rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-50 transition-all"
+                            >
+                              <span className="material-symbols-outlined text-base">close</span>
+                            </button>
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <p className="text-sm font-semibold text-slate-800">{item.name}</p>
+                          <div className="flex items-center gap-1 shrink-0">
+                            <button
+                              onClick={() => { setEditingItemId(item.id); setEditingItemName(item.name); }}
+                              className="w-8 h-8 flex items-center justify-center rounded-xl text-slate-400 hover:text-brand-purple hover:bg-purple-50 transition-all"
+                            >
+                              <span className="material-symbols-outlined text-base">edit</span>
+                            </button>
+                            <button
+                              onClick={() => deleteCatalogItem(item.id)}
+                              className="w-8 h-8 flex items-center justify-center rounded-xl text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all"
+                            >
+                              <span className="material-symbols-outlined text-base">delete</span>
+                            </button>
+                          </div>
+                        </>
+                      )}
                     </div>
                   ))}
                 </div>

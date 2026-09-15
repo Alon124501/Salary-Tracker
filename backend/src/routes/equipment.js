@@ -31,6 +31,21 @@ router.post('/catalog', auth, adminAuth, asyncHandler(async (req, res) => {
   res.json(data);
 }));
 
+// PUT /api/equipment/catalog/:id — admin
+router.put('/catalog/:id', auth, adminAuth, asyncHandler(async (req, res) => {
+  const { name } = req.body;
+  if (!name?.trim()) return res.status(400).json({ error: 'נדרש שם' });
+
+  const { data, error } = await supabase
+    .from('equipment_catalog')
+    .update({ name: name.trim() })
+    .eq('id', req.params.id)
+    .select()
+    .single();
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data);
+}));
+
 // DELETE /api/equipment/catalog/:id — admin
 router.delete('/catalog/:id', auth, adminAuth, asyncHandler(async (req, res) => {
   const { error } = await supabase
