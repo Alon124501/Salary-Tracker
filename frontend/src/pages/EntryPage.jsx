@@ -10,7 +10,7 @@ const defaultForm = {
   date: today(),
   insurance_tests: 0, screening_tests: 0, mixed_screening_tests: 0, partial_tests: 0,
   kilometers: 0, office_hours: 0, food_expense: 0, parking_expense: 0,
-  cancellations: 0,
+  cancellations: 0, notes: '',
 };
 
 export default function EntryPage() {
@@ -44,6 +44,7 @@ export default function EntryPage() {
           food_expense: existing.food_expense,
           parking_expense: existing.parking_expense,
           cancellations: existing.cancellations,
+          notes: existing.notes || '',
         });
         setEntryId(existing.id);
         if (existing.food_receipt_urls?.length > 0) {
@@ -400,6 +401,20 @@ export default function EntryPage() {
                 </label>
               </div>
             </div>
+          </div>
+
+          {/* Notes */}
+          <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100">
+            <label className="block text-xs font-bold text-slate-400 mb-2 uppercase tracking-wider">הערות</label>
+            <textarea
+              value={form.notes}
+              onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
+              maxLength={500}
+              rows={3}
+              dir="rtl"
+              className="w-full bg-[#F2F2F7] border-none rounded-xl p-3 text-sm focus:ring-2 focus:ring-brand-purple transition-all text-slate-900 resize-none"
+              placeholder="הערה חופשית ליום זה..."
+            />
           </div>
 
           {/* Tests Today */}

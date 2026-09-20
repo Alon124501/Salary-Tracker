@@ -4,7 +4,6 @@ function buildSheet(sheet, entries, profile = {}, title = '') {
   const centerAlign = { horizontal: 'center', vertical: 'middle' };
   const stripeFill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF9FAFB' } };
   const totalFill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF0F2F5' } };
-  const numCols = 10;
 
   sheet.columns = [
     { header: 'תאריך',           key: 'date',   width: 14 },
@@ -18,7 +17,9 @@ function buildSheet(sheet, entries, profile = {}, title = '') {
     { header: 'שעות משרד',        key: 'hrs',    width: 14 },
     { header: 'אוכל (₪)',         key: 'food',   width: 12 },
     { header: 'חניה (₪)',         key: 'parking', width: 12 },
+    { header: 'הערות',           key: 'notes',  width: 30 },
   ];
+  const numCols = sheet.columns.length;
 
   sheet.getRow(1).eachCell(cell => {
     cell.fill = headerFill;
@@ -40,6 +41,7 @@ function buildSheet(sheet, entries, profile = {}, title = '') {
       canc: e.cancellations,
       km: e.kilometers, hrs: e.office_hours,
       food: e.food_expense, parking: e.parking_expense,
+      notes: e.notes || '',
     });
 
     if (i % 2 === 0) {

@@ -24,6 +24,7 @@ const EntryBodySchema = z.object({
   food_expense:          NumericField,
   parking_expense:       NumericField,
   cancellations:         NumericField,
+  notes:                 z.string().max(500).optional().default(''),
 });
 
 // PUT uses optional fields WITHOUT defaults so omitted fields stay undefined
@@ -39,6 +40,7 @@ const PutBodySchema = z.object({
   food_expense:          PutNumericField,
   parking_expense:       PutNumericField,
   cancellations:         PutNumericField,
+  notes:                 z.string().max(500).optional(),
 });
 
 // Only blocks INCREASES to food_expense on days with <4 tests; decreases and
@@ -320,6 +322,7 @@ router.put('/:id', asyncHandler(async (req, res) => {
     food_expense:          fields.food_expense          ?? entry.food_expense,
     parking_expense:       fields.parking_expense       ?? entry.parking_expense,
     cancellations:         fields.cancellations         ?? entry.cancellations,
+    notes:                 fields.notes                 ?? entry.notes,
   };
   enforceFoodGate(updates, entry.food_expense);
 
@@ -358,6 +361,7 @@ router.post('/restore', asyncHandler(async (req, res) => {
     food_expense: Math.max(0, Number(e.food_expense) || 0),
     parking_expense: Math.max(0, Number(e.parking_expense) || 0),
     cancellations: Math.max(0, Number(e.cancellations) || 0),
+    notes: e.notes || '',
   }));
 
   const { error } = await supabase.from('entries').upsert(rows, { onConflict: 'user_id,date' });
