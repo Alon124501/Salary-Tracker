@@ -4,6 +4,7 @@ const nodemailer = require('nodemailer');
 const supabase = require('../supabase');
 const { computeNextOccurrence } = require('../utils/scheduling');
 const { sendPushToAll } = require('../lib/webPush');
+const { safeExt } = require('../lib/safeExt');
 
 const router = express.Router();
 
@@ -11,7 +12,7 @@ const ADMIN_EMAIL = 'alonm@mpcheck.co.il';
 
 router.get('/monthly-receipts', async (req, res) => {
   const secret = process.env.CRON_SECRET;
-  if (secret && req.headers.authorization !== `Bearer ${secret}`) {
+  if (!secret || req.headers.authorization !== `Bearer ${secret}`) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
@@ -62,7 +63,7 @@ router.get('/monthly-receipts', async (req, res) => {
         if (dlErr || !fileData) continue;
 
         const buf = Buffer.from(await fileData.arrayBuffer());
-        const ext = entry.receipt_url.split('.').pop();
+        const ext = safeExt(entry.receipt_url);
         const username = usernameMap[entry.user_id] || entry.user_id;
         archive.append(buf, { name: `${username}/${entry.date}-receipt.${ext}` });
       }
@@ -102,7 +103,7 @@ router.get('/monthly-receipts', async (req, res) => {
 // For recurring ones, inserts the next occurrence after activation.
 router.get('/process-notifications', async (req, res) => {
   const secret = process.env.CRON_SECRET;
-  if (secret && req.headers.authorization !== `Bearer ${secret}`) {
+  if (!secret || req.headers.authorization !== `Bearer ${secret}`) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 

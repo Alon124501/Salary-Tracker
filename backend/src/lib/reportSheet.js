@@ -1,3 +1,13 @@
+const { totalTestsFor } = require('./payCalc');
+
+// Prevents Excel/CSV formula injection: a cell whose text begins with a
+// formula-trigger character (=, +, -, @) is prefixed with a leading quote so
+// spreadsheet apps treat it as literal text instead of evaluating it.
+function sanitizeCell(value) {
+  if (typeof value !== 'string' || value.length === 0) return value;
+  return /^[=+\-@]/.test(value) ? `'${value}` : value;
+}
+
 function buildSheet(sheet, entries, profile = {}, title = '') {
   const headerFill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4F46E5' } };
   const headerFont = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
@@ -32,16 +42,16 @@ function buildSheet(sheet, entries, profile = {}, title = '') {
 
   for (let i = 0; i < entries.length; i++) {
     const e = entries[i];
-    const total = (e.insurance_tests || 0) + (e.screening_tests || 0) +
-                  (e.mixed_screening_tests || 0) + (e.partial_tests || 0);
+    const total = totalTestsFor(e);
 
     const dataRow = sheet.addRow({
-      date: e.date ? e.date.split('-').reverse().join('/') : '', ins: e.insurance_tests, scr: e.screening_tests,
-      mix: e.mixed_screening_tests, par: e.partial_tests, total,
-      canc: e.cancellations,
-      km: e.kilometers, hrs: e.office_hours,
-      food: e.food_expense, parking: e.parking_expense,
-      notes: e.notes || '',
+      date: e.date ? e.date.split('-').reverse().join('/') : '',
+      ins: e.insurance_tests || 0, scr: e.screening_tests || 0,
+      mix: e.mixed_screening_tests || 0, par: e.partial_tests || 0, total,
+      canc: e.cancellations || 0,
+      km: e.kilometers || 0, hrs: e.office_hours || 0,
+      food: e.food_expense || 0, parking: e.parking_expense || 0,
+      notes: sanitizeCell(e.notes || ''),
     });
 
     if (i % 2 === 0) {

@@ -6,6 +6,8 @@ const ExcelJS = require('exceljs');
 const supabase = require('../supabase');
 const auth = require('../middleware/auth');
 const adminAuth = require('../middleware/adminAuth');
+const { safeExt } = require('../lib/safeExt');
+const { isSafeUrl } = require('../lib/validateUrl');
 
 const router = express.Router();
 router.use(auth);
@@ -13,7 +15,7 @@ router.use(auth);
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
 async function uploadLogo(file) {
-  const ext = file.originalname.split('.').pop() || 'jpg';
+  const ext = safeExt(file.originalname, 'jpg');
   const filePath = `logos/${Date.now()}.${ext}`;
   const { error } = await supabase.storage
     .from('screening-logos')
@@ -24,7 +26,7 @@ async function uploadLogo(file) {
 }
 
 async function uploadBrochure(file) {
-  const ext = file.originalname.split('.').pop() || 'jpg';
+  const ext = safeExt(file.originalname, 'jpg');
   const filePath = `brochures/${Date.now()}.${ext}`;
   const { error } = await supabase.storage
     .from('branch-brochures')
@@ -49,7 +51,7 @@ router.get('/companies', async (req, res) => {
 // POST /api/screening/companies  (admin)
 router.post('/companies', adminAuth, upload.fields([{ name: 'logo' }, { name: 'brochure' }]), async (req, res) => {
   const { name } = req.body;
-  if (!name?.trim()) return res.status(400).json({ error: 'נדרש שם חברה' });
+  if (!name?.trim() || name.trim().length > 200) return res.status(400).json({ error: 'נדרש שם חברה תקין' });
 
   const logoFile = req.files?.logo?.[0];
   const brochureFile = req.files?.brochure?.[0];
@@ -71,7 +73,7 @@ router.post('/companies', adminAuth, upload.fields([{ name: 'logo' }, { name: 'b
 // PUT /api/screening/companies/:id  (admin)
 router.put('/companies/:id', adminAuth, upload.fields([{ name: 'logo' }, { name: 'brochure' }]), async (req, res) => {
   const { name } = req.body;
-  if (!name?.trim()) return res.status(400).json({ error: 'נדרש שם חברה' });
+  if (!name?.trim() || name.trim().length > 200) return res.status(400).json({ error: 'נדרש שם חברה תקין' });
 
   const updates = { name: name.trim() };
   const logoFile = req.files?.logo?.[0];
@@ -137,15 +139,22 @@ async function parseValidDeviceIds(required_device_ids) {
 // POST /api/screening/companies/:id/branches  (admin)
 router.post('/companies/:id/branches', adminAuth, upload.none(), async (req, res) => {
   const { name, contacts, test_types, registration_url, address, required_device_ids } = req.body;
-  if (!name?.trim()) return res.status(400).json({ error: 'נדרש שם סניף' });
+  if (!name?.trim() || name.trim().length > 200) return res.status(400).json({ error: 'נדרש שם סניף תקין' });
+  if (address && address.trim().length > 300) return res.status(400).json({ error: 'כתובת ארוכה מדי' });
+
+  const regUrl = registration_url?.trim() || null;
+  if (regUrl && !isSafeUrl(regUrl)) return res.status(400).json({ error: 'כתובת ההרשמה חייבת להיות קישור http/https תקין' });
 
   let parsedContacts;
+  let parsedTestTypes;
   try {
     parsedContacts = contacts
       ? (typeof contacts === 'string' ? JSON.parse(contacts) : contacts)
       : [];
+    parsedTestTypes = Array.isArray(test_types) ? test_types : (test_types ? JSON.parse(test_types) : []);
+    if (!Array.isArray(parsedContacts) || !Array.isArray(parsedTestTypes)) throw new Error('not an array');
   } catch {
-    return res.status(400).json({ error: 'פורמט אנשי קשר לא תקין' });
+    return res.status(400).json({ error: 'פורמט אנשי קשר או סוגי בדיקות לא תקין' });
   }
 
   const { data, error } = await supabase
@@ -155,8 +164,8 @@ router.post('/companies/:id/branches', adminAuth, upload.none(), async (req, res
       name: name.trim(),
       contacts: parsedContacts,
       required_device_ids: await parseValidDeviceIds(required_device_ids),
-      test_types: Array.isArray(test_types) ? test_types : (test_types ? JSON.parse(test_types) : []),
-      registration_url: registration_url?.trim() || null,
+      test_types: parsedTestTypes,
+      registration_url: regUrl,
       address: address?.trim() || null,
     })
     .select()
@@ -168,23 +177,30 @@ router.post('/companies/:id/branches', adminAuth, upload.none(), async (req, res
 // PUT /api/screening/branches/:id  (admin)
 router.put('/branches/:id', adminAuth, upload.none(), async (req, res) => {
   const { name, contacts, test_types, registration_url, address, required_device_ids } = req.body;
-  if (!name?.trim()) return res.status(400).json({ error: 'נדרש שם סניף' });
+  if (!name?.trim() || name.trim().length > 200) return res.status(400).json({ error: 'נדרש שם סניף תקין' });
+  if (address && address.trim().length > 300) return res.status(400).json({ error: 'כתובת ארוכה מדי' });
+
+  const regUrl = registration_url?.trim() || null;
+  if (regUrl && !isSafeUrl(regUrl)) return res.status(400).json({ error: 'כתובת ההרשמה חייבת להיות קישור http/https תקין' });
 
   let parsedContacts;
+  let parsedTestTypes;
   try {
     parsedContacts = contacts
       ? (typeof contacts === 'string' ? JSON.parse(contacts) : contacts)
       : [];
+    parsedTestTypes = Array.isArray(test_types) ? test_types : (test_types ? JSON.parse(test_types) : []);
+    if (!Array.isArray(parsedContacts) || !Array.isArray(parsedTestTypes)) throw new Error('not an array');
   } catch {
-    return res.status(400).json({ error: 'פורמט אנשי קשר לא תקין' });
+    return res.status(400).json({ error: 'פורמט אנשי קשר או סוגי בדיקות לא תקין' });
   }
 
   const updates = {
     name: name.trim(),
     contacts: parsedContacts,
     required_device_ids: await parseValidDeviceIds(required_device_ids),
-    test_types: Array.isArray(test_types) ? test_types : (test_types ? JSON.parse(test_types) : []),
-    registration_url: registration_url?.trim() || null,
+    test_types: parsedTestTypes,
+    registration_url: regUrl,
     address: address?.trim() || null,
   };
 
@@ -211,7 +227,7 @@ router.delete('/branches/:id', adminAuth, async (req, res) => {
 // ── Vouchers ───────────────────────────────────────────────────────────────
 
 async function uploadVoucherFile(file, branchId, workDate, userId) {
-  const ext = file.originalname.split('.').pop() || 'jpg';
+  const ext = safeExt(file.originalname, 'jpg');
   const filePath = `${branchId}/${workDate}/${userId}/${Date.now()}.${ext}`;
   const { error } = await supabase.storage
     .from('screening-vouchers')
@@ -370,7 +386,7 @@ router.get('/branches/:id/vouchers', async (req, res) => {
 // POST /api/screening/branches/:id/vouchers
 router.post('/branches/:id/vouchers', upload.single('voucher'), async (req, res) => {
   const { work_date } = req.body;
-  if (!work_date) return res.status(400).json({ error: 'נדרש תאריך עבודה' });
+  if (typeof work_date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(work_date)) return res.status(400).json({ error: 'נדרש תאריך עבודה תקין' });
   if (!req.file) return res.status(400).json({ error: 'נדרש קובץ שובר' });
 
   const filePath = await uploadVoucherFile(req.file, req.params.id, work_date, req.userId);

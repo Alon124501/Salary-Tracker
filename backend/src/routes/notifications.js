@@ -5,6 +5,8 @@ const adminAuth = require('../middleware/adminAuth');
 const supabase  = require('../supabase');
 const { computeNextOccurrence } = require('../utils/scheduling');
 const { sendPushToAll } = require('../lib/webPush');
+const { safeExt } = require('../lib/safeExt');
+const { isSafeUrl } = require('../lib/validateUrl');
 
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
@@ -128,11 +130,17 @@ router.post('/', auth, adminAuth, upload.single('document'), async (req, res) =>
     if (!title?.trim() || !content?.trim()) {
       return res.status(400).json({ error: 'יש למלא כותרת ותוכן' });
     }
+    if (title.trim().length > 200 || content.trim().length > 5000) {
+      return res.status(400).json({ error: 'כותרת או תוכן ארוכים מדי' });
+    }
     if (!['manual', 'recurring'].includes(type)) {
       return res.status(400).json({ error: 'הסוג חייב להיות חד-פעמי או חוזר' });
     }
     if (force_view_document && !req.file && !document_external_url) {
       return res.status(400).json({ error: 'נדרש קובץ מסמך או קישור כאשר נדרשת פתיחת מסמך' });
+    }
+    if (document_external_url && !isSafeUrl(document_external_url)) {
+      return res.status(400).json({ error: 'קישור המסמך חייב להיות כתובת http/https תקינה' });
     }
 
     let isActive     = true;
@@ -179,7 +187,7 @@ router.post('/', auth, adminAuth, upload.single('document'), async (req, res) =>
     // On upload failure we delete the just-created row to avoid a notification
     // with force_view_document=true but no reachable document.
     if (req.file) {
-      const ext      = req.file.originalname.split('.').pop();
+      const ext      = safeExt(req.file.originalname);
       const filePath = `${data.id}/${Date.now()}.${ext}`;
       const { error: uploadErr } = await supabase.storage
         .from('notification-documents')

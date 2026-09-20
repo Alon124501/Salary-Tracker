@@ -1,10 +1,31 @@
 const express = require('express');
+const { z }   = require('zod');
 const supabase = require('../supabase');
 const auth = require('../middleware/auth');
 const adminAuth = require('../middleware/adminAuth');
 const asyncHandler = require('../middleware/asyncHandler');
+const { safeExt } = require('../lib/safeExt');
+const { isSafeUrl } = require('../lib/validateUrl');
 
 const router = express.Router();
+
+const TutorialSchema = z.object({
+  title:              z.string().trim().min(1).max(200),
+  device_id:          z.string().max(100).optional(),
+  device_name_other:  z.string().trim().max(100).optional(),
+  description:        z.string().max(2000).optional(),
+  source_type:        z.enum(['upload', 'link']),
+  storage_path:       z.string().max(500).optional(),
+  external_url:       z.string().max(2000).optional(),
+  sort_order:         z.coerce.number().optional().default(0),
+});
+const TutorialPatchSchema = z.object({
+  title:              z.string().trim().min(1).max(200).optional(),
+  device_id:          z.string().max(100).optional(),
+  device_name_other:  z.string().trim().max(100).optional(),
+  description:        z.string().max(2000).optional(),
+  sort_order:         z.coerce.number().optional(),
+});
 
 const BUCKET = 'tutorial-videos';
 
@@ -38,7 +59,7 @@ router.post('/upload-url', auth, adminAuth, asyncHandler(async (req, res) => {
   const { filename } = req.body;
   if (!filename?.trim()) return res.status(400).json({ error: 'נדרש שם קובץ' });
 
-  const ext = filename.split('.').pop();
+  const ext = safeExt(filename);
   const storagePath = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
 
   const { data, error } = await supabase.storage.from(BUCKET).createSignedUploadUrl(storagePath);
@@ -48,11 +69,11 @@ router.post('/upload-url', auth, adminAuth, asyncHandler(async (req, res) => {
 
 // POST /api/tutorials — admin: create row
 router.post('/', auth, adminAuth, asyncHandler(async (req, res) => {
-  const { title, device_id, device_name_other, description, source_type, storage_path, external_url, sort_order } = req.body;
-  if (!title?.trim()) return res.status(400).json({ error: 'נדרשת כותרת' });
-  if (!['upload', 'link'].includes(source_type)) return res.status(400).json({ error: 'סוג המקור חייב להיות העלאה או קישור' });
+  const parsed = TutorialSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
+  const { title, device_id, device_name_other, description, source_type, storage_path, external_url, sort_order } = parsed.data;
   if (source_type === 'upload' && !storage_path) return res.status(400).json({ error: 'נדרש נתיב אחסון עבור קבצים שהועלו' });
-  if (source_type === 'link' && !external_url?.trim()) return res.status(400).json({ error: 'נדרשת כתובת URL עבור קישורים' });
+  if (source_type === 'link' && !isSafeUrl(external_url)) return res.status(400).json({ error: 'נדרשת כתובת URL תקינה (http/https) עבור קישורים' });
 
   const { data, error } = await supabase
     .from('tutorial_videos')
@@ -87,7 +108,9 @@ router.post('/reorder', auth, adminAuth, asyncHandler(async (req, res) => {
 
 // PATCH /api/tutorials/:id — admin: metadata only, no file/link swap
 router.patch('/:id', auth, adminAuth, asyncHandler(async (req, res) => {
-  const { title, device_id, device_name_other, description, sort_order } = req.body;
+  const parsed = TutorialPatchSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
+  const { title, device_id, device_name_other, description, sort_order } = parsed.data;
   const updates = {};
   if (title             !== undefined) updates.title = title;
   if (device_id         !== undefined) updates.device_id = device_id || null;

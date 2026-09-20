@@ -5,6 +5,7 @@ const supabase = require('../supabase');
 const auth     = require('../middleware/auth');
 const asyncHandler = require('../middleware/asyncHandler');
 const { foodAudit, totalTestsFor, dailyExpenses, FOOD_BONUS_TEST_THRESHOLD } = require('../lib/payCalc');
+const { safeExt } = require('../lib/safeExt');
 
 const router = express.Router();
 router.use(auth);
@@ -13,8 +14,19 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 
 
 const NumericField = z.coerce.number().min(0).optional().default(0);
 
+// Rejects malformed or wildly out-of-range dates (typos like a 2062 entry)
+// while still allowing reasonable backfill/near-future entries.
+function isReasonableDate(s) {
+  if (typeof s !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
+  const d = new Date(`${s}T00:00:00Z`);
+  if (isNaN(d.getTime())) return false;
+  const year = d.getUTCFullYear();
+  const nowYear = new Date().getUTCFullYear();
+  return year >= nowYear - 3 && year <= nowYear + 1;
+}
+
 const EntryBodySchema = z.object({
-  date:                  z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'date must be YYYY-MM-DD').optional(),
+  date:                  z.string().refine(isReasonableDate, 'תאריך לא תקין או מחוץ לטווח המותר').optional(),
   insurance_tests:       NumericField,
   screening_tests:       NumericField,
   mixed_screening_tests: NumericField,
@@ -144,7 +156,7 @@ router.put('/:id/receipt', upload.single('receipt'), asyncHandler(async (req, re
     .single();
   if (fetchErr || !entry) return res.status(404).json({ error: 'הרשומה לא נמצאה' });
 
-  const ext = req.file.originalname.split('.').pop();
+  const ext = safeExt(req.file.originalname);
   const month = entry.date.slice(0, 7);
   const filePath = `${req.userId}/${month}/${entry.id}.${ext}`;
 
@@ -173,7 +185,7 @@ router.post('/:id/food-receipt', upload.single('food_receipt'), asyncHandler(asy
     return res.status(400).json({ error: 'יש להוסיף לפחות 4 בדיקות ליום זה לפני העלאת קבלת אוכל' });
   }
 
-  const ext = req.file.originalname.split('.').pop();
+  const ext = safeExt(req.file.originalname);
   const month = entry.date.slice(0, 7);
   const filePath = `${req.userId}/${month}/${entry.id}/food_${Date.now()}.${ext}`;
 
@@ -242,7 +254,7 @@ router.post('/:id/parking-receipt', upload.single('parking_receipt'), asyncHandl
     .eq('id', req.params.id).eq('user_id', req.userId).single();
   if (fetchErr || !entry) return res.status(404).json({ error: 'הרשומה לא נמצאה' });
 
-  const ext = req.file.originalname.split('.').pop();
+  const ext = safeExt(req.file.originalname);
   const month = entry.date.slice(0, 7);
   const filePath = `${req.userId}/${month}/${entry.id}/parking_${Date.now()}.${ext}`;
 
@@ -349,7 +361,7 @@ router.post('/restore', asyncHandler(async (req, res) => {
   const { entries } = req.body;
   if (!Array.isArray(entries)) return res.status(400).json({ error: 'נדרש מערך רשומות' });
 
-  const rows = entries.filter(e => e.date).map(e => ({
+  const rows = entries.filter(e => isReasonableDate(e.date)).map(e => ({
     user_id: req.userId,
     date: e.date,
     insurance_tests: Math.max(0, Number(e.insurance_tests) || 0),

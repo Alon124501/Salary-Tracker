@@ -69,13 +69,15 @@ router.get('/users', asyncHandler(async (req, res) => {
   res.json(withUrls);
 }));
 
+const USER_PATCH_MAX_LENGTHS = {
+  first_name: 100, last_name: 100, email: 200, id_number: 20, phone: 30,
+  address: 300, vehicle_type_color: 100, vehicle_number: 30,
+  shift_preference: 100, clothing_size: 20, shirt_size: 20, pants_size: 20,
+};
+
 // PATCH /api/admin/users/:id
 router.patch('/users/:id', asyncHandler(async (req, res) => {
-  const allowed = [
-    'first_name', 'last_name', 'email', 'id_number', 'phone', 'address',
-    'vehicle_type_color', 'vehicle_number', 'shift_preference',
-    'clothing_size', 'uniform_sets', 'echo_certified', 'shirt_size', 'pants_size',
-  ];
+  const allowed = Object.keys(USER_PATCH_MAX_LENGTHS);
 
   const updates = {};
   if (req.body.is_admin !== undefined) {
@@ -84,7 +86,24 @@ router.patch('/users/:id', asyncHandler(async (req, res) => {
     updates.is_admin = req.body.is_admin === true || req.body.is_admin === 'true';
   }
   for (const key of allowed) {
-    if (req.body[key] !== undefined) updates[key] = req.body[key] === '' ? null : req.body[key];
+    if (req.body[key] === undefined) continue;
+    const val = req.body[key];
+    if (typeof val !== 'string') return res.status(400).json({ error: `שדה ${key} לא תקין` });
+    if (val.length > USER_PATCH_MAX_LENGTHS[key]) return res.status(400).json({ error: `שדה ${key} ארוך מדי` });
+    updates[key] = val === '' ? null : val;
+  }
+  if (req.body.uniform_sets !== undefined) {
+    const raw = req.body.uniform_sets;
+    if (raw === '' || raw === null) {
+      updates.uniform_sets = null;
+    } else {
+      const n = Number(raw);
+      if (!Number.isFinite(n) || n < 0 || n > 100) return res.status(400).json({ error: 'כמות ערכות לא תקינה' });
+      updates.uniform_sets = Math.trunc(n);
+    }
+  }
+  if (req.body.echo_certified !== undefined) {
+    updates.echo_certified = req.body.echo_certified === true || req.body.echo_certified === 'true';
   }
   if (Object.keys(updates).length === 0)
     return res.status(400).json({ error: 'לא סופקו שדות תקינים' });

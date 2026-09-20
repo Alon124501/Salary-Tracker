@@ -1,10 +1,19 @@
 const express = require('express');
+const { z }   = require('zod');
 const supabase = require('../supabase');
 const auth     = require('../middleware/auth');
 const adminAuth = require('../middleware/adminAuth');
 const asyncHandler = require('../middleware/asyncHandler');
 
 const router = express.Router();
+
+const ContactSchema = z.object({
+  name:       z.string().trim().min(1).max(100),
+  title:      z.string().trim().max(100).optional(),
+  phone:      z.string().trim().min(1).max(30),
+  sort_order: z.coerce.number().optional().default(0),
+});
+const ContactPatchSchema = ContactSchema.partial();
 
 // GET /api/contacts — authenticated
 router.get('/', auth, asyncHandler(async (req, res) => {
@@ -18,13 +27,13 @@ router.get('/', auth, asyncHandler(async (req, res) => {
 
 // POST /api/contacts — admin
 router.post('/', auth, adminAuth, asyncHandler(async (req, res) => {
-  const { name, title, phone, sort_order } = req.body;
-  if (!name?.trim() || !phone?.trim())
-    return res.status(400).json({ error: 'יש למלא שם וטלפון' });
+  const parsed = ContactSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
+  const { name, title, phone, sort_order } = parsed.data;
 
   const { data, error } = await supabase
     .from('contacts')
-    .insert({ name: name.trim(), title: title?.trim() || null, phone: phone.trim(), sort_order: sort_order ?? 0 })
+    .insert({ name, title: title || null, phone, sort_order })
     .select().single();
   if (error) return res.status(500).json({ error: error.message });
   res.json(data);
@@ -52,11 +61,13 @@ router.post('/reorder', auth, adminAuth, asyncHandler(async (req, res) => {
 
 // PATCH /api/contacts/:id — admin
 router.patch('/:id', auth, adminAuth, asyncHandler(async (req, res) => {
-  const { name, title, phone } = req.body;
+  const parsed = ContactPatchSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
+  const { name, title, phone } = parsed.data;
   const updates = {};
-  if (name  !== undefined) updates.name  = name.trim();
-  if (title !== undefined) updates.title = title?.trim() || null;
-  if (phone !== undefined) updates.phone = phone.trim();
+  if (name  !== undefined) updates.name  = name;
+  if (title !== undefined) updates.title = title || null;
+  if (phone !== undefined) updates.phone = phone;
 
   if (Object.keys(updates).length === 0)
     return res.status(400).json({ error: 'אין שדות לעדכון' });

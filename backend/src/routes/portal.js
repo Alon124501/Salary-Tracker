@@ -1,11 +1,25 @@
 const express = require('express');
 const multer = require('multer');
+const { z }  = require('zod');
 const supabase = require('../supabase');
 const auth = require('../middleware/auth');
 const adminAuth = require('../middleware/adminAuth');
+const { safeExt } = require('../lib/safeExt');
 
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
+
+const CredentialSchema = z.object({
+  name:       z.string().trim().min(1).max(100),
+  username:   z.string().trim().min(1).max(200),
+  password:   z.string().min(1).max(200),
+  sort_order: z.coerce.number().optional().default(0),
+});
+const CredentialPatchSchema = z.object({
+  name:     z.string().trim().min(1).max(100).optional(),
+  username: z.string().trim().min(1).max(200).optional(),
+  password: z.string().min(1).max(200).optional(),
+});
 
 async function withSignedUrl(cred) {
   if (!cred.image_url) return { ...cred, image_signed_url: null };
@@ -27,13 +41,13 @@ router.get('/credentials', auth, async (req, res) => {
 
 // POST /api/portal/credentials — admin
 router.post('/credentials', auth, adminAuth, upload.single('image'), async (req, res) => {
-  const { name, username, password, sort_order } = req.body;
-  if (!name || !username || !password)
-    return res.status(400).json({ error: 'יש למלא שם, שם משתמש וסיסמה' });
+  const parsed = CredentialSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
+  const { name, username, password, sort_order } = parsed.data;
 
   let image_url = null;
   if (req.file) {
-    const ext = req.file.originalname.split('.').pop();
+    const ext = safeExt(req.file.originalname);
     const filePath = `${Date.now()}.${ext}`;
     const { error: uploadErr } = await supabase.storage
       .from('app-images')
@@ -64,14 +78,16 @@ router.post('/credentials/reorder', auth, adminAuth, async (req, res) => {
 
 // PATCH /api/portal/credentials/:id — admin
 router.patch('/credentials/:id', auth, adminAuth, upload.single('image'), async (req, res) => {
-  const { name, username, password } = req.body;
+  const parsed = CredentialPatchSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
+  const { name, username, password } = parsed.data;
   const updates = {};
   if (name     !== undefined) updates.name     = name;
   if (username !== undefined) updates.username = username;
   if (password !== undefined) updates.password = password;
 
   if (req.file) {
-    const ext = req.file.originalname.split('.').pop();
+    const ext = safeExt(req.file.originalname);
     const filePath = `${Date.now()}.${ext}`;
     const { error: uploadErr } = await supabase.storage
       .from('app-images')

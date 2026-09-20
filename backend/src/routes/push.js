@@ -34,7 +34,7 @@ router.delete('/subscribe', asyncHandler(async (req, res) => {
   const endpoint = req.query.endpoint || req.body?.endpoint;
   if (!endpoint) return res.status(400).json({ error: 'נדרש endpoint' });
 
-  const { error } = await supabase.from('push_subscriptions').delete().eq('endpoint', endpoint);
+  const { error } = await supabase.from('push_subscriptions').delete().eq('endpoint', endpoint).eq('user_id', req.userId);
   if (error) return res.status(500).json({ error: error.message });
   res.json({ success: true });
 }));
