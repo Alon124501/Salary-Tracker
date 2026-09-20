@@ -2,11 +2,24 @@ import { useState } from 'react';
 import api from '../api.js';
 import { useFetch } from '../hooks/useFetch.js';
 import { useToast } from '../context/ToastContext.jsx';
+import { formatDate } from '../utils/date.js';
+import DatePicker from '../components/DatePicker.jsx';
 
 const CATEGORIES = [
   { id: 'insurance', label: 'בדיקות ביטוח' },
   { id: 'screening', label: 'בדיקות סקר' },
 ];
+
+const TIME_OFF_CATEGORIES = [
+  { id: 'vacation', label: 'חופשה' },
+  { id: 'sick', label: 'מחלה' },
+];
+
+const TIME_OFF_STATUS = {
+  pending:  { label: 'ממתין',  className: 'bg-amber-50 text-amber-600' },
+  approved: { label: 'אושר',   className: 'bg-emerald-50 text-emerald-600' },
+  rejected: { label: 'נדחה',   className: 'bg-rose-50 text-rose-600' },
+};
 
 function renderAnswer(text) {
   const lines = text.split('\n');
@@ -96,6 +109,15 @@ export default function PortalPage() {
     return v.title.toLowerCase().includes(q) || (v.device_name || '').toLowerCase().includes(q);
   });
 
+  // Time-off request state
+  const { data: myTimeOff = [], loading: myTimeOffLoading, reload: reloadMyTimeOff } =
+    useFetch('/timeoff/requests/mine', { enabled: tab === 'timeoff' });
+  const [toCategory, setToCategory] = useState('vacation');
+  const [toStart, setToStart] = useState('');
+  const [toEnd, setToEnd] = useState('');
+  const [toNote, setToNote] = useState('');
+  const [toSubmitting, setToSubmitting] = useState(false);
+
   async function submitOrder() {
     const items = eqCatalog
       .filter(item => (eqQty[item.id] || 0) > 0)
@@ -109,6 +131,28 @@ export default function PortalPage() {
       showToast('ההזמנה נשלחה', 'success');
     } catch (err) { showToast(err?.response?.data?.error || 'שליחת ההזמנה נכשלה'); }
     finally { setEqSubmitting(false); }
+  }
+
+  async function submitTimeOff() {
+    if (!toStart || !toEnd) return;
+    setToSubmitting(true);
+    try {
+      await api.post('/timeoff/requests', { category: toCategory, start_date: toStart, end_date: toEnd, note: toNote });
+      setToStart('');
+      setToEnd('');
+      setToNote('');
+      showToast('הבקשה נשלחה', 'success');
+      reloadMyTimeOff();
+    } catch (err) { showToast(err?.response?.data?.error || 'שליחת הבקשה נכשלה'); }
+    finally { setToSubmitting(false); }
+  }
+
+  async function cancelTimeOff(id) {
+    try {
+      await api.delete(`/timeoff/requests/${id}`);
+      showToast('הבקשה בוטלה', 'success');
+      reloadMyTimeOff();
+    } catch (err) { showToast(err?.response?.data?.error || 'ביטול הבקשה נכשל'); }
   }
 
   function toggle(key) {
@@ -126,7 +170,7 @@ export default function PortalPage() {
 
         {/* Tab toggle */}
         <div className="flex gap-2 mb-6 flex-wrap">
-          {[{ id: 'apps', label: 'אפליקציות', icon: 'apps' }, { id: 'faq', label: 'שאלות נפוצות', icon: 'quiz' }, { id: 'contacts', label: 'אנשי קשר', icon: 'call' }, { id: 'equipment', label: 'ציוד', icon: 'inventory' }, { id: 'videos', label: 'סרטונים', icon: 'smart_display' }].map(t => (
+          {[{ id: 'apps', label: 'אפליקציות', icon: 'apps' }, { id: 'faq', label: 'שאלות נפוצות', icon: 'quiz' }, { id: 'contacts', label: 'אנשי קשר', icon: 'call' }, { id: 'equipment', label: 'ציוד', icon: 'inventory' }, { id: 'videos', label: 'סרטונים', icon: 'smart_display' }, { id: 'timeoff', label: 'ימי חופש / מחלה', icon: 'event_busy' }].map(t => (
             <button
               key={t.id}
               onClick={() => setTab(t.id)}
@@ -296,6 +340,104 @@ export default function PortalPage() {
                       {eqSubmitting ? 'שולח...' : 'שלח הזמנה'}
                     </button>
                   </>
+                )}
+              </div>
+            )}
+
+            {/* ── Time off ── */}
+            {tab === 'timeoff' && (
+              <div className="mb-8">
+                <h2 className="text-base font-extrabold text-slate-700 mb-3 px-1 flex items-center gap-2">
+                  <span className="material-symbols-outlined text-brand-purple text-lg" style={{ fontVariationSettings: "'FILL' 1" }}>event_busy</span>
+                  בקשת ימי חופש
+                </h2>
+
+                <div className="bg-white rounded-2xl border border-slate-100 px-4 py-4 mb-5"
+                  style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
+                  <label className="text-sm font-semibold text-slate-800 block mb-2">סוג</label>
+                  <div className="flex gap-2 mb-4">
+                    {TIME_OFF_CATEGORIES.map(c => (
+                      <button
+                        key={c.id}
+                        onClick={() => setToCategory(c.id)}
+                        className={`flex-1 py-2 rounded-xl text-sm font-semibold transition-all active:scale-95 ${
+                          toCategory === c.id ? 'brand-gradient text-white' : 'bg-slate-100 text-slate-500'
+                        }`}
+                      >
+                        {c.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="flex gap-3 mb-4">
+                    <div className="flex-1">
+                      <label className="text-sm font-semibold text-slate-800 block mb-2">מתאריך *</label>
+                      <DatePicker value={toStart} onChange={setToStart} />
+                    </div>
+                    <div className="flex-1">
+                      <label className="text-sm font-semibold text-slate-800 block mb-2">עד תאריך *</label>
+                      <DatePicker value={toEnd} onChange={setToEnd} />
+                    </div>
+                  </div>
+
+                  <label className="text-sm font-semibold text-slate-800 block mb-2">הערה (לא חובה)</label>
+                  <textarea
+                    value={toNote}
+                    onChange={e => setToNote(e.target.value)}
+                    maxLength={500}
+                    rows={3}
+                    dir="rtl"
+                    placeholder="פרטים נוספים..."
+                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-purple/30 resize-none"
+                  />
+                </div>
+
+                <button
+                  onClick={submitTimeOff}
+                  disabled={toSubmitting || !toStart || !toEnd}
+                  className="w-full py-3 rounded-2xl text-sm font-bold text-white brand-gradient active:scale-[0.98] transition-all disabled:opacity-40 mb-6"
+                  style={{ boxShadow: '0 4px 14px rgba(139,53,217,0.3)' }}
+                >
+                  {toSubmitting ? 'שולח...' : 'שלח בקשה'}
+                </button>
+
+                <h3 className="text-sm font-extrabold text-slate-700 mb-3 px-1">הבקשות שלי</h3>
+                {myTimeOffLoading ? (
+                  <div className="flex justify-center py-10">
+                    <span className="material-symbols-outlined text-3xl text-slate-300 animate-spin">progress_activity</span>
+                  </div>
+                ) : myTimeOff.length === 0 ? (
+                  <div className="bg-white rounded-2xl border border-slate-100 py-8 flex flex-col items-center gap-2 text-slate-400"
+                    style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
+                    <span className="material-symbols-outlined text-3xl opacity-30">event_busy</span>
+                    <p className="text-sm">אין עדיין בקשות</p>
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-3">
+                    {myTimeOff.map(r => {
+                      const st = TIME_OFF_STATUS[r.status] || TIME_OFF_STATUS.pending;
+                      const catLabel = TIME_OFF_CATEGORIES.find(c => c.id === r.category)?.label || r.category;
+                      return (
+                        <div key={r.id} className="bg-white rounded-2xl border border-slate-100 px-4 py-3.5"
+                          style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
+                          <div className="flex items-center justify-between mb-1.5">
+                            <p className="text-sm font-bold text-slate-800">{catLabel}</p>
+                            <span className={`text-xs font-bold px-2.5 py-1 rounded-lg ${st.className}`}>{st.label}</span>
+                          </div>
+                          <p className="text-xs text-slate-500">{formatDate(r.start_date)} — {formatDate(r.end_date)}</p>
+                          {r.note && <p className="text-xs text-slate-400 mt-1.5">{r.note}</p>}
+                          {r.status === 'pending' && (
+                            <button
+                              onClick={() => cancelTimeOff(r.id)}
+                              className="mt-2.5 text-xs font-bold text-rose-500 active:scale-95 transition-all"
+                            >
+                              ביטול בקשה
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
                 )}
               </div>
             )}

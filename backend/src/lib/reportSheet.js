@@ -36,7 +36,7 @@ function buildSheet(sheet, entries, profile = {}, title = '') {
                   (e.mixed_screening_tests || 0) + (e.partial_tests || 0);
 
     const dataRow = sheet.addRow({
-      date: e.date, ins: e.insurance_tests, scr: e.screening_tests,
+      date: e.date ? e.date.split('-').reverse().join('/') : '', ins: e.insurance_tests, scr: e.screening_tests,
       mix: e.mixed_screening_tests, par: e.partial_tests, total,
       canc: e.cancellations,
       km: e.kilometers, hrs: e.office_hours,

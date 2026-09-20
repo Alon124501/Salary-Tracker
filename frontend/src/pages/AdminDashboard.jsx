@@ -3,6 +3,7 @@ import axios from 'axios';
 import api from '../api.js';
 import { useFetch } from '../hooks/useFetch.js';
 import { useToast } from '../context/ToastContext.jsx';
+import { formatDate } from '../utils/date.js';
 
 function activityColor(shiftsPerWeek) {
   const n = parseInt(shiftsPerWeek, 10);
@@ -18,7 +19,10 @@ const TABS = [
   { id: 'notifications', label: 'התראות',        icon: 'notifications' },
   { id: 'faq',           label: 'פורטל',         icon: 'hub' },
   { id: 'eq_orders',     label: 'הזמנות',        icon: 'inventory' },
+  { id: 'timeoff',       label: 'חופשות',        icon: 'event_busy' },
 ];
+
+const TIME_OFF_CATEGORY_LABELS = { vacation: 'חופשה', sick: 'מחלה', other: 'אחר' };
 
 const FAQ_CATEGORIES = [
   { id: 'insurance', label: 'בדיקות ביטוח' },
@@ -152,6 +156,12 @@ export default function AdminDashboard() {
   const [eqOrderModal, setEqOrderModal] = useState(null);
   const [completingOrderId, setCompletingOrderId] = useState(null);
 
+  // Time-off requests tab state
+  const { data: timeOffRequests = [], setData: setTimeOffRequests, loading: timeOffLoading } =
+    useFetch('/timeoff/requests');
+  const pendingTimeOffCount = timeOffRequests.filter(r => r.status === 'pending').length;
+  const [decidingTimeOffId, setDecidingTimeOffId] = useState(null);
+
   // Device recap ("Equipment" directory tab) state
   const { data: deviceCatalog = [], loading: deviceCatalogLoading, reload: loadDeviceCatalog } =
     useFetch('/devices/catalog', { enabled: activeTab === 'equipment' || activeTab === 'faq' });
@@ -257,6 +267,16 @@ export default function AdminDashboard() {
       showToast('ההזמנה סומנה כהושלמה', 'success');
     } catch (err) { showToast(err?.response?.data?.error || 'השלמת ההזמנה נכשלה'); }
     finally { setCompletingOrderId(null); }
+  }
+
+  async function decideTimeOff(id, status) {
+    setDecidingTimeOffId(id);
+    try {
+      const { data } = await api.put(`/timeoff/requests/${id}/decide`, { status });
+      setTimeOffRequests(prev => prev.map(r => (r.id === id ? { ...r, ...data } : r)));
+      showToast(status === 'approved' ? 'הבקשה אושרה' : 'הבקשה נדחתה', 'success');
+    } catch (err) { showToast(err?.response?.data?.error || 'עדכון הבקשה נכשל'); }
+    finally { setDecidingTimeOffId(null); }
   }
 
   // ── Device toggle ───────────────────────────────────────────────────────
@@ -702,6 +722,11 @@ export default function AdminDashboard() {
                     {pendingOrdersCount}
                   </span>
                 )}
+                {tab.id === 'timeoff' && pendingTimeOffCount > 0 && (
+                  <span className="bg-blue-500 text-white text-[10px] font-bold min-w-[17px] h-[17px] px-1 rounded-full flex items-center justify-center leading-none">
+                    {pendingTimeOffCount}
+                  </span>
+                )}
               </button>
             );
           })}
@@ -800,7 +825,7 @@ export default function AdminDashboard() {
                         </td>
                         <td className="px-3 py-2.5 text-center text-slate-400" title="התאריך שבו העובד דיווח לאחרונה בעצמו; עריכות מנהל למעלה אינן משנות תאריך זה">
                           {u.last_reported
-                            ? new Date(u.last_reported).toLocaleDateString('he-IL', { month: 'short', day: 'numeric' })
+                            ? formatDate(u.last_reported)
                             : 'מעולם לא'}
                         </td>
                       </tr>
@@ -895,7 +920,7 @@ export default function AdminDashboard() {
                 const isApproving  = approvingId   === s.user.id;
                 const errMsg       = approveMsgs[s.user.id];
                 const approvedAt   = s.approved?.at
-                  ? new Date(s.approved.at).toLocaleDateString('he-IL', { month: 'short', day: 'numeric' })
+                  ? formatDate(s.approved.at)
                   : null;
                 return (
                   <div key={s.user.id} className="px-4 py-3.5 border-b border-slate-50 last:border-0">
@@ -1748,7 +1773,7 @@ export default function AdminDashboard() {
                         </div>
                         <p className="text-xs text-slate-400 line-clamp-2">{n.content}</p>
                         <div className="flex flex-col gap-0.5 mt-1.5">
-                          <p className="text-[10px] text-slate-300">נוצר {new Date(n.created_at).toLocaleDateString('he-IL', { month: 'short', day: 'numeric', year: 'numeric' })}</p>
+                          <p className="text-[10px] text-slate-300">נוצר {formatDate(n.created_at)}</p>
                           {n.scheduled_for && !n.is_active && (
                             <p className="text-[10px] text-amber-500 font-semibold">
                               נשלח {new Date(n.scheduled_for).toLocaleString('he-IL', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
@@ -1832,7 +1857,7 @@ export default function AdminDashboard() {
                               {t.approved_at ? (
                                 <span className="flex items-center gap-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1.5 rounded-xl border border-emerald-100 whitespace-nowrap">
                                   <span className="material-symbols-outlined text-sm" style={{ fontVariationSettings: "'FILL' 1" }}>check_circle</span>
-                                  {new Date(t.approved_at).toLocaleDateString('he-IL', { month: 'short', day: 'numeric' })}
+                                  {formatDate(t.approved_at)}
                                 </span>
                               ) : (
                                 <span className="flex items-center gap-1.5 text-xs font-bold text-slate-400 bg-slate-100 px-2.5 py-1.5 rounded-xl whitespace-nowrap">
@@ -1844,7 +1869,7 @@ export default function AdminDashboard() {
                                 t.document_opened_at ? (
                                   <span className="flex items-center gap-1 text-xs font-bold text-blue-700 bg-blue-50 px-2.5 py-1.5 rounded-xl border border-blue-100 whitespace-nowrap">
                                     <span className="material-symbols-outlined text-sm" style={{ fontVariationSettings: "'FILL' 1" }}>visibility</span>
-                                    נפתח {new Date(t.document_opened_at).toLocaleDateString('he-IL', { month: 'short', day: 'numeric' })}
+                                    נפתח {formatDate(t.document_opened_at)}
                                   </span>
                                 ) : (
                                   <span className="flex items-center gap-1 text-xs font-bold text-slate-400 bg-slate-100 px-2.5 py-1.5 rounded-xl whitespace-nowrap">
@@ -2004,10 +2029,10 @@ export default function AdminDashboard() {
                         <div>
                           <p className="text-sm font-bold text-slate-800">{name}</p>
                           <p className="text-xs text-slate-400 mt-0.5">
-                            {itemCount} {itemCount !== 1 ? 'פריטים' : 'פריט'} · {new Date(order.created_at).toLocaleDateString('he-IL', { month: 'short', day: 'numeric', year: 'numeric' })}
+                            {itemCount} {itemCount !== 1 ? 'פריטים' : 'פריט'} · {formatDate(order.created_at)}
                           </p>
                           <p className="text-xs font-semibold text-brand-purple mt-0.5">
-                            נדרש: {order.needed_date ? new Date(order.needed_date).toLocaleDateString('he-IL', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}
+                            נדרש: {order.needed_date ? formatDate(order.needed_date) : '—'}
                           </p>
                         </div>
                         <span className={`text-xs font-bold px-2.5 py-1 rounded-xl ${order.status === 'completed' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
@@ -2018,6 +2043,73 @@ export default function AdminDashboard() {
                   })}
                 </div>
               )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Tab: Time Off Requests ─────────────────────────────────────── */}
+      {activeTab === 'timeoff' && (
+        <div className="px-4 space-y-4">
+          {timeOffLoading ? (
+            <div className="flex justify-center py-10">
+              <span className="material-symbols-outlined text-3xl text-slate-300 animate-spin">progress_activity</span>
+            </div>
+          ) : timeOffRequests.length === 0 ? (
+            <div className="bg-white rounded-2xl border border-slate-100 py-10 flex flex-col items-center gap-2 text-slate-400"
+              style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
+              <span className="material-symbols-outlined text-3xl opacity-30">event_busy</span>
+              <p className="text-sm">אין עדיין בקשות חופשה</p>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-2">
+              {timeOffRequests.map(r => {
+                const profile = r.profiles;
+                const name = profile ? `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || profile.username : '—';
+                const catLabel = TIME_OFF_CATEGORY_LABELS[r.category] || r.category;
+                const deciding = decidingTimeOffId === r.id;
+                return (
+                  <div key={r.id} className="bg-white rounded-2xl border border-slate-100 px-4 py-3.5"
+                    style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-bold text-slate-800">{name} · {catLabel}</p>
+                        <p className="text-xs text-slate-400 mt-0.5">
+                          {formatDate(r.start_date)}
+                          {' — '}
+                          {formatDate(r.end_date)}
+                        </p>
+                      </div>
+                      <span className={`text-xs font-bold px-2.5 py-1 rounded-xl ${
+                        r.status === 'approved' ? 'bg-emerald-50 text-emerald-700'
+                          : r.status === 'rejected' ? 'bg-rose-50 text-rose-700'
+                          : 'bg-amber-50 text-amber-700'
+                      }`}>
+                        {r.status === 'approved' ? 'אושר' : r.status === 'rejected' ? 'נדחה' : 'ממתין'}
+                      </span>
+                    </div>
+                    {r.note && <p className="text-xs text-slate-500 mt-2">{r.note}</p>}
+                    {r.status === 'pending' && (
+                      <div className="flex gap-2 mt-3">
+                        <button
+                          onClick={() => decideTimeOff(r.id, 'approved')}
+                          disabled={deciding}
+                          className="flex-1 py-2 rounded-xl text-sm font-bold text-white brand-gradient active:scale-95 transition-all disabled:opacity-50"
+                        >
+                          אישור
+                        </button>
+                        <button
+                          onClick={() => decideTimeOff(r.id, 'rejected')}
+                          disabled={deciding}
+                          className="flex-1 py-2 rounded-xl text-sm font-bold text-rose-600 bg-rose-50 active:scale-95 transition-all disabled:opacity-50"
+                        >
+                          דחייה
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
@@ -2035,10 +2127,10 @@ export default function AdminDashboard() {
                   return <h2 className="text-base font-extrabold text-slate-900">{name}</h2>;
                 })()}
                 <p className="text-xs text-slate-400 mt-0.5">
-                  נשלח: {new Date(eqOrderModal.created_at).toLocaleDateString('he-IL', { month: 'long', day: 'numeric', year: 'numeric' })}
+                  נשלח: {formatDate(eqOrderModal.created_at)}
                 </p>
                 <p className="text-xs font-semibold text-brand-purple mt-0.5">
-                  תאריך נדרש: {eqOrderModal.needed_date ? new Date(eqOrderModal.needed_date).toLocaleDateString('he-IL', { month: 'long', day: 'numeric', year: 'numeric' }) : '—'}
+                  תאריך נדרש: {eqOrderModal.needed_date ? formatDate(eqOrderModal.needed_date) : '—'}
                 </p>
               </div>
               <button onClick={() => setEqOrderModal(null)} className="w-8 h-8 flex items-center justify-center rounded-xl bg-slate-100 text-slate-500">

@@ -49,6 +49,7 @@ app.use('/api/portal',        require('./routes/portal'));
 app.use('/api/notifications', require('./routes/notifications'));
 app.use('/api/contacts',      require('./routes/contacts'));
 app.use('/api/equipment',     require('./routes/equipment'));
+app.use('/api/timeoff',       require('./routes/timeoff'));
 app.use('/api/devices',       require('./routes/devices'));
 app.use('/api/tutorials',     require('./routes/tutorials'));
 app.use('/api/push',          require('./routes/push'));
