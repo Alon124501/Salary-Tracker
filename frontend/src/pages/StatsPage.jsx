@@ -91,7 +91,7 @@ export default function StatsPage() {
             <StatRow label="ביטוח" value={s.insurance_tests || 0} color="brand-gradient" max={s.total_tests || 1} />
             <StatRow label="סקר" value={s.screening_tests || 0} color="bg-purple-400" max={s.total_tests || 1} />
             <StatRow label="מעורב" value={s.mixed_screening_tests || 0} color="bg-indigo-400" max={s.total_tests || 1} />
-            <StatRow label="חלקי" value={s.partial_tests || 0} color="bg-sky-400" max={s.total_tests || 1} />
+            <StatRow label="השלמה" value={s.partial_tests || 0} color="bg-sky-400" max={s.total_tests || 1} />
           </div>
         </div>
 

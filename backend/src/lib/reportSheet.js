@@ -11,7 +11,7 @@ function buildSheet(sheet, entries, profile = {}, title = '') {
     { header: 'בדיקות ביטוח',     key: 'ins',    width: 16 },
     { header: 'בדיקות סקר',       key: 'scr',    width: 16 },
     { header: 'סקר מעורב',        key: 'mix',    width: 16 },
-    { header: 'בדיקות חלקיות',    key: 'par',    width: 14 },
+    { header: 'בדיקות השלמה',     key: 'par',    width: 14 },
     { header: 'סה"כ בדיקות',      key: 'total',  width: 14 },
     { header: 'ביטולים',          key: 'canc',   width: 12 },
     { header: 'קילומטרים',        key: 'km',     width: 12 },

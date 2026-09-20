@@ -337,7 +337,7 @@ export default function Dashboard() {
             <div className="w-9 h-9 rounded-xl bg-fuchsia-50 flex items-center justify-center mb-3">
               <span className="material-symbols-outlined text-fuchsia-500 text-lg" style={{ fontVariationSettings: "'FILL' 1" }}>science</span>
             </div>
-            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">חלקי</p>
+            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">השלמה</p>
             <div className="text-2xl font-bold text-slate-900 font-headline">{s.partial_tests || 0}</div>
           </div>
         </div>
