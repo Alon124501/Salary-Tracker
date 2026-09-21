@@ -64,7 +64,7 @@ router.delete('/requests/:id', auth, asyncHandler(async (req, res) => {
 router.get('/requests', auth, adminAuth, asyncHandler(async (req, res) => {
   const { data, error } = await supabase
     .from('time_off_requests')
-    .select('*, profiles(first_name, last_name, username)')
+    .select('*, profiles!user_id(first_name, last_name, username)')
     .order('created_at', { ascending: false });
   if (error) return res.status(500).json({ error: error.message });
   res.json(data || []);

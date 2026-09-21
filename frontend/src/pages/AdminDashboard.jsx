@@ -157,7 +157,7 @@ export default function AdminDashboard() {
   const [completingOrderId, setCompletingOrderId] = useState(null);
 
   // Time-off requests tab state
-  const { data: timeOffRequests = [], setData: setTimeOffRequests, loading: timeOffLoading } =
+  const { data: timeOffRequests = [], setData: setTimeOffRequests, loading: timeOffLoading, error: timeOffError } =
     useFetch('/timeoff/requests');
   const pendingTimeOffCount = timeOffRequests.filter(r => r.status === 'pending').length;
   const [decidingTimeOffId, setDecidingTimeOffId] = useState(null);
@@ -2054,6 +2054,12 @@ export default function AdminDashboard() {
           {timeOffLoading ? (
             <div className="flex justify-center py-10">
               <span className="material-symbols-outlined text-3xl text-slate-300 animate-spin">progress_activity</span>
+            </div>
+          ) : timeOffError ? (
+            <div className="bg-rose-50 rounded-2xl border border-rose-100 py-10 flex flex-col items-center gap-2 text-rose-600">
+              <span className="material-symbols-outlined text-3xl opacity-50">error</span>
+              <p className="text-sm font-bold">טעינת בקשות החופשה נכשלה</p>
+              <p className="text-xs text-rose-500">{timeOffError}</p>
             </div>
           ) : timeOffRequests.length === 0 ? (
             <div className="bg-white rounded-2xl border border-slate-100 py-10 flex flex-col items-center gap-2 text-slate-400"
