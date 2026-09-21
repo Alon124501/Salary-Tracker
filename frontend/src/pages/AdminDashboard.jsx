@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import axios from 'axios';
 import api from '../api.js';
 import { useFetch } from '../hooks/useFetch.js';
+import ScrollTabs from '../components/ScrollTabs.jsx';
 import { useToast } from '../context/ToastContext.jsx';
 import { formatDate } from '../utils/date.js';
 
@@ -702,15 +703,15 @@ export default function AdminDashboard() {
       </div>
 
       {/* Tabs */}
-      <div className="px-4 mb-4 overflow-x-auto">
-        <div className="flex gap-2 min-w-max">
+      <div className="px-4 mb-4">
+        <ScrollTabs activeIndex={TABS.findIndex(tab => tab.id === activeTab)}>
           {TABS.map(tab => {
             const active = activeTab === tab.id;
             return (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center gap-1.5 px-4 py-2 rounded-2xl text-sm font-bold transition-all active:scale-95 ${
+                className={`flex items-center gap-1.5 px-4 py-2 rounded-2xl text-sm font-bold transition-all active:scale-95 shrink-0 ${
                   active ? 'brand-gradient text-white' : 'bg-white text-slate-500 hover:bg-slate-100'
                 }`}
                 style={active ? { boxShadow: '0 4px 14px rgba(139,53,217,0.3)' } : {}}
@@ -730,7 +731,7 @@ export default function AdminDashboard() {
               </button>
             );
           })}
-        </div>
+        </ScrollTabs>
       </div>
 
       {/* ── Tab: Directory ─────────────────────────────────────────────── */}

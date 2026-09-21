@@ -4,10 +4,20 @@ import { useFetch } from '../hooks/useFetch.js';
 import { useToast } from '../context/ToastContext.jsx';
 import { formatDate } from '../utils/date.js';
 import DatePicker from '../components/DatePicker.jsx';
+import ScrollTabs from '../components/ScrollTabs.jsx';
 
 const CATEGORIES = [
   { id: 'insurance', label: 'בדיקות ביטוח' },
   { id: 'screening', label: 'בדיקות סקר' },
+];
+
+const PORTAL_TABS = [
+  { id: 'apps', label: 'אפליקציות', icon: 'apps' },
+  { id: 'faq', label: 'שאלות נפוצות', icon: 'quiz' },
+  { id: 'contacts', label: 'אנשי קשר', icon: 'call' },
+  { id: 'equipment', label: 'ציוד', icon: 'inventory' },
+  { id: 'videos', label: 'סרטונים', icon: 'smart_display' },
+  { id: 'timeoff', label: 'ימי חופש / מחלה', icon: 'event_busy' },
 ];
 
 const TIME_OFF_CATEGORIES = [
@@ -169,23 +179,25 @@ export default function PortalPage() {
         </div>
 
         {/* Tab toggle */}
-        <div className="flex gap-2 mb-6 flex-wrap">
-          {[{ id: 'apps', label: 'אפליקציות', icon: 'apps' }, { id: 'faq', label: 'שאלות נפוצות', icon: 'quiz' }, { id: 'contacts', label: 'אנשי קשר', icon: 'call' }, { id: 'equipment', label: 'ציוד', icon: 'inventory' }, { id: 'videos', label: 'סרטונים', icon: 'smart_display' }, { id: 'timeoff', label: 'ימי חופש / מחלה', icon: 'event_busy' }].map(t => (
-            <button
-              key={t.id}
-              onClick={() => setTab(t.id)}
-              className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold transition-all active:scale-95 ${
-                tab === t.id ? 'brand-gradient text-white' : 'bg-white border border-slate-200 text-slate-500'
-              }`}
-              style={tab === t.id ? { boxShadow: '0 4px 14px rgba(139,53,217,0.25)' } : {}}
-            >
-              <span className="material-symbols-outlined text-[16px]"
-                style={{ fontVariationSettings: tab === t.id ? "'FILL' 1" : "'FILL' 0" }}>
-                {t.icon}
-              </span>
-              {t.label}
-            </button>
-          ))}
+        <div className="mb-6">
+          <ScrollTabs activeIndex={PORTAL_TABS.findIndex(t => t.id === tab)}>
+            {PORTAL_TABS.map(t => (
+              <button
+                key={t.id}
+                onClick={() => setTab(t.id)}
+                className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold transition-all active:scale-95 shrink-0 ${
+                  tab === t.id ? 'brand-gradient text-white' : 'bg-white border border-slate-200 text-slate-500'
+                }`}
+                style={tab === t.id ? { boxShadow: '0 4px 14px rgba(139,53,217,0.25)' } : {}}
+              >
+                <span className="material-symbols-outlined text-[16px]"
+                  style={{ fontVariationSettings: tab === t.id ? "'FILL' 1" : "'FILL' 0" }}>
+                  {t.icon}
+                </span>
+                {t.label}
+              </button>
+            ))}
+          </ScrollTabs>
         </div>
 
         {loading ? (
