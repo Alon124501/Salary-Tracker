@@ -146,14 +146,19 @@ export default function AdminDashboard() {
 
   // Equipment Orders tab state
   const { data: eqCatalog = [], setData: setEqCatalog, loading: eqCatalogLoading, reload: loadEqCatalog } =
-    useFetch('/equipment/catalog', { enabled: activeTab === 'eq_orders' });
+    useFetch('/equipment/catalog/admin', { enabled: activeTab === 'eq_orders' });
   const { data: eqOrders = [], setData: setEqOrders, loading: eqOrdersLoading, reload: loadEqOrders } =
     useFetch('/equipment/orders');
   const pendingOrdersCount = eqOrders.filter(o => o.status === 'pending').length;
-  const [newItemName, setNewItemName] = useState('');
   const [eqSubTab, setEqSubTab] = useState('catalog');
-  const [editingItemId, setEditingItemId] = useState(null);
-  const [editingItemName, setEditingItemName] = useState('');
+  const EMPTY_PRODUCT_FORM = {
+    name: '', sku: '', supplier_contact_name: '', supplier_email: '', supplier_phone: '',
+    supplier_whatsapp: '', supplier_company_id: '', price_excl_vat: '', price_incl_vat: '',
+    vat_amount: '', units_per_box: '', stock_qty: '',
+  };
+  const [productModal, setProductModal] = useState(null); // { id } for edit, {} for new, null closed
+  const [productForm, setProductForm] = useState(EMPTY_PRODUCT_FORM);
+  const [savingProduct, setSavingProduct] = useState(false);
   const [eqOrderModal, setEqOrderModal] = useState(null);
   const [completingOrderId, setCompletingOrderId] = useState(null);
 
@@ -201,13 +206,37 @@ export default function AdminDashboard() {
 
 
   // ── Equipment Orders actions ───────────────────────────────────────────
-  async function addCatalogItem() {
-    if (!newItemName.trim()) return;
+  function openProductModal(item) {
+    if (item) {
+      setProductModal(item);
+      setProductForm({
+        name: item.name || '', sku: item.sku || '',
+        supplier_contact_name: item.supplier_contact_name || '', supplier_email: item.supplier_email || '',
+        supplier_phone: item.supplier_phone || '', supplier_whatsapp: item.supplier_whatsapp || '',
+        supplier_company_id: item.supplier_company_id || '',
+        price_excl_vat: item.price_excl_vat ?? '', price_incl_vat: item.price_incl_vat ?? '',
+        vat_amount: item.vat_amount ?? '', units_per_box: item.units_per_box ?? '',
+        stock_qty: item.stock_qty ?? '',
+      });
+    } else {
+      setProductModal({});
+      setProductForm(EMPTY_PRODUCT_FORM);
+    }
+  }
+
+  async function saveProduct() {
+    if (!productForm.name.trim()) return;
+    setSavingProduct(true);
     try {
-      await api.post('/equipment/catalog', { name: newItemName.trim() });
-      setNewItemName('');
+      if (productModal?.id) {
+        await api.put(`/equipment/catalog/${productModal.id}`, productForm);
+      } else {
+        await api.post('/equipment/catalog', productForm);
+      }
+      setProductModal(null);
       loadEqCatalog();
-    } catch (err) { showToast(err?.response?.data?.error || 'הוספת הפריט נכשלה'); }
+    } catch (err) { showToast(err?.response?.data?.error || 'שמירת המוצר נכשלה'); }
+    finally { setSavingProduct(false); }
   }
 
   async function deleteCatalogItem(id) {
@@ -215,16 +244,6 @@ export default function AdminDashboard() {
       await api.delete(`/equipment/catalog/${id}`);
       loadEqCatalog();
     } catch (err) { showToast(err?.response?.data?.error || 'מחיקת הפריט נכשלה'); }
-  }
-
-  async function renameCatalogItem(id) {
-    if (!editingItemName.trim()) return;
-    try {
-      await api.put(`/equipment/catalog/${id}`, { name: editingItemName.trim() });
-      setEditingItemId(null);
-      setEditingItemName('');
-      loadEqCatalog();
-    } catch (err) { showToast(err?.response?.data?.error || 'עדכון הפריט נכשל'); }
   }
 
   // ── Device catalog actions ──────────────────────────────────────────────
@@ -262,10 +281,14 @@ export default function AdminDashboard() {
   async function completeOrder(id) {
     setCompletingOrderId(id);
     try {
-      await api.delete(`/equipment/orders/${id}`);
+      const { data } = await api.delete(`/equipment/orders/${id}`);
       setEqOrders(prev => prev.filter(o => o.id !== id));
       setEqOrderModal(null);
-      showToast('ההזמנה סומנה כהושלמה', 'success');
+      if (data?.unmatched_items?.length) {
+        showToast(`ההזמנה הושלמה, אך המלאי לא עודכן עבור: ${data.unmatched_items.join(', ')} (הפריט הוסר מהקטלוג)`);
+      } else {
+        showToast('ההזמנה סומנה כהושלמה', 'success');
+      }
     } catch (err) { showToast(err?.response?.data?.error || 'השלמת ההזמנה נכשלה'); }
     finally { setCompletingOrderId(null); }
   }
@@ -1915,21 +1938,14 @@ export default function AdminDashboard() {
           {/* Catalog sub-tab */}
           {eqSubTab === 'catalog' && (
             <div>
-              <div className="flex gap-2 mb-4">
-                <input
-                  type="text"
-                  value={newItemName}
-                  onChange={e => setNewItemName(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && addCatalogItem()}
-                  placeholder="שם הפריט..."
-                  className="flex-1 px-3 py-2.5 text-sm rounded-xl border border-slate-200 focus:border-brand-purple/50 focus:outline-none bg-white"
-                />
+              <div className="flex justify-end mb-4">
                 <button
-                  onClick={addCatalogItem}
-                  className="px-4 py-2.5 rounded-xl text-sm font-bold text-white brand-gradient active:scale-95 transition-all"
+                  onClick={() => openProductModal(null)}
+                  className="px-4 py-2.5 rounded-xl text-sm font-bold text-white brand-gradient active:scale-95 transition-all flex items-center gap-1.5"
                   style={{ boxShadow: '0 4px 14px rgba(139,53,217,0.25)' }}
                 >
-                  הוספה
+                  <span className="material-symbols-outlined text-base">add</span>
+                  מוצר חדש
                 </button>
               </div>
               {eqCatalogLoading ? (
@@ -1944,58 +1960,36 @@ export default function AdminDashboard() {
                 </div>
               ) : (
                 <div className="flex flex-col gap-2">
-                  {eqCatalog.map(item => (
-                    <div key={item.id} className="bg-white rounded-2xl border border-slate-100 px-4 py-3.5 flex items-center justify-between"
-                      style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
-                      {editingItemId === item.id ? (
-                        <>
-                          <input
-                            type="text"
-                            autoFocus
-                            value={editingItemName}
-                            onChange={e => setEditingItemName(e.target.value)}
-                            onKeyDown={e => {
-                              if (e.key === 'Enter') renameCatalogItem(item.id);
-                              if (e.key === 'Escape') { setEditingItemId(null); setEditingItemName(''); }
-                            }}
-                            className="flex-1 me-2 px-3 py-1.5 text-sm rounded-xl border border-brand-purple/50 focus:outline-none bg-white"
-                          />
-                          <div className="flex items-center gap-1 shrink-0">
-                            <button
-                              onClick={() => renameCatalogItem(item.id)}
-                              className="w-8 h-8 flex items-center justify-center rounded-xl text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 transition-all"
-                            >
-                              <span className="material-symbols-outlined text-base">check</span>
-                            </button>
-                            <button
-                              onClick={() => { setEditingItemId(null); setEditingItemName(''); }}
-                              className="w-8 h-8 flex items-center justify-center rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-50 transition-all"
-                            >
-                              <span className="material-symbols-outlined text-base">close</span>
-                            </button>
-                          </div>
-                        </>
-                      ) : (
-                        <>
-                          <p className="text-sm font-semibold text-slate-800">{item.name}</p>
-                          <div className="flex items-center gap-1 shrink-0">
-                            <button
-                              onClick={() => { setEditingItemId(item.id); setEditingItemName(item.name); }}
-                              className="w-8 h-8 flex items-center justify-center rounded-xl text-slate-400 hover:text-brand-purple hover:bg-purple-50 transition-all"
-                            >
-                              <span className="material-symbols-outlined text-base">edit</span>
-                            </button>
-                            <button
-                              onClick={() => deleteCatalogItem(item.id)}
-                              className="w-8 h-8 flex items-center justify-center rounded-xl text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all"
-                            >
-                              <span className="material-symbols-outlined text-base">delete</span>
-                            </button>
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  ))}
+                  {eqCatalog.map(item => {
+                    const stock = item.stock_qty ?? 0;
+                    const lowStock = stock <= 0;
+                    return (
+                      <div key={item.id} className="bg-white rounded-2xl border border-slate-100 px-4 py-3.5 flex items-center justify-between"
+                        style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
+                        <button onClick={() => openProductModal(item)} className="flex-1 text-right min-w-0">
+                          <p className="text-sm font-semibold text-slate-800 truncate">{item.name}</p>
+                          {item.sku && <p className="text-xs text-slate-400 mt-0.5">{item.sku}</p>}
+                        </button>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className={`text-xs font-bold px-2.5 py-1 rounded-xl ${lowStock ? 'bg-red-50 text-red-600' : 'bg-emerald-50 text-emerald-700'}`}>
+                            מלאי: {stock}
+                          </span>
+                          <button
+                            onClick={() => openProductModal(item)}
+                            className="w-8 h-8 flex items-center justify-center rounded-xl text-slate-400 hover:text-brand-purple hover:bg-purple-50 transition-all"
+                          >
+                            <span className="material-symbols-outlined text-base">edit</span>
+                          </button>
+                          <button
+                            onClick={() => deleteCatalogItem(item.id)}
+                            className="w-8 h-8 flex items-center justify-center rounded-xl text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all"
+                          >
+                            <span className="material-symbols-outlined text-base">delete</span>
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -2152,7 +2146,8 @@ export default function AdminDashboard() {
                 </div>
               ))}
             </div>
-            <div className="px-5 py-4 border-t border-slate-100 flex-shrink-0">
+            <div className="px-5 py-4 border-t border-slate-100 flex-shrink-0 space-y-2">
+              <p className="text-[11px] text-slate-400 text-center">סימון כהושלם יפחית את הכמויות שהוזמנו מהמלאי</p>
               <button
                 onClick={() => completeOrder(eqOrderModal.id)}
                 disabled={completingOrderId === eqOrderModal.id}
@@ -2160,6 +2155,53 @@ export default function AdminDashboard() {
                 style={{ boxShadow: '0 4px 14px rgba(139,53,217,0.3)' }}
               >
                 {completingOrderId === eqOrderModal.id ? 'שומר...' : 'סימון כהושלם'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Product Modal (equipment catalog: SKU/supplier/pricing/stock) ── */}
+      {productModal && (
+        <div className="fixed inset-0 z-40 bg-black/40 flex items-center justify-center p-4" onClick={e => { if (e.target === e.currentTarget) setProductModal(null); }}>
+          <div className="relative z-50 bg-white rounded-3xl w-full max-w-md shadow-2xl" style={{ maxHeight: '85vh', display: 'flex', flexDirection: 'column' }}>
+            <div className="px-5 py-4 flex items-center justify-between border-b border-slate-100 flex-shrink-0">
+              <h2 className="text-base font-extrabold text-slate-900">{productModal.id ? 'עריכת מוצר' : 'מוצר חדש'}</h2>
+              <button onClick={() => setProductModal(null)} className="w-8 h-8 flex items-center justify-center rounded-xl bg-slate-100 text-slate-500">
+                <span className="material-symbols-outlined text-base">close</span>
+              </button>
+            </div>
+            <div className="overflow-y-auto flex-1 px-5 py-4 space-y-3">
+              <Field label="שם המוצר" value={productForm.name} onChange={v => setProductForm(f => ({ ...f, name: v }))} />
+              <Field label="מק״ט / SKU" value={productForm.sku} onChange={v => setProductForm(f => ({ ...f, sku: v }))} />
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="כמות במלאי" type="number" value={productForm.stock_qty} onChange={v => setProductForm(f => ({ ...f, stock_qty: v }))} />
+                <Field label="יחידות בקופסה" type="number" value={productForm.units_per_box} onChange={v => setProductForm(f => ({ ...f, units_per_box: v }))} />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="מחיר לפני מע״מ" type="number" step="0.01" value={productForm.price_excl_vat} onChange={v => setProductForm(f => ({ ...f, price_excl_vat: v }))} />
+                <Field label="מחיר כולל מע״מ" type="number" step="0.01" value={productForm.price_incl_vat} onChange={v => setProductForm(f => ({ ...f, price_incl_vat: v }))} />
+              </div>
+              <Field label="סכום מע״מ" type="number" step="0.01" value={productForm.vat_amount} onChange={v => setProductForm(f => ({ ...f, vat_amount: v }))} />
+              <div className="pt-2 mt-1 border-t border-slate-100">
+                <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-2">פרטי ספק</p>
+              </div>
+              <Field label="איש קשר" value={productForm.supplier_contact_name} onChange={v => setProductForm(f => ({ ...f, supplier_contact_name: v }))} />
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="טלפון" value={productForm.supplier_phone} onChange={v => setProductForm(f => ({ ...f, supplier_phone: v }))} dir="ltr" />
+                <Field label="וואטסאפ" value={productForm.supplier_whatsapp} onChange={v => setProductForm(f => ({ ...f, supplier_whatsapp: v }))} dir="ltr" />
+              </div>
+              <Field label="אימייל" type="email" value={productForm.supplier_email} onChange={v => setProductForm(f => ({ ...f, supplier_email: v }))} dir="ltr" />
+              <Field label="ח.פ. הספק" value={productForm.supplier_company_id} onChange={v => setProductForm(f => ({ ...f, supplier_company_id: v }))} />
+            </div>
+            <div className="px-5 py-4 border-t border-slate-100 flex-shrink-0">
+              <button
+                onClick={saveProduct}
+                disabled={savingProduct || !productForm.name.trim()}
+                className="w-full py-3 rounded-2xl text-sm font-bold text-white brand-gradient active:scale-[0.98] transition-all disabled:opacity-50"
+                style={{ boxShadow: '0 4px 14px rgba(139,53,217,0.3)' }}
+              >
+                {savingProduct ? 'שומר...' : 'שמירה'}
               </button>
             </div>
           </div>

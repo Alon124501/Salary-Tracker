@@ -317,7 +317,12 @@ export default function PortalPage() {
                       {eqCatalog.map(item => (
                         <div key={item.id} className="bg-white rounded-2xl border border-slate-100 px-4 py-3.5 flex items-center justify-between"
                           style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
-                          <p className="text-sm font-semibold text-slate-800">{item.name}</p>
+                          <div>
+                            <p className="text-sm font-semibold text-slate-800">{item.name}</p>
+                            <p className={`text-xs mt-0.5 ${(item.stock_qty ?? 0) <= 0 ? 'text-red-500 font-semibold' : 'text-slate-400'}`}>
+                              במלאי: {item.stock_qty ?? 0}
+                            </p>
+                          </div>
                           <div className="flex items-center gap-2">
                             <button
                               onClick={() => setEqQty(q => ({ ...q, [item.id]: Math.max(0, (q[item.id] || 0) - 1) }))}
