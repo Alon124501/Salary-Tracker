@@ -1,8 +1,12 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import axios from 'axios';
+import { motion } from 'motion/react';
 import api from '../api.js';
 import { useFetch } from '../hooks/useFetch.js';
+import { useSwipeableTabs } from '../hooks/useSwipeableTabs.js';
 import ScrollTabs from '../components/ScrollTabs.jsx';
+import SwipeableTabsGroup from '../components/SwipeableTabsGroup.jsx';
+import AnimatedModal from '../components/AnimatedModal.jsx';
 import { useToast } from '../context/ToastContext.jsx';
 import { formatDate } from '../utils/date.js';
 
@@ -54,6 +58,11 @@ function Field({ label, value, onChange, type = 'text', dir, placeholder, step }
 export default function AdminDashboard() {
   const showToast = useToast();
   const [activeTab, setActiveTab] = useState('directory');
+  const { panelMotionProps } = useSwipeableTabs({
+    tabKeys: TABS.map(t => t.id),
+    activeKey: activeTab,
+    onSwipe: setActiveTab,
+  });
 
   const { data: users = [], setData: setUsers, loading, error, reload: loadUsers } =
     useFetch('/admin/users');
@@ -757,9 +766,10 @@ export default function AdminDashboard() {
         </ScrollTabs>
       </div>
 
+      <SwipeableTabsGroup>
       {/* ── Tab: Directory ─────────────────────────────────────────────── */}
       {activeTab === 'directory' && (
-        <div className="px-4 space-y-2">
+        <motion.div key="directory" {...panelMotionProps} className="px-4 space-y-2">
           {users.map(u => {
             const name = `${u.first_name || ''} ${u.last_name || ''}`.trim() || u.username;
             const initials = (`${(u.first_name || '')[0] || ''}${(u.last_name || '')[0] || ''}`.toUpperCase()) || u.username[0]?.toUpperCase() || '?';
@@ -786,12 +796,12 @@ export default function AdminDashboard() {
               </button>
             );
           })}
-        </div>
+        </motion.div>
       )}
 
       {/* ── Tab: Equipment ─────────────────────────────────────────────── */}
       {activeTab === 'equipment' && (
-        <div className="px-4 space-y-4">
+        <motion.div key="equipment" {...panelMotionProps} className="px-4 space-y-4">
           {/* Sub-tab toggle */}
           <div className="flex gap-2">
             {[{ id: 'grid', label: 'טבלה', icon: 'grid_view' }, { id: 'catalog', label: 'קטלוג', icon: 'list' }].map(st => (
@@ -908,12 +918,12 @@ export default function AdminDashboard() {
               )}
             </div>
           )}
-        </div>
+        </motion.div>
       )}
 
       {/* ── Tab: Reports ───────────────────────────────────────────────── */}
       {activeTab === 'reports' && (
-        <div className="px-4 space-y-4">
+        <motion.div key="reports" {...panelMotionProps} className="px-4 space-y-4">
           {/* Month picker */}
           <div className="bg-white rounded-2xl border border-slate-100 p-4 flex items-center gap-3">
             <span className="material-symbols-outlined text-slate-400">calendar_month</span>
@@ -1001,11 +1011,11 @@ export default function AdminDashboard() {
               })}
             </div>
           )}
-        </div>
+        </motion.div>
       )}
       {/* ── Tab: Portal (FAQ + Apps) ───────────────────────────────────── */}
       {activeTab === 'faq' && (
-        <div className="px-4 space-y-4">
+        <motion.div key="faq" {...panelMotionProps} className="px-4 space-y-4">
           {/* Sub-tab toggle */}
           <div className="flex gap-2">
             {[{ id: 'faq', label: 'שאלות נפוצות', icon: 'quiz' }, { id: 'apps', label: 'אפליקציות', icon: 'apps' }, { id: 'contacts', label: 'אנשי קשר', icon: 'call' }, { id: 'videos', label: 'סרטונים', icon: 'smart_display' }].map(st => {
@@ -1553,12 +1563,12 @@ export default function AdminDashboard() {
               )}
             </div>
           )}
-        </div>
+        </motion.div>
       )}
 
       {/* ── Tab: Notifications ────────────────────────────────────────── */}
       {activeTab === 'notifications' && (
-        <div className="px-4 space-y-6">
+        <motion.div key="notifications" {...panelMotionProps} className="px-4 space-y-6">
 
           {/* Create notification form */}
           <div className="bg-white rounded-2xl border border-slate-100 shadow-card p-5 space-y-4">
@@ -1836,88 +1846,12 @@ export default function AdminDashboard() {
               </div>
             )}
           </div>
-        </div>
-      )}
-
-      {/* ── Compliance Modal ──────────────────────────────────────────────── */}
-      {complianceModal && (
-        <div className="fixed inset-0 z-40 bg-black/40 flex items-center justify-center p-4" onClick={e => { if (e.target === e.currentTarget) setComplianceModal(null); }}>
-          <div className="relative z-50 bg-white rounded-3xl flex flex-col w-full max-w-lg shadow-2xl" style={{ maxHeight: '85vh' }}>
-            <div className="px-5 py-4 flex items-center justify-between flex-shrink-0 border-b border-slate-100">
-              <div className="min-w-0 flex-1">
-                <h2 className="text-base font-extrabold text-slate-900 truncate">
-                  {complianceModal.loading ? 'טוען...' : complianceModal.notification?.title}
-                </h2>
-                <p className="text-xs text-slate-400 mt-0.5">סטטוס אישור עובדים</p>
-              </div>
-              <button onClick={() => setComplianceModal(null)} className="w-8 h-8 flex items-center justify-center rounded-xl bg-slate-100 text-slate-500 ms-3 flex-shrink-0">
-                <span className="material-symbols-outlined text-base">close</span>
-              </button>
-            </div>
-            {complianceModal.loading ? (
-              <div className="flex justify-center py-10">
-                <span className="material-symbols-outlined text-3xl text-slate-300 animate-spin">progress_activity</span>
-              </div>
-            ) : (
-              <div className="overflow-y-auto flex-1">
-                {(complianceModal.compliance || []).length === 0 ? (
-                  <div className="flex flex-col items-center gap-2 py-10 text-slate-400">
-                    <span className="material-symbols-outlined text-4xl opacity-30">group</span>
-                    <p className="text-sm font-medium">לא נמצאו עובדים</p>
-                  </div>
-                ) : (
-                  <div>
-                    {(() => {
-                      const hasDocument = !!(complianceModal.notification?.document_storage_path || complianceModal.notification?.document_external_url);
-                      return (complianceModal.compliance || []).map(t => {
-                        const name = `${t.first_name || ''} ${t.last_name || ''}`.trim() || t.username;
-                        return (
-                          <div key={t.user_id} className="px-5 py-3.5 flex items-center justify-between gap-3 border-b border-slate-50 last:border-0">
-                            <div className="min-w-0">
-                              <p className="text-sm font-semibold text-slate-800 truncate">{name}</p>
-                              <p className="text-[11px] text-slate-400">{t.username}</p>
-                            </div>
-                            <div className="flex flex-col gap-1 items-end flex-shrink-0">
-                              {t.approved_at ? (
-                                <span className="flex items-center gap-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1.5 rounded-xl border border-emerald-100 whitespace-nowrap">
-                                  <span className="material-symbols-outlined text-sm" style={{ fontVariationSettings: "'FILL' 1" }}>check_circle</span>
-                                  {formatDate(t.approved_at)}
-                                </span>
-                              ) : (
-                                <span className="flex items-center gap-1.5 text-xs font-bold text-slate-400 bg-slate-100 px-2.5 py-1.5 rounded-xl whitespace-nowrap">
-                                  <span className="material-symbols-outlined text-sm">schedule</span>
-                                  ממתין
-                                </span>
-                              )}
-                              {hasDocument && (
-                                t.document_opened_at ? (
-                                  <span className="flex items-center gap-1 text-xs font-bold text-blue-700 bg-blue-50 px-2.5 py-1.5 rounded-xl border border-blue-100 whitespace-nowrap">
-                                    <span className="material-symbols-outlined text-sm" style={{ fontVariationSettings: "'FILL' 1" }}>visibility</span>
-                                    נפתח {formatDate(t.document_opened_at)}
-                                  </span>
-                                ) : (
-                                  <span className="flex items-center gap-1 text-xs font-bold text-slate-400 bg-slate-100 px-2.5 py-1.5 rounded-xl whitespace-nowrap">
-                                    <span className="material-symbols-outlined text-sm">visibility_off</span>
-                                    לא נפתח
-                                  </span>
-                                )
-                              )}
-                            </div>
-                          </div>
-                        );
-                      });
-                    })()}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
+        </motion.div>
       )}
 
       {/* ── Tab: Equipment Orders ──────────────────────────────────────── */}
       {activeTab === 'eq_orders' && (
-        <div className="px-4 space-y-4">
+        <motion.div key="eq_orders" {...panelMotionProps} className="px-4 space-y-4">
           {/* Sub-tab toggle */}
           <div className="flex gap-2">
             {[{ id: 'catalog', label: 'קטלוג', icon: 'list' }, { id: 'orders', label: 'הזמנות', icon: 'inventory' }].map(st => (
@@ -2040,12 +1974,12 @@ export default function AdminDashboard() {
               )}
             </div>
           )}
-        </div>
+        </motion.div>
       )}
 
       {/* ── Tab: Time Off Requests ─────────────────────────────────────── */}
       {activeTab === 'timeoff' && (
-        <div className="px-4 space-y-4">
+        <motion.div key="timeoff" {...panelMotionProps} className="px-4 space-y-4">
           {timeOffLoading ? (
             <div className="flex justify-center py-10">
               <span className="material-symbols-outlined text-3xl text-slate-300 animate-spin">progress_activity</span>
@@ -2113,12 +2047,89 @@ export default function AdminDashboard() {
               })}
             </div>
           )}
-        </div>
+        </motion.div>
       )}
+      </SwipeableTabsGroup>
+
+      {/* ── Compliance Modal ──────────────────────────────────────────────── */}
+      <AnimatedModal open={!!complianceModal} onBackdropClick={() => setComplianceModal(null)} zIndex={40}>
+        {complianceModal && (
+          <div className="relative z-50 bg-white rounded-3xl flex flex-col w-full max-w-lg shadow-2xl" style={{ maxHeight: '85vh' }}>
+            <div className="px-5 py-4 flex items-center justify-between flex-shrink-0 border-b border-slate-100">
+              <div className="min-w-0 flex-1">
+                <h2 className="text-base font-extrabold text-slate-900 truncate">
+                  {complianceModal.loading ? 'טוען...' : complianceModal.notification?.title}
+                </h2>
+                <p className="text-xs text-slate-400 mt-0.5">סטטוס אישור עובדים</p>
+              </div>
+              <button onClick={() => setComplianceModal(null)} className="w-8 h-8 flex items-center justify-center rounded-xl bg-slate-100 text-slate-500 ms-3 flex-shrink-0">
+                <span className="material-symbols-outlined text-base">close</span>
+              </button>
+            </div>
+            {complianceModal.loading ? (
+              <div className="flex justify-center py-10">
+                <span className="material-symbols-outlined text-3xl text-slate-300 animate-spin">progress_activity</span>
+              </div>
+            ) : (
+              <div className="overflow-y-auto flex-1">
+                {(complianceModal.compliance || []).length === 0 ? (
+                  <div className="flex flex-col items-center gap-2 py-10 text-slate-400">
+                    <span className="material-symbols-outlined text-4xl opacity-30">group</span>
+                    <p className="text-sm font-medium">לא נמצאו עובדים</p>
+                  </div>
+                ) : (
+                  <div>
+                    {(() => {
+                      const hasDocument = !!(complianceModal.notification?.document_storage_path || complianceModal.notification?.document_external_url);
+                      return (complianceModal.compliance || []).map(t => {
+                        const name = `${t.first_name || ''} ${t.last_name || ''}`.trim() || t.username;
+                        return (
+                          <div key={t.user_id} className="px-5 py-3.5 flex items-center justify-between gap-3 border-b border-slate-50 last:border-0">
+                            <div className="min-w-0">
+                              <p className="text-sm font-semibold text-slate-800 truncate">{name}</p>
+                              <p className="text-[11px] text-slate-400">{t.username}</p>
+                            </div>
+                            <div className="flex flex-col gap-1 items-end flex-shrink-0">
+                              {t.approved_at ? (
+                                <span className="flex items-center gap-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1.5 rounded-xl border border-emerald-100 whitespace-nowrap">
+                                  <span className="material-symbols-outlined text-sm" style={{ fontVariationSettings: "'FILL' 1" }}>check_circle</span>
+                                  {formatDate(t.approved_at)}
+                                </span>
+                              ) : (
+                                <span className="flex items-center gap-1.5 text-xs font-bold text-slate-400 bg-slate-100 px-2.5 py-1.5 rounded-xl whitespace-nowrap">
+                                  <span className="material-symbols-outlined text-sm">schedule</span>
+                                  ממתין
+                                </span>
+                              )}
+                              {hasDocument && (
+                                t.document_opened_at ? (
+                                  <span className="flex items-center gap-1 text-xs font-bold text-blue-700 bg-blue-50 px-2.5 py-1.5 rounded-xl border border-blue-100 whitespace-nowrap">
+                                    <span className="material-symbols-outlined text-sm" style={{ fontVariationSettings: "'FILL' 1" }}>visibility</span>
+                                    נפתח {formatDate(t.document_opened_at)}
+                                  </span>
+                                ) : (
+                                  <span className="flex items-center gap-1 text-xs font-bold text-slate-400 bg-slate-100 px-2.5 py-1.5 rounded-xl whitespace-nowrap">
+                                    <span className="material-symbols-outlined text-sm">visibility_off</span>
+                                    לא נפתח
+                                  </span>
+                                )
+                              )}
+                            </div>
+                          </div>
+                        );
+                      });
+                    })()}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+      </AnimatedModal>
 
       {/* ── Equipment Order Modal ──────────────────────────────────────── */}
-      {eqOrderModal && (
-        <div className="fixed inset-0 z-40 bg-black/40 flex items-center justify-center p-4" onClick={e => { if (e.target === e.currentTarget) setEqOrderModal(null); }}>
+      <AnimatedModal open={!!eqOrderModal} onBackdropClick={() => setEqOrderModal(null)} zIndex={40}>
+        {eqOrderModal && (
           <div className="relative z-50 bg-white rounded-3xl w-full max-w-md shadow-2xl" style={{ maxHeight: '80vh', display: 'flex', flexDirection: 'column' }}>
             <div className="px-5 py-4 flex items-center justify-between border-b border-slate-100 flex-shrink-0">
               <div>
@@ -2158,12 +2169,12 @@ export default function AdminDashboard() {
               </button>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </AnimatedModal>
 
       {/* ── Product Modal (equipment catalog: SKU/supplier/pricing/stock) ── */}
-      {productModal && (
-        <div className="fixed inset-0 z-40 bg-black/40 flex items-center justify-center p-4" onClick={e => { if (e.target === e.currentTarget) setProductModal(null); }}>
+      <AnimatedModal open={!!productModal} onBackdropClick={() => setProductModal(null)} zIndex={40}>
+        {productModal && (
           <div className="relative z-50 bg-white rounded-3xl w-full max-w-md shadow-2xl" style={{ maxHeight: '85vh', display: 'flex', flexDirection: 'column' }}>
             <div className="px-5 py-4 flex items-center justify-between border-b border-slate-100 flex-shrink-0">
               <h2 className="text-base font-extrabold text-slate-900">{productModal.id ? 'עריכת מוצר' : 'מוצר חדש'}</h2>
@@ -2205,8 +2216,8 @@ export default function AdminDashboard() {
               </button>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </AnimatedModal>
 
       {/* ── User Detail Drawer ─────────────────────────────────────────── */}
       {selectedUser && (
@@ -2335,8 +2346,8 @@ export default function AdminDashboard() {
       )}
 
       {/* ── Delete Employee Confirmation Modal ────────────────────────────── */}
-      {deleteConfirmUser && (
-        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+      <AnimatedModal open={!!deleteConfirmUser} zIndex={50} backdropClassName="bg-black/50">
+        {deleteConfirmUser && (
           <div className="bg-white rounded-3xl w-full max-w-sm p-6 shadow-2xl">
             <div className="w-12 h-12 bg-red-100 rounded-2xl flex items-center justify-center mb-4">
               <span className="material-symbols-outlined text-red-600" style={{ fontVariationSettings: "'FILL' 1" }}>warning</span>
@@ -2366,8 +2377,8 @@ export default function AdminDashboard() {
               </button>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </AnimatedModal>
     </div>
   );
 }

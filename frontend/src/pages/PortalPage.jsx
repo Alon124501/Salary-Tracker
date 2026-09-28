@@ -1,10 +1,14 @@
 import { useState } from 'react';
+import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import api from '../api.js';
 import { useFetch } from '../hooks/useFetch.js';
+import { useSwipeableTabs } from '../hooks/useSwipeableTabs.js';
 import { useToast } from '../context/ToastContext.jsx';
 import { formatDate } from '../utils/date.js';
 import DatePicker from '../components/DatePicker.jsx';
 import ScrollTabs from '../components/ScrollTabs.jsx';
+import SwipeableTabsGroup from '../components/SwipeableTabsGroup.jsx';
+import AnimatedModal from '../components/AnimatedModal.jsx';
 
 const CATEGORIES = [
   { id: 'insurance', label: 'בדיקות ביטוח' },
@@ -95,6 +99,12 @@ export default function PortalPage() {
   const showToast = useToast();
   const [open, setOpen] = useState(null);
   const [tab, setTab] = useState('apps');
+  const { panelMotionProps } = useSwipeableTabs({
+    tabKeys: PORTAL_TABS.map(t => t.id),
+    activeKey: tab,
+    onSwipe: setTab,
+  });
+  const reducedMotion = useReducedMotion();
 
   const { data: creds = [],                                    loading: credsLoading  } = useFetch('/portal/credentials');
   const { data: faqItems = { insurance: [], screening: [] },   loading: faqLoading    } = useFetch('/faq');
@@ -205,9 +215,9 @@ export default function PortalPage() {
             <span className="material-symbols-outlined text-4xl text-slate-300 animate-spin">progress_activity</span>
           </div>
         ) : (
-          <>
+          <SwipeableTabsGroup>
             {/* ── Applications ── */}
-            {tab === 'apps' && <div className="mb-8">
+            {tab === 'apps' && <motion.div key="apps" {...panelMotionProps} className="mb-8">
               <h2 className="text-base font-extrabold text-slate-700 mb-3 px-1 flex items-center gap-2">
                 <span className="material-symbols-outlined text-brand-purple text-lg" style={{ fontVariationSettings: "'FILL' 1" }}>apps</span>
                 אפליקציות
@@ -253,11 +263,11 @@ export default function PortalPage() {
                   ))}
                 </div>
               )}
-            </div>}
+            </motion.div>}
 
             {/* ── Contacts ── */}
             {tab === 'contacts' && (
-              <div className="mb-8">
+              <motion.div key="contacts" {...panelMotionProps} className="mb-8">
                 <h2 className="text-base font-extrabold text-slate-700 mb-3 px-1 flex items-center gap-2">
                   <span className="material-symbols-outlined text-brand-purple text-lg" style={{ fontVariationSettings: "'FILL' 1" }}>call</span>
                   אנשי קשר חשובים
@@ -291,12 +301,12 @@ export default function PortalPage() {
                     ))}
                   </div>
                 )}
-              </div>
+              </motion.div>
             )}
 
             {/* ── Equipment Order ── */}
             {tab === 'equipment' && (
-              <div className="mb-8">
+              <motion.div key="equipment" {...panelMotionProps} className="mb-8">
                 <h2 className="text-base font-extrabold text-slate-700 mb-3 px-1 flex items-center gap-2">
                   <span className="material-symbols-outlined text-brand-purple text-lg" style={{ fontVariationSettings: "'FILL' 1" }}>inventory</span>
                   הזמנת ציוד
@@ -317,18 +327,24 @@ export default function PortalPage() {
                       {eqCatalog.map(item => (
                         <div key={item.id} className="bg-white rounded-2xl border border-slate-100 px-4 py-3.5 flex items-center justify-between"
                           style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
-                          <div>
-                            <p className="text-sm font-semibold text-slate-800">{item.name}</p>
-                            <p className={`text-xs mt-0.5 ${(item.stock_qty ?? 0) <= 0 ? 'text-red-500 font-semibold' : 'text-slate-400'}`}>
-                              במלאי: {item.stock_qty ?? 0}
-                            </p>
-                          </div>
+                          <p className="text-sm font-semibold text-slate-800">{item.name}</p>
                           <div className="flex items-center gap-2">
                             <button
                               onClick={() => setEqQty(q => ({ ...q, [item.id]: Math.max(0, (q[item.id] || 0) - 1) }))}
                               className="w-8 h-8 flex items-center justify-center rounded-xl bg-slate-100 text-slate-600 font-bold active:scale-95 transition-all"
                             >−</button>
-                            <span className="w-8 text-center text-sm font-bold text-slate-800">{eqQty[item.id] || 0}</span>
+                            <input
+                              type="number"
+                              min="0"
+                              inputMode="numeric"
+                              value={eqQty[item.id] || 0}
+                              onChange={e => {
+                                const n = parseInt(e.target.value, 10);
+                                setEqQty(q => ({ ...q, [item.id]: Number.isFinite(n) && n >= 0 ? n : 0 }));
+                              }}
+                              onFocus={e => e.target.select()}
+                              className="w-12 text-center text-sm font-bold text-slate-800 rounded-xl border border-slate-200 py-1 focus:outline-none focus:ring-2 focus:ring-brand-purple/30"
+                            />
                             <button
                               onClick={() => setEqQty(q => ({ ...q, [item.id]: (q[item.id] || 0) + 1 }))}
                               className="w-8 h-8 flex items-center justify-center rounded-xl bg-slate-100 text-slate-600 font-bold active:scale-95 transition-all"
@@ -358,12 +374,12 @@ export default function PortalPage() {
                     </button>
                   </>
                 )}
-              </div>
+              </motion.div>
             )}
 
             {/* ── Time off ── */}
             {tab === 'timeoff' && (
-              <div className="mb-8">
+              <motion.div key="timeoff" {...panelMotionProps} className="mb-8">
                 <h2 className="text-base font-extrabold text-slate-700 mb-3 px-1 flex items-center gap-2">
                   <span className="material-symbols-outlined text-brand-purple text-lg" style={{ fontVariationSettings: "'FILL' 1" }}>event_busy</span>
                   בקשת ימי חופש
@@ -456,13 +472,15 @@ export default function PortalPage() {
                     })}
                   </div>
                 )}
-              </div>
+              </motion.div>
             )}
 
             {/* ── FAQ ── */}
-            {tab === 'faq' && CATEGORIES.map(cat => (
-              <div key={cat.id} className="mb-8">
-                <h2 className="text-base font-extrabold text-slate-700 mb-3 px-1" dir="rtl">{cat.label}</h2>
+            {tab === 'faq' && (
+              <motion.div key="faq" {...panelMotionProps}>
+                {CATEGORIES.map(cat => (
+                  <div key={cat.id} className="mb-8">
+                    <h2 className="text-base font-extrabold text-slate-700 mb-3 px-1" dir="rtl">{cat.label}</h2>
 
                 {faqItems[cat.id].length === 0 ? (
                   <div className="bg-white rounded-2xl border border-slate-100 py-8 flex flex-col items-center gap-2 text-slate-400"
@@ -490,24 +508,35 @@ export default function PortalPage() {
                               style={{ transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)' }}
                             >expand_more</span>
                           </button>
-                          {isOpen && (
-                            <div className="px-5 pb-4 border-t border-slate-50">
-                              <div className="pt-3 space-y-1.5" dir="rtl">
-                                {renderAnswer(item.answer)}
-                              </div>
-                            </div>
-                          )}
+                          <AnimatePresence initial={false}>
+                            {isOpen && (
+                              <motion.div
+                                key="answer"
+                                initial={{ height: 0, opacity: 0 }}
+                                animate={{ height: 'auto', opacity: 1 }}
+                                exit={{ height: 0, opacity: 0 }}
+                                transition={{ duration: reducedMotion ? 0.05 : 0.25, ease: 'easeInOut' }}
+                                className="px-5 pb-4 border-t border-slate-50 overflow-hidden"
+                              >
+                                <div className="pt-3 space-y-1.5" dir="rtl">
+                                  {renderAnswer(item.answer)}
+                                </div>
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
                         </div>
                       );
                     })}
                   </div>
                 )}
               </div>
-            ))}
+                ))}
+              </motion.div>
+            )}
 
             {/* ── Tutorial Videos ── */}
             {tab === 'videos' && (
-              <div className="mb-8">
+              <motion.div key="videos" {...panelMotionProps} className="mb-8">
                 <h2 className="text-base font-extrabold text-slate-700 mb-3 px-1 flex items-center gap-2">
                   <span className="material-symbols-outlined text-brand-purple text-lg" style={{ fontVariationSettings: "'FILL' 1" }}>smart_display</span>
                   סרטוני הדרכה
@@ -553,17 +582,14 @@ export default function PortalPage() {
                     ))}
                   </div>
                 )}
-              </div>
+              </motion.div>
             )}
-          </>
+          </SwipeableTabsGroup>
         )}
       </div>
 
-      {videoModal && (
-        <div
-          className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50"
-          onClick={() => setVideoModal(null)}
-        >
+      <AnimatedModal open={!!videoModal} onBackdropClick={() => setVideoModal(null)} zIndex={50} backdropClassName="bg-black/50">
+        {videoModal && (
           <div
             className="bg-white rounded-2xl max-w-lg w-full p-5 max-h-[90vh] overflow-y-auto"
             onClick={e => e.stopPropagation()}
@@ -600,8 +626,8 @@ export default function PortalPage() {
               <p className="text-sm text-slate-500 mt-3 leading-relaxed">{videoModal.description}</p>
             )}
           </div>
-        </div>
-      )}
+        )}
+      </AnimatedModal>
     </div>
   );
 }

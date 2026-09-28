@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import api from '../api.js';
+import AnimatedModal from './AnimatedModal.jsx';
 
 export default function DeviceRecapModal({
   onSubmitted,
@@ -49,7 +50,7 @@ export default function DeviceRecapModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+    <AnimatedModal open zIndex={50} backdropClassName="bg-black/50">
       <div className="bg-white rounded-3xl w-full max-w-md p-6 shadow-2xl flex flex-col gap-5">
         <div>
           <h3 className="text-lg font-extrabold text-slate-900 font-headline">{title}</h3>
@@ -101,6 +102,6 @@ export default function DeviceRecapModal({
           {submitting ? 'Submitting…' : submitLabel}
         </button>
       </div>
-    </div>
+    </AnimatedModal>
   );
 }

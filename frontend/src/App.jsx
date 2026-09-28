@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useOutlet, useLocation } from 'react-router-dom';
+import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import { ToastProvider } from './context/ToastContext.jsx';
 import api from './api.js';
 import DeviceRecapModal from './components/DeviceRecapModal.jsx';
@@ -33,7 +34,20 @@ function AdminRoute({ children }) {
   return children;
 }
 
-function AppLayout({ children }) {
+// Snapshots the matched route element once per keyed mount, so the *exiting*
+// copy (still mounted during its AnimatePresence exit animation) keeps
+// rendering the old page instead of re-resolving to whatever now matches —
+// a plain <Outlet/> would show the new route in both the exiting and
+// entering panel simultaneously (double-mounting the new page).
+function AnimatedOutlet() {
+  const outlet = useOutlet();
+  const [element] = useState(outlet);
+  return element;
+}
+
+function AppLayout() {
+  const location = useLocation();
+  const reducedMotion = useReducedMotion();
   const [checking, setChecking] = useState(true);
   const [blocked, setBlocked] = useState(false);
 
@@ -68,7 +82,17 @@ function AppLayout({ children }) {
   return (
     <>
       <Navbar />
-      {children}
+      <AnimatePresence initial={false}>
+        <motion.div
+          key={location.pathname}
+          initial={reducedMotion ? { opacity: 0 } : { opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={reducedMotion ? { opacity: 0 } : { opacity: 0, y: -10 }}
+          transition={{ duration: reducedMotion ? 0.1 : 0.18 }}
+        >
+          <AnimatedOutlet />
+        </motion.div>
+      </AnimatePresence>
       <BottomNav />
     </>
   );
@@ -82,14 +106,18 @@ export default function App() {
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
-        <Route path="/" element={<PrivateRoute><AppLayout><Dashboard /></AppLayout></PrivateRoute>} />
-        <Route path="/entry/:date?" element={<PrivateRoute><AppLayout><EntryPage /></AppLayout></PrivateRoute>} />
-        <Route path="/stats" element={<PrivateRoute><AppLayout><StatsPage /></AppLayout></PrivateRoute>} />
-        <Route path="/settings" element={<PrivateRoute><AppLayout><SettingsPage /></AppLayout></PrivateRoute>} />
-        <Route path="/edit-profile" element={<PrivateRoute><AppLayout><EditProfilePage /></AppLayout></PrivateRoute>} />
-        <Route path="/screening-locations" element={<PrivateRoute><AppLayout><ScreeningLocationsPage /></AppLayout></PrivateRoute>} />
-        <Route path="/portal" element={<PrivateRoute><AppLayout><PortalPage /></AppLayout></PrivateRoute>} />
-        <Route path="/admin" element={<AdminRoute><AppLayout><AdminDashboard /></AppLayout></AdminRoute>} />
+        <Route element={<PrivateRoute><AppLayout /></PrivateRoute>}>
+          <Route path="/" element={<Dashboard />} />
+          <Route path="/entry/:date?" element={<EntryPage />} />
+          <Route path="/stats" element={<StatsPage />} />
+          <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/edit-profile" element={<EditProfilePage />} />
+          <Route path="/screening-locations" element={<ScreeningLocationsPage />} />
+          <Route path="/portal" element={<PortalPage />} />
+        </Route>
+        <Route element={<AdminRoute><AppLayout /></AdminRoute>}>
+          <Route path="/admin" element={<AdminDashboard />} />
+        </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
