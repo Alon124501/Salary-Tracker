@@ -6,11 +6,17 @@ function totalTestsFor(e) {
          (e.mixed_screening_tests || 0) + (e.partial_tests || 0);
 }
 
-// Monthly food-spend audit: employees with >=4 tests on a day are entitled to
-// up to 40₪ food money for that day; this checks the month's actual
+// Food-gate count: cancellations count toward the 4-per-day food threshold,
+// but never toward test totals or pay.
+function foodQualifyingCountFor(e) {
+  return totalTestsFor(e) + (e.cancellations || 0);
+}
+
+// Monthly food-spend audit: employees with >=4 tests+cancellations on a day are
+// entitled to up to 40₪ food money for that day; this checks the month's actual
 // food_expense claims against that entitlement in aggregate (not per-day).
 function foodAudit(entries) {
-  const qualifyingDays = entries.filter(e => totalTestsFor(e) >= FOOD_BONUS_TEST_THRESHOLD).length;
+  const qualifyingDays = entries.filter(e => foodQualifyingCountFor(e) >= FOOD_BONUS_TEST_THRESHOLD).length;
   const entitlement = qualifyingDays * FOOD_BONUS_DAILY_AMOUNT;
   const claimed = entries.reduce((sum, e) => sum + (e.food_expense || 0), 0);
   return { qualifyingDays, entitlement, claimed, overBy: Math.max(0, claimed - entitlement) };
@@ -20,4 +26,4 @@ function dailyExpenses(e) {
   return (e.food_expense || 0) + (e.parking_expense || 0);
 }
 
-module.exports = { totalTestsFor, foodAudit, dailyExpenses, FOOD_BONUS_TEST_THRESHOLD };
+module.exports = { totalTestsFor, foodQualifyingCountFor, foodAudit, dailyExpenses, FOOD_BONUS_TEST_THRESHOLD };

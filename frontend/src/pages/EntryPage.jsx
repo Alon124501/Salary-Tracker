@@ -137,7 +137,8 @@ export default function EntryPage() {
   }
 
   const totalTests = form.insurance_tests + form.screening_tests + form.mixed_screening_tests + form.partial_tests;
-  const foodLocked = totalTests < 4;
+  // Cancellations count toward the food unlock, but not toward test totals/pay.
+  const foodLocked = totalTests + (form.cancellations || 0) < 4;
 
   return (
     <div className="bg-[#F2F2F7] min-h-screen pb-56 lg:pb-24">
@@ -229,7 +230,7 @@ export default function EntryPage() {
                 </div>
               </div>
               {foodLocked && (
-                <p className="text-[10px] text-amber-600 font-semibold px-4 pb-2 -mt-1">הוסף 4 בדיקות ומעלה כדי לפתוח את הוצאות האוכל</p>
+                <p className="text-[10px] text-amber-600 font-semibold px-4 pb-2 -mt-1">הוסף 4 בדיקות או ביטולים ומעלה כדי לפתוח את הוצאות האוכל</p>
               )}
               {/* Parking */}
               <div className="p-4 flex items-center justify-between border-b border-slate-50">
@@ -381,7 +382,7 @@ export default function EntryPage() {
                   </div>
                   <div>
                     <p className="text-[13px] font-bold text-slate-900">הוסף קבלת אוכל</p>
-                    <p className="text-[11px] text-slate-400">{foodLocked ? 'הוסף 4 בדיקות ומעלה כדי לפתוח' : 'הקש כדי להוסיף תמונות'}</p>
+                    <p className="text-[11px] text-slate-400">{foodLocked ? 'הוסף 4 בדיקות או ביטולים ומעלה כדי לפתוח' : 'הקש כדי להוסיף תמונות'}</p>
                   </div>
                   <input
                     type="file"
