@@ -1,9 +1,20 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import api from '../api.js';
+import { compressImage } from '../utils/compressImage.js';
 
 function today() {
   return new Date().toISOString().slice(0, 10);
+}
+
+// Always returns a string: Vercel's own errors (e.g. 413 body-too-large) come
+// back as { error: { code, message } }, and rendering that object crashes React.
+function errorText(err, fallback) {
+  if (err.response?.status === 413) return 'הקובץ גדול מדי — נסה תמונה קטנה יותר';
+  const e = err.response?.data?.error;
+  if (typeof e === 'string') return e;
+  if (typeof e?.message === 'string') return e.message;
+  return fallback;
 }
 
 const defaultForm = {
@@ -83,7 +94,7 @@ export default function EntryPage() {
       await api.delete(`/entries/${id}/food-receipt`, { params: { path } });
       setFoodReceipts(prev => prev.filter(r => r.path !== path));
     } catch (err) {
-      setError(err.response?.data?.error || err.message || 'מחיקת הקבלה נכשלה');
+      setError(errorText(err, 'מחיקת הקבלה נכשלה'));
     }
   }
 
@@ -93,7 +104,7 @@ export default function EntryPage() {
       await api.delete(`/entries/${id}/parking-receipt`, { params: { path } });
       setParkingReceipts(prev => prev.filter(r => r.path !== path));
     } catch (err) {
-      setError(err.response?.data?.error || err.message || 'מחיקת הקבלה נכשלה');
+      setError(errorText(err, 'מחיקת הקבלה נכשלה'));
     }
   }
 
@@ -103,7 +114,7 @@ export default function EntryPage() {
       await api.delete(`/entries/${id}/toll-receipt`, { params: { path } });
       setTollReceipts(prev => prev.filter(r => r.path !== path));
     } catch (err) {
-      setError(err.response?.data?.error || err.message || 'מחיקת הקבלה נכשלה');
+      setError(errorText(err, 'מחיקת הקבלה נכשלה'));
     }
   }
 
@@ -137,28 +148,28 @@ export default function EntryPage() {
       setEntryId(saved.id);
       for (const { file } of pendingFoodFiles) {
         const fd = new FormData();
-        fd.append('food_receipt', file);
+        fd.append('food_receipt', await compressImage(file));
         await api.post(`/entries/${saved.id}/food-receipt`, fd, {
           headers: { 'Content-Type': 'multipart/form-data' },
         });
       }
       for (const { file } of pendingParkingFiles) {
         const fd = new FormData();
-        fd.append('parking_receipt', file);
+        fd.append('parking_receipt', await compressImage(file));
         await api.post(`/entries/${saved.id}/parking-receipt`, fd, {
           headers: { 'Content-Type': 'multipart/form-data' },
         });
       }
       for (const { file } of pendingTollFiles) {
         const fd = new FormData();
-        fd.append('toll_receipt', file);
+        fd.append('toll_receipt', await compressImage(file));
         await api.post(`/entries/${saved.id}/toll-receipt`, fd, {
           headers: { 'Content-Type': 'multipart/form-data' },
         });
       }
       navigate('/');
     } catch (err) {
-      setError(err.response?.data?.error || 'שמירת הרישום נכשלה');
+      setError(errorText(err, 'שמירת הרישום נכשלה'));
     } finally {
       setLoading(false);
     }
