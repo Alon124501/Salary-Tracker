@@ -821,7 +821,7 @@ export default function AdminDashboard() {
 
           {/* Grid sub-tab */}
           {devSubTab === 'grid' && (
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto" style={{ touchAction: 'pan-x pan-y' }}>
               <table className="min-w-full text-xs">
                 <thead>
                   <tr className="bg-slate-50 text-[10px] uppercase tracking-wide text-slate-500 font-semibold">

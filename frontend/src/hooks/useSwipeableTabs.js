@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef, useState } from 'react';
-import { useReducedMotion } from 'motion/react';
+import { useReducedMotion, useDragControls } from 'motion/react';
 import { slideDirectionForIndexDelta, dragToIndexDelta } from '../utils/rtlSwipe.js';
 
 const slideVariants = {
@@ -14,6 +14,16 @@ const reducedVariants = {
   exit: { opacity: 0 },
 };
 
+// True when the pointer went down inside a horizontally scrollable element
+// (e.g. a wide table) between the target and the panel itself.
+function isInHorizontalScroller(target, panel) {
+  for (let el = target; el && el !== panel; el = el.parentElement) {
+    const { overflowX } = getComputedStyle(el);
+    if ((overflowX === 'auto' || overflowX === 'scroll') && el.scrollWidth > el.clientWidth) return true;
+  }
+  return false;
+}
+
 // Drives both tap-triggered tab switches (arbitrary index jump) and
 // drag-to-swipe (always adjacent, clamped, no wraparound) through the same
 // activeKey diff, so slide direction is computed identically either way.
@@ -21,6 +31,7 @@ export function useSwipeableTabs({ tabKeys, activeKey, onSwipe }) {
   const reducedMotion = useReducedMotion();
   const prevIndexRef = useRef(tabKeys.indexOf(activeKey));
   const [direction, setDirection] = useState(0);
+  const dragControls = useDragControls();
 
   useLayoutEffect(() => {
     const newIndex = tabKeys.indexOf(activeKey);
@@ -56,6 +67,14 @@ export function useSwipeableTabs({ tabKeys, activeKey, onSwipe }) {
           dragElastic: 0.15,
           dragMomentum: false,
           onDragEnd: handleDragEnd,
+          // Drag is started manually so a pan that begins inside a nested
+          // horizontal scroller scrolls it instead of swiping the tab
+          // (otherwise touch devices can't scroll wide tables at all).
+          dragControls,
+          dragListener: false,
+          onPointerDown: e => {
+            if (!isInHorizontalScroller(e.target, e.currentTarget)) dragControls.start(e);
+          },
         }),
   };
 
