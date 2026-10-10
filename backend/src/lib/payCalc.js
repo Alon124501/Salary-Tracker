@@ -23,7 +23,7 @@ function foodAudit(entries) {
 }
 
 function dailyExpenses(e) {
-  return (e.food_expense || 0) + (e.parking_expense || 0);
+  return (e.food_expense || 0) + (e.parking_expense || 0) + (e.toll_expense || 0);
 }
 
 module.exports = { totalTestsFor, foodQualifyingCountFor, foodAudit, dailyExpenses, FOOD_BONUS_TEST_THRESHOLD };

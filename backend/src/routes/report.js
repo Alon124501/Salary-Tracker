@@ -97,6 +97,7 @@ router.get('/download-zip', async (req, res) => {
     archive.append(Buffer.from(excelBuffer), { name: `${name} - ${monthName} ${year}.xlsx` });
     archive.append(Buffer.alloc(0), { name: 'Food Receipts/' });
     archive.append(Buffer.alloc(0), { name: 'Parking Receipts/' });
+    archive.append(Buffer.alloc(0), { name: 'Toll Receipts/' });
 
     for (const entry of entries || []) {
       for (const path of entry.food_receipt_urls || []) {
@@ -110,6 +111,12 @@ router.get('/download-zip', async (req, res) => {
         if (dlErr || !blob) continue;
         const arrayBuf = await blob.arrayBuffer();
         archive.append(Buffer.from(arrayBuf), { name: `Parking Receipts/${entry.date} - ${path.split('/').pop()}` });
+      }
+      for (const path of entry.toll_receipt_urls || []) {
+        const { data: blob, error: dlErr } = await supabase.storage.from('receipts').download(path);
+        if (dlErr || !blob) continue;
+        const arrayBuf = await blob.arrayBuffer();
+        archive.append(Buffer.from(arrayBuf), { name: `Toll Receipts/${entry.date} - ${path.split('/').pop()}` });
       }
     }
 

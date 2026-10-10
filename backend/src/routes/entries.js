@@ -12,6 +12,16 @@ router.use(auth);
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
 
+// Toll invoices often arrive as PDF, so toll receipts accept PDF as well as images.
+const tollUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 20 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype.startsWith('image/') || file.mimetype === 'application/pdf') return cb(null, true);
+    cb(Object.assign(new Error('ניתן להעלות תמונה או קובץ PDF בלבד'), { status: 400 }));
+  },
+});
+
 const NumericField = z.coerce.number().min(0).optional().default(0);
 
 // Rejects malformed or wildly out-of-range dates (typos like a 2062 entry)
@@ -35,6 +45,7 @@ const EntryBodySchema = z.object({
   office_hours:          NumericField,
   food_expense:          NumericField,
   parking_expense:       NumericField,
+  toll_expense:          NumericField,
   cancellations:         NumericField,
   notes:                 z.string().max(500).optional().default(''),
 });
@@ -51,6 +62,7 @@ const PutBodySchema = z.object({
   office_hours:          PutNumericField,
   food_expense:          PutNumericField,
   parking_expense:       PutNumericField,
+  toll_expense:          PutNumericField,
   cancellations:         PutNumericField,
   notes:                 z.string().max(500).optional(),
 });
@@ -314,6 +326,80 @@ router.delete('/:id/parking-receipt', asyncHandler(async (req, res) => {
   res.json({ success: true });
 }));
 
+// POST /api/entries/:id/toll-receipt
+router.post('/:id/toll-receipt', (req, res, next) => {
+  tollUpload.single('toll_receipt')(req, res, err => {
+    if (err) return res.status(400).json({ error: err.status === 400 ? err.message : 'שגיאה בהעלאת הקובץ' });
+    next();
+  });
+}, asyncHandler(async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'לא הועלה קובץ' });
+
+  const { data: entry, error: fetchErr } = await supabase.from('entries')
+    .select('id, date, toll_receipt_urls')
+    .eq('id', req.params.id).eq('user_id', req.userId).single();
+  if (fetchErr || !entry) return res.status(404).json({ error: 'הרשומה לא נמצאה' });
+
+  const ext = safeExt(req.file.originalname);
+  const month = entry.date.slice(0, 7);
+  const filePath = `${req.userId}/${month}/${entry.id}/toll_${Date.now()}.${ext}`;
+
+  const { error: uploadErr } = await supabase.storage
+    .from('receipts')
+    .upload(filePath, req.file.buffer, { contentType: req.file.mimetype });
+  if (uploadErr) return res.status(500).json({ error: uploadErr.message });
+
+  const currentUrls = entry.toll_receipt_urls || [];
+  const { error: updateErr } = await supabase.from('entries')
+    .update({ toll_receipt_urls: [...currentUrls, filePath] })
+    .eq('id', entry.id);
+  if (updateErr) return res.status(500).json({ error: updateErr.message });
+
+  const { data: signedData } = await supabase.storage
+    .from('receipts').createSignedUrl(filePath, 604800);
+
+  res.json({ path: filePath, signedUrl: signedData?.signedUrl });
+}));
+
+// GET /api/entries/:id/toll-receipts
+router.get('/:id/toll-receipts', asyncHandler(async (req, res) => {
+  const { data: entry, error: fetchErr } = await supabase.from('entries')
+    .select('toll_receipt_urls')
+    .eq('id', req.params.id).eq('user_id', req.userId).single();
+  if (fetchErr || !entry) return res.status(404).json({ error: 'הרשומה לא נמצאה' });
+
+  const paths = entry.toll_receipt_urls || [];
+  const receipts = await Promise.all(paths.map(async path => {
+    const { data: urlData, error: urlErr } = await supabase.storage.from('receipts').createSignedUrl(path, 604800);
+    if (urlErr) console.error('createSignedUrl failed for', path, urlErr.message);
+    return { path, signedUrl: urlData?.signedUrl ?? null };
+  }));
+  res.json(receipts);
+}));
+
+// DELETE /api/entries/:id/toll-receipt
+router.delete('/:id/toll-receipt', asyncHandler(async (req, res) => {
+  const path = req.query.path;
+  if (!path) return res.status(400).json({ error: 'נדרש נתיב קובץ' });
+
+  const { data: entry, error: fetchErr } = await supabase.from('entries')
+    .select('toll_receipt_urls')
+    .eq('id', req.params.id).eq('user_id', req.userId).single();
+  if (fetchErr || !entry) return res.status(404).json({ error: 'הרשומה לא נמצאה' });
+
+  const currentUrls = entry.toll_receipt_urls || [];
+  if (!currentUrls.includes(path)) return res.status(404).json({ error: 'הקבלה לא נמצאה' });
+
+  await supabase.storage.from('receipts').remove([path]);
+
+  const { error: updateErr } = await supabase.from('entries')
+    .update({ toll_receipt_urls: currentUrls.filter(p => p !== path) })
+    .eq('id', req.params.id);
+  if (updateErr) return res.status(500).json({ error: updateErr.message });
+
+  res.json({ success: true });
+}));
+
 // PUT /api/entries/:id
 router.put('/:id', asyncHandler(async (req, res) => {
   const { data: entry, error: fetchErr } = await supabase.from('entries').select('*')
@@ -333,6 +419,7 @@ router.put('/:id', asyncHandler(async (req, res) => {
     office_hours:          fields.office_hours          ?? entry.office_hours,
     food_expense:          fields.food_expense          ?? entry.food_expense,
     parking_expense:       fields.parking_expense       ?? entry.parking_expense,
+    toll_expense:          fields.toll_expense          ?? entry.toll_expense,
     cancellations:         fields.cancellations         ?? entry.cancellations,
     notes:                 fields.notes                 ?? entry.notes,
   };
@@ -372,6 +459,7 @@ router.post('/restore', asyncHandler(async (req, res) => {
     office_hours: Math.max(0, Number(e.office_hours) || 0),
     food_expense: Math.max(0, Number(e.food_expense) || 0),
     parking_expense: Math.max(0, Number(e.parking_expense) || 0),
+    toll_expense: Math.max(0, Number(e.toll_expense) || 0),
     cancellations: Math.max(0, Number(e.cancellations) || 0),
     notes: e.notes || '',
   }));

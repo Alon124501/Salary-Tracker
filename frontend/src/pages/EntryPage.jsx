@@ -9,7 +9,7 @@ function today() {
 const defaultForm = {
   date: today(),
   insurance_tests: 0, screening_tests: 0, mixed_screening_tests: 0, partial_tests: 0,
-  kilometers: 0, office_hours: 0, food_expense: 0, parking_expense: 0,
+  kilometers: 0, office_hours: 0, food_expense: 0, parking_expense: 0, toll_expense: 0,
   cancellations: 0, notes: '',
 };
 
@@ -22,6 +22,8 @@ export default function EntryPage() {
   const [pendingFoodFiles, setPendingFoodFiles] = useState([]);
   const [parkingReceipts, setParkingReceipts] = useState([]);
   const [pendingParkingFiles, setPendingParkingFiles] = useState([]);
+  const [tollReceipts, setTollReceipts] = useState([]);
+  const [pendingTollFiles, setPendingTollFiles] = useState([]);
   const [viewingUrl, setViewingUrl] = useState(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -43,6 +45,7 @@ export default function EntryPage() {
           office_hours: existing.office_hours,
           food_expense: existing.food_expense,
           parking_expense: existing.parking_expense,
+          toll_expense: existing.toll_expense || 0,
           cancellations: existing.cancellations,
           notes: existing.notes || '',
         });
@@ -57,6 +60,12 @@ export default function EntryPage() {
           try {
             const { data: receipts } = await api.get(`/entries/${existing.id}/parking-receipts`);
             setParkingReceipts(receipts);
+          } catch {}
+        }
+        if (existing.toll_receipt_urls?.length > 0) {
+          try {
+            const { data: receipts } = await api.get(`/entries/${existing.id}/toll-receipts`);
+            setTollReceipts(receipts);
           } catch {}
         }
       }
@@ -88,6 +97,16 @@ export default function EntryPage() {
     }
   }
 
+  async function deleteTollReceipt(path) {
+    const id = entryId ?? path.split('/')[2];
+    try {
+      await api.delete(`/entries/${id}/toll-receipt`, { params: { path } });
+      setTollReceipts(prev => prev.filter(r => r.path !== path));
+    } catch (err) {
+      setError(err.response?.data?.error || err.message || 'מחיקת הקבלה נכשלה');
+    }
+  }
+
   async function openReceipt(path, type) {
     try {
       const { data } = await api.get(`/entries/${entryId}/${type}-receipts`);
@@ -95,6 +114,8 @@ export default function EntryPage() {
       if (found?.signedUrl) {
         if (type === 'food') {
           setFoodReceipts(prev => prev.map(r => r.path === path ? { ...r, signedUrl: found.signedUrl } : r));
+        } else if (type === 'toll') {
+          setTollReceipts(prev => prev.map(r => r.path === path ? { ...r, signedUrl: found.signedUrl } : r));
         } else {
           setParkingReceipts(prev => prev.map(r => r.path === path ? { ...r, signedUrl: found.signedUrl } : r));
         }
@@ -125,6 +146,13 @@ export default function EntryPage() {
         const fd = new FormData();
         fd.append('parking_receipt', file);
         await api.post(`/entries/${saved.id}/parking-receipt`, fd, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
+      }
+      for (const { file } of pendingTollFiles) {
+        const fd = new FormData();
+        fd.append('toll_receipt', file);
+        await api.post(`/entries/${saved.id}/toll-receipt`, fd, {
           headers: { 'Content-Type': 'multipart/form-data' },
         });
       }
@@ -322,6 +350,108 @@ export default function EntryPage() {
                         previewUrl: URL.createObjectURL(file),
                       }));
                       setPendingParkingFiles(prev => [...prev, ...files]);
+                      e.target.value = '';
+                    }}
+                  />
+                </label>
+              </div>
+
+              {/* Toll roads */}
+              <div className="p-4 flex items-center justify-between border-b border-slate-50">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center">
+                    <span className="material-symbols-outlined text-emerald-600" style={{ fontSize: 20 }}>toll</span>
+                  </div>
+                  <div>
+                    <p className="text-[13px] font-bold text-slate-900">כביש אגרה</p>
+                    <p className="text-[11px] text-slate-400">כביש 6, מנהרות הכרמל וכו׳</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1 bg-[#F2F2F7] px-3 py-2 rounded-lg">
+                  <span className="text-slate-400 font-bold text-sm">₪</span>
+                  <input
+                    type="number" inputMode="decimal" min="0" step="0.01"
+                    value={form.toll_expense === 0 ? '' : form.toll_expense}
+                    onChange={e => set('toll_expense', e.target.value)}
+                    className="w-16 bg-transparent border-none p-0 text-right font-bold text-slate-900 focus:ring-0"
+                    placeholder="0.00"
+                  />
+                </div>
+              </div>
+
+              {/* Toll Receipt Upload — multiple, images or PDF (invoices often arrive later) */}
+              <div className="p-4 space-y-3 border-b border-slate-50">
+                {(tollReceipts.length > 0 || pendingTollFiles.length > 0) && (
+                  <div className="flex flex-wrap gap-2">
+                    {tollReceipts.map(r => (
+                      <div key={r.path} className="relative w-16 h-16 flex-shrink-0">
+                        {r.signedUrl && isPdfPath(r.path) ? (
+                          <PdfThumb href={r.signedUrl} />
+                        ) : r.signedUrl ? (
+                          <img
+                            src={r.signedUrl}
+                            alt="toll receipt"
+                            className="w-16 h-16 object-cover rounded-xl cursor-pointer border-2 border-white shadow"
+                            onClick={() => openReceipt(r.path, 'toll')}
+                          />
+                        ) : (
+                          <div
+                            className="w-16 h-16 rounded-xl bg-slate-200 flex items-center justify-center border-2 border-slate-300"
+                          >
+                            <span className="material-symbols-outlined text-slate-400" style={{ fontSize: 20 }}>broken_image</span>
+                          </div>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => deleteTollReceipt(r.path)}
+                          className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center shadow"
+                        >
+                          <span className="material-symbols-outlined text-white" style={{ fontSize: 12 }}>close</span>
+                        </button>
+                      </div>
+                    ))}
+                    {pendingTollFiles.map((item, i) => (
+                      <div key={i} className="relative w-16 h-16 flex-shrink-0">
+                        {item.file.type === 'application/pdf' ? (
+                          <PdfThumb href={item.previewUrl} pending />
+                        ) : (
+                          <img
+                            src={item.previewUrl}
+                            alt="pending"
+                            className="w-16 h-16 object-cover rounded-xl opacity-70 border-2 border-dashed border-emerald-300 cursor-pointer"
+                            onClick={() => setViewingUrl(item.previewUrl)}
+                          />
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => setPendingTollFiles(prev => prev.filter((_, idx) => idx !== i))}
+                          className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-slate-400 rounded-full flex items-center justify-center shadow"
+                        >
+                          <span className="material-symbols-outlined text-white" style={{ fontSize: 12 }}>close</span>
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <label className="flex items-center gap-3 cursor-pointer hover:bg-slate-50 rounded-xl transition-colors py-1">
+                  <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center flex-shrink-0">
+                    <span className="material-symbols-outlined text-emerald-600" style={{ fontSize: 20 }}>upload_file</span>
+                  </div>
+                  <div>
+                    <p className="text-[13px] font-bold text-slate-900">הוסף קבלת כביש אגרה</p>
+                    <p className="text-[11px] text-slate-400">תמונה או PDF — אפשר להוסיף גם מאוחר יותר</p>
+                  </div>
+                  <input
+                    type="file"
+                    accept="image/*,application/pdf"
+                    multiple
+                    className="hidden"
+                    onChange={e => {
+                      const files = Array.from(e.target.files).map(file => ({
+                        file,
+                        previewUrl: URL.createObjectURL(file),
+                      }));
+                      setPendingTollFiles(prev => [...prev, ...files]);
                       e.target.value = '';
                     }}
                   />
@@ -598,6 +728,25 @@ function CalendarPicker({ value, onChange }) {
       </div>
       </>}
     </div>
+  );
+}
+
+function isPdfPath(path) {
+  return /\.pdf$/i.test(path);
+}
+
+// PDFs can't render in the <img> lightbox, so they open in a new tab instead.
+function PdfThumb({ href, pending = false }) {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className={`w-16 h-16 rounded-xl bg-red-50 flex flex-col items-center justify-center ${pending ? 'opacity-70 border-2 border-dashed border-emerald-300' : 'border-2 border-white shadow'}`}
+    >
+      <span className="material-symbols-outlined text-red-500" style={{ fontSize: 22 }}>picture_as_pdf</span>
+      <span className="text-[9px] font-bold text-red-500">PDF</span>
+    </a>
   );
 }
 

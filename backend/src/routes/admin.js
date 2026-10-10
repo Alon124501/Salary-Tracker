@@ -201,6 +201,8 @@ router.get('/reports', asyncHandler(async (req, res) => {
       },
       totals,
       foodAudit: foodAudit(entries),
+      // Toll invoices often arrive late — flag days claimed without a receipt yet.
+      tollMissingReceipts: entries.filter(e => (e.toll_expense || 0) > 0 && !(e.toll_receipt_urls || []).length).length,
       approved: approvalMap[p.id] ? { at: approvalMap[p.id] } : null,
     };
   });
@@ -345,6 +347,7 @@ router.post('/users/:userId/report/approve', asyncHandler(async (req, res) => {
     const receiptPaths = entries.flatMap(e => [
       ...(e.food_receipt_urls || []),
       ...(e.parking_receipt_urls || []),
+      ...(e.toll_receipt_urls || []),
     ]);
     const signedUrls = (await Promise.all(
       receiptPaths.map(async path => {

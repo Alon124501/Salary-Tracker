@@ -27,6 +27,7 @@ function buildSheet(sheet, entries, profile = {}, title = '') {
     { header: 'שעות משרד',        key: 'hrs',    width: 14 },
     { header: 'אוכל (₪)',         key: 'food',   width: 12 },
     { header: 'חניה (₪)',         key: 'parking', width: 12 },
+    { header: 'כביש אגרה (₪)',    key: 'toll',   width: 14 },
     { header: 'הערות',           key: 'notes',  width: 30 },
   ];
   const numCols = sheet.columns.length;
@@ -38,7 +39,7 @@ function buildSheet(sheet, entries, profile = {}, title = '') {
   });
   sheet.getRow(1).height = 22;
 
-  const sums = { ins: 0, scr: 0, mix: 0, par: 0, total: 0, canc: 0, km: 0, hrs: 0, food: 0, parking: 0 };
+  const sums = { ins: 0, scr: 0, mix: 0, par: 0, total: 0, canc: 0, km: 0, hrs: 0, food: 0, parking: 0, toll: 0 };
 
   for (let i = 0; i < entries.length; i++) {
     const e = entries[i];
@@ -51,6 +52,7 @@ function buildSheet(sheet, entries, profile = {}, title = '') {
       canc: e.cancellations || 0,
       km: e.kilometers || 0, hrs: e.office_hours || 0,
       food: e.food_expense || 0, parking: e.parking_expense || 0,
+      toll: e.toll_expense || 0,
       notes: sanitizeCell(e.notes || ''),
     });
 
@@ -70,6 +72,7 @@ function buildSheet(sheet, entries, profile = {}, title = '') {
     sums.hrs     += e.office_hours          || 0;
     sums.food    += e.food_expense          || 0;
     sums.parking += e.parking_expense       || 0;
+    sums.toll    += e.toll_expense          || 0;
   }
 
   // Blank separator

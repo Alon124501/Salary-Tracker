@@ -968,6 +968,12 @@ export default function AdminDashboard() {
                             אוכל: ₪{s.foodAudit.claimed.toLocaleString()} נתבע / ₪{s.foodAudit.entitlement.toLocaleString()} מותר ({s.foodAudit.qualifyingDays} {s.foodAudit.qualifyingDays !== 1 ? 'ימים מזכים' : 'יום מזכה'}) — חריגה של ₪{s.foodAudit.overBy.toLocaleString()}
                           </p>
                         )}
+                        {s.tollMissingReceipts > 0 && (
+                          <p className="text-[11px] font-bold text-amber-600 mt-1 flex items-center gap-1">
+                            <span className="material-symbols-outlined text-sm">warning</span>
+                            {s.tollMissingReceipts === 1 ? 'יום אחד' : `${s.tollMissingReceipts} ימים`} עם כביש אגרה ללא קבלה
+                          </p>
+                        )}
                       </div>
                       <div className="flex items-center gap-2 flex-shrink-0 flex-wrap justify-end">
                         {/* Open Report */}
