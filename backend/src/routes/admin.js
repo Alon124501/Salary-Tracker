@@ -8,6 +8,7 @@ const adminAuth = require('../middleware/adminAuth');
 const asyncHandler = require('../middleware/asyncHandler');
 const { foodAudit, totalTestsFor } = require('../lib/payCalc');
 const { buildSheet } = require('../lib/reportSheet');
+const { monthRange } = require('../lib/monthSummary');
 
 const router = express.Router();
 router.use(auth);
@@ -15,14 +16,6 @@ router.use(adminAuth);
 
 const ACCOUNTING_EMAIL = 'alonm@mpcheck.co.il';
 const PROFILE_SELECT = 'first_name, last_name, username';
-
-function monthRange(month) {
-  const [year, mon] = month.split('-').map(Number);
-  return {
-    start: `${month}-01`,
-    end: new Date(year, mon, 0).toISOString().slice(0, 10),
-  };
-}
 
 // ── Users ──────────────────────────────────────────────────────────────────
 

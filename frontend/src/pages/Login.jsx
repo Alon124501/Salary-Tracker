@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import api from '../api.js';
 import { isValidIsraeliId } from '../utils/israeliId.js';
 
@@ -84,6 +84,7 @@ const COUNTRY_CODES = [
 
 export default function Login() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [mode, setMode] = useState('login');
   const [step, setStep] = useState(1);
   const [password, setPassword] = useState('');
@@ -154,7 +155,8 @@ export default function Login() {
       }
       localStorage.setItem('token', data.token);
       localStorage.setItem('username', data.username);
-      navigate('/');
+      const from = location.state?.from;
+      navigate(from?.pathname ? `${from.pathname}${from.search || ''}` : '/');
     } catch (err) {
       const raw = err.response?.data?.error;
       setError(typeof raw === 'string' ? raw : raw?.message || 'משהו השתבש');

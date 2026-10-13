@@ -9,6 +9,7 @@ import SwipeableTabsGroup from '../components/SwipeableTabsGroup.jsx';
 import AnimatedModal from '../components/AnimatedModal.jsx';
 import { useToast } from '../context/ToastContext.jsx';
 import { formatDate } from '../utils/date.js';
+import MonthlyRecap from '../components/MonthlyRecap.jsx';
 
 function activityColor(shiftsPerWeek) {
   const n = parseInt(shiftsPerWeek, 10);
@@ -25,6 +26,7 @@ const TABS = [
   { id: 'faq',           label: 'פורטל',         icon: 'hub' },
   { id: 'eq_orders',     label: 'הזמנות',        icon: 'inventory' },
   { id: 'timeoff',       label: 'חופשות',        icon: 'event_busy' },
+  { id: 'recap',         label: 'סיכום חודשי',   icon: 'insights' },
 ];
 
 const TIME_OFF_CATEGORY_LABELS = { vacation: 'חופשה', sick: 'מחלה', other: 'אחר' };
@@ -36,6 +38,11 @@ const FAQ_CATEGORIES = [
 
 function nowMonth() {
   return new Date().toISOString().slice(0, 7);
+}
+
+function prevMonth() {
+  const d = new Date();
+  return new Date(d.getFullYear(), d.getMonth() - 1, 15).toISOString().slice(0, 7);
 }
 
 function Field({ label, value, onChange, type = 'text', dir, placeholder, step }) {
@@ -57,7 +64,10 @@ function Field({ label, value, onChange, type = 'text', dir, placeholder, step }
 
 export default function AdminDashboard() {
   const showToast = useToast();
-  const [activeTab, setActiveTab] = useState('directory');
+  // Deep link support (e.g. WhatsApp recap link: /admin?tab=recap&month=2026-09)
+  const [urlParams] = useState(() => new URLSearchParams(window.location.search));
+  const [activeTab, setActiveTab] = useState(() =>
+    TABS.some(t => t.id === urlParams.get('tab')) ? urlParams.get('tab') : 'directory');
   const { panelMotionProps } = useSwipeableTabs({
     tabKeys: TABS.map(t => t.id),
     activeKey: activeTab,
@@ -212,6 +222,60 @@ export default function AdminDashboard() {
       setApproveMsgs({});
     }
   }, [activeTab, reportMonth, loadReportSummary]);
+
+  // ── Monthly recap tab ───────────────────────────────────────────────────
+  const [recapMonth, setRecapMonth] = useState(() =>
+    /^\d{4}-\d{2}$/.test(urlParams.get('month') || '') ? urlParams.get('month') : prevMonth());
+  const [recapData, setRecapData] = useState(null);
+  const [recapLoading, setRecapLoading] = useState(false);
+  const [recapSharing, setRecapSharing] = useState(false);
+
+  useEffect(() => {
+    if (activeTab !== 'recap' || !recapMonth) return;
+    let cancelled = false;
+    setRecapLoading(true);
+    api.get(`/recap/${recapMonth}`)
+      .then(({ data }) => { if (!cancelled) setRecapData(data); })
+      .catch(() => { if (!cancelled) { setRecapData(null); showToast('שגיאה בטעינת הסיכום', 'error'); } })
+      .finally(() => { if (!cancelled) setRecapLoading(false); });
+    return () => { cancelled = true; };
+  }, [activeTab, recapMonth, showToast]);
+
+  async function getRecapLink() {
+    const { data } = await api.get(`/recap/${recapMonth}/share`);
+    return data;
+  }
+
+  async function shareRecapWhatsApp() {
+    // Open the window synchronously so mobile popup blockers allow it.
+    const win = window.open('', '_blank');
+    setRecapSharing(true);
+    try {
+      const { text } = await getRecapLink();
+      const url = `https://wa.me/?text=${encodeURIComponent(text)}`;
+      if (win) win.location.href = url; else window.location.href = url;
+    } catch (err) {
+      win?.close();
+      const msg = err?.response?.data?.error;
+      showToast(typeof msg === 'string' ? msg : 'שגיאה ביצירת הקישור', 'error');
+    } finally {
+      setRecapSharing(false);
+    }
+  }
+
+  async function copyRecapLink() {
+    setRecapSharing(true);
+    try {
+      const { url } = await getRecapLink();
+      await navigator.clipboard.writeText(url);
+      showToast('הקישור הועתק', 'success');
+    } catch (err) {
+      const msg = err?.response?.data?.error;
+      showToast(typeof msg === 'string' ? msg : 'שגיאה בהעתקת הקישור', 'error');
+    } finally {
+      setRecapSharing(false);
+    }
+  }
 
 
   // ── Equipment Orders actions ───────────────────────────────────────────
@@ -2053,6 +2117,54 @@ export default function AdminDashboard() {
               })}
             </div>
           )}
+        </motion.div>
+      )}
+
+      {/* ── Tab: Monthly recap ─────────────────────────────────────────── */}
+      {activeTab === 'recap' && (
+        <motion.div key="recap" {...panelMotionProps} className="px-4 space-y-4">
+          <div className="bg-white rounded-2xl border border-slate-100 p-4 space-y-3">
+            <div className="flex items-center gap-3">
+              <span className="material-symbols-outlined text-slate-400">calendar_month</span>
+              <input
+                type="month"
+                value={recapMonth}
+                max={nowMonth()}
+                onChange={e => setRecapMonth(e.target.value)}
+                className="flex-1 text-sm font-bold text-slate-800 border-0 focus:outline-none bg-transparent"
+              />
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={shareRecapWhatsApp}
+                disabled={recapSharing || !recapData}
+                className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-sm font-bold text-white bg-[#25D366] active:scale-95 transition-all disabled:opacity-50"
+              >
+                <span className="material-symbols-outlined text-base">share</span>
+                שתף בוואטסאפ
+              </button>
+              <button
+                onClick={copyRecapLink}
+                disabled={recapSharing || !recapData}
+                className="flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-bold text-slate-600 bg-slate-100 active:scale-95 transition-all disabled:opacity-50"
+              >
+                <span className="material-symbols-outlined text-base">link</span>
+                העתק קישור
+              </button>
+            </div>
+            <p className="text-[11px] text-slate-400">הקישור פותח את לוח הניהול על הסיכום של החודש הנבחר. הצפייה דורשת כניסה עם חשבון מנהל.</p>
+          </div>
+
+          {recapLoading ? (
+            <div className="flex justify-center py-10">
+              <span className="material-symbols-outlined text-3xl text-slate-300 animate-spin">progress_activity</span>
+            </div>
+          ) : recapData ? (
+            <MonthlyRecap
+              data={recapData}
+              loadDrilldown={async (userId) => (await api.get(`/recap/${recapMonth}/user/${userId}`)).data.days}
+            />
+          ) : null}
         </motion.div>
       )}
       </SwipeableTabsGroup>

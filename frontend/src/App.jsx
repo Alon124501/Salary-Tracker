@@ -29,7 +29,9 @@ function PrivateRoute({ children }) {
 }
 
 function AdminRoute({ children }) {
-  if (!localStorage.getItem('token')) return <Navigate to="/login" replace />;
+  const location = useLocation();
+  // Remember where we were going (e.g. a shared recap link) so login can return here.
+  if (!localStorage.getItem('token')) return <Navigate to="/login" replace state={{ from: location }} />;
   // Full admin check happens server-side; the page itself won't load data if not admin (403)
   return children;
 }

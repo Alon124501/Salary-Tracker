@@ -5,6 +5,9 @@ const rateLimit = require('express-rate-limit');
 
 const app = express();
 
+// Behind Vercel's proxy — needed so rate limits key on the real client IP.
+app.set('trust proxy', 1);
+
 app.use(helmet());
 app.use(cors({
   origin: [
@@ -53,6 +56,7 @@ app.use('/api/timeoff',       require('./routes/timeoff'));
 app.use('/api/devices',       require('./routes/devices'));
 app.use('/api/tutorials',     require('./routes/tutorials'));
 app.use('/api/push',          require('./routes/push'));
+app.use('/api/recap',         require('./routes/recap'));
 app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
 
 // ── Global error handler ───────────────────────────────────────────────────
