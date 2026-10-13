@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import api from '../api.js';
 import { isValidIsraeliId } from '../utils/israeliId.js';
 
-const SIZES = ['S', 'M', 'L', 'XL', 'XXL'];
+const SIZES = ['XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL'];
 
 const inputBase = "w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-purple/30";
 const selectBase = inputBase + " appearance-none cursor-pointer bg-white";

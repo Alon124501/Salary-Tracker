@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import api from '../api.js';
 import { isValidIsraeliId } from '../utils/israeliId.js';
 
-const SIZES = ['S', 'M', 'L', 'XL', 'XXL'];
+const SIZES = ['XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL'];
 
 const COUNTRY_CODES = [
   { label: '🇮🇱 +972', value: '+972' },
