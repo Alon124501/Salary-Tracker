@@ -20,7 +20,7 @@ function localDateStr(d) {
 const EMPTY_COMPANY_FORM = { name: '', requires_vouchers: false };
 const EMPTY_BRANCH_FORM = {
   name: '', contacts: [],
-  required_device_ids: [], test_types: [], registration_url: '', address: '',
+  required_device_ids: [], performed_tests: [], test_types: [], registration_url: '', address: '',
 };
 
 function whatsappLink(phone) {
@@ -266,6 +266,7 @@ export default function ScreeningLocationsPage() {
       name: branch.name,
       contacts: branch.contacts || [],
       required_device_ids: branch.required_device_ids || [],
+      performed_tests: branch.performed_tests || [],
       test_types: branch.test_types || [],
       registration_url: branch.registration_url || '',
       address: branch.address || '',
@@ -286,6 +287,21 @@ export default function ScreeningLocationsPage() {
     setBranchForm(p => ({
       ...p,
       contacts: p.contacts.map((c, i) => i === index ? { ...c, [field]: value } : c),
+    }));
+  }
+
+  function addPerformedTest() {
+    setBranchForm(p => ({ ...p, performed_tests: [...p.performed_tests, ''] }));
+  }
+
+  function removePerformedTest(index) {
+    setBranchForm(p => ({ ...p, performed_tests: p.performed_tests.filter((_, i) => i !== index) }));
+  }
+
+  function updatePerformedTest(index, value) {
+    setBranchForm(p => ({
+      ...p,
+      performed_tests: p.performed_tests.map((t, i) => i === index ? value : t),
     }));
   }
 
@@ -316,6 +332,7 @@ export default function ScreeningLocationsPage() {
       fd.append('name', branchForm.name.trim());
       fd.append('contacts', JSON.stringify(branchForm.contacts.filter(c => c.name.trim() || c.phone.trim())));
       fd.append('required_device_ids', JSON.stringify(branchForm.required_device_ids));
+      fd.append('performed_tests', JSON.stringify(branchForm.performed_tests.map(t => t.trim()).filter(Boolean)));
       fd.append('test_types', JSON.stringify(branchForm.test_types));
       fd.append('registration_url', branchForm.registration_url.trim());
       fd.append('address', branchForm.address.trim());
@@ -757,6 +774,23 @@ export default function ScreeningLocationsPage() {
                   </div>
                 )}
 
+                {/* Performed tests */}
+                {selectedBranch.performed_tests?.length > 0 && (
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-3">בדיקות שמבצעים בסניף</p>
+                    <div className="flex flex-wrap gap-2">
+                      {selectedBranch.performed_tests.map((test, i) => (
+                        <span
+                          key={i}
+                          className="bg-purple-50 text-brand-purple font-semibold text-xs px-3 py-1.5 rounded-full"
+                        >
+                          {test}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {/* Test types */}
                 {selectedBranch.test_types?.length > 0 && (
                   <div>
@@ -799,7 +833,7 @@ export default function ScreeningLocationsPage() {
                   </div>
                 )}
 
-                {!selectedBranch.contacts?.length && !selectedBranch.test_types?.length && !selectedBranch.registration_url && !selectedBranch.address && !selectedBranch.required_device_ids?.length && (
+                {!selectedBranch.contacts?.length && !selectedBranch.test_types?.length && !selectedBranch.registration_url && !selectedBranch.address && !selectedBranch.required_device_ids?.length && !selectedBranch.performed_tests?.length && (
                   <p className="text-sm text-slate-400 text-center py-4">אין פרטים נוספים לסניף זה</p>
                 )}
               </>)}
@@ -1221,6 +1255,45 @@ export default function ScreeningLocationsPage() {
                   </div>
                 </div>
               )}
+
+              {/* Performed tests */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">בדיקות שמבצעים בסניף</label>
+                  <button
+                    type="button"
+                    onClick={addPerformedTest}
+                    className="flex items-center gap-1 text-xs font-bold text-brand-purple bg-purple-50 px-2.5 py-1 rounded-full hover:bg-purple-100 transition-colors"
+                  >
+                    <span className="material-symbols-outlined text-sm">add</span>
+                    הוסף
+                  </button>
+                </div>
+                {branchForm.performed_tests.length === 0 ? (
+                  <p className="text-xs text-slate-400 text-center py-2">לא הוגדרו בדיקות</p>
+                ) : (
+                  <div className="space-y-2">
+                    {branchForm.performed_tests.map((test, i) => (
+                      <div key={i} className="flex gap-2 items-center">
+                        <input
+                          className="flex-1 px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-purple/30 text-right"
+                          placeholder="שם הבדיקה"
+                          maxLength={200}
+                          value={test}
+                          onChange={e => updatePerformedTest(i, e.target.value)}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => removePerformedTest(i)}
+                          className="w-8 h-8 flex items-center justify-center rounded-xl text-slate-300 hover:text-red-500 hover:bg-red-50 transition-colors flex-shrink-0"
+                        >
+                          <span className="material-symbols-outlined text-sm">delete</span>
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
 
               {/* Test types */}
               <div>
