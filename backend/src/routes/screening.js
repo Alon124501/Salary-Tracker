@@ -122,32 +122,28 @@ router.get('/companies/:id/branches', async (req, res) => {
   res.json(data);
 });
 
-async function parseValidDeviceIds(required_device_ids) {
-  const ids = Array.isArray(required_device_ids)
-    ? required_device_ids
-    : (required_device_ids ? JSON.parse(required_device_ids) : []);
+async function parseValidCatalogIds(raw, table) {
+  const ids = Array.isArray(raw) ? raw : (raw ? JSON.parse(raw) : []);
+  if (!Array.isArray(ids)) throw new Error('not an array');
   if (!ids.length) return [];
-  const { data: catalog, error } = await supabase.from('device_catalog').select('id');
+  const { data: catalog, error } = await supabase.from(table).select('id');
   if (error) {
-    console.error('[screening] failed to load device_catalog for validation:', error.message);
+    console.error(`[screening] failed to load ${table} for validation:`, error.message);
     return [];
   }
   const validIds = new Set((catalog || []).map(c => c.id));
-  return ids.filter(id => validIds.has(id));
+  return [...new Set(ids)].filter(id => validIds.has(id));
 }
 
-function parsePerformedTests(raw) {
-  const list = Array.isArray(raw) ? raw : (raw ? JSON.parse(raw) : []);
-  if (!Array.isArray(list)) throw new Error('not an array');
-  return list
-    .map(t => String(t ?? '').trim().slice(0, 200))
-    .filter(Boolean)
-    .slice(0, 50);
+function parseHasParking(raw) {
+  if (raw === true || raw === 'true') return true;
+  if (raw === false || raw === 'false') return false;
+  return null;
 }
 
 // POST /api/screening/companies/:id/branches  (admin)
 router.post('/companies/:id/branches', adminAuth, upload.none(), async (req, res) => {
-  const { name, contacts, test_types, registration_url, address, required_device_ids, performed_tests } = req.body;
+  const { name, contacts, registration_url, address, performed_test_ids, has_parking } = req.body;
   if (!name?.trim() || name.trim().length > 200) return res.status(400).json({ error: 'נדרש שם סניף תקין' });
   if (address && address.trim().length > 300) return res.status(400).json({ error: 'כתובת ארוכה מדי' });
 
@@ -155,17 +151,15 @@ router.post('/companies/:id/branches', adminAuth, upload.none(), async (req, res
   if (regUrl && !isSafeUrl(regUrl)) return res.status(400).json({ error: 'כתובת ההרשמה חייבת להיות קישור http/https תקין' });
 
   let parsedContacts;
-  let parsedTestTypes;
-  let parsedPerformedTests;
+  let parsedPerformedTestIds;
   try {
     parsedContacts = contacts
       ? (typeof contacts === 'string' ? JSON.parse(contacts) : contacts)
       : [];
-    parsedTestTypes = Array.isArray(test_types) ? test_types : (test_types ? JSON.parse(test_types) : []);
-    if (!Array.isArray(parsedContacts) || !Array.isArray(parsedTestTypes)) throw new Error('not an array');
-    parsedPerformedTests = parsePerformedTests(performed_tests);
+    if (!Array.isArray(parsedContacts)) throw new Error('not an array');
+    parsedPerformedTestIds = await parseValidCatalogIds(performed_test_ids, 'screening_test_catalog');
   } catch {
-    return res.status(400).json({ error: 'פורמט אנשי קשר, סוגי בדיקות או רשימת בדיקות לא תקין' });
+    return res.status(400).json({ error: 'פורמט אנשי קשר או רשימת בדיקות לא תקין' });
   }
 
   const { data, error } = await supabase
@@ -174,11 +168,10 @@ router.post('/companies/:id/branches', adminAuth, upload.none(), async (req, res
       company_id: req.params.id,
       name: name.trim(),
       contacts: parsedContacts,
-      required_device_ids: await parseValidDeviceIds(required_device_ids),
-      test_types: parsedTestTypes,
-      performed_tests: parsedPerformedTests,
+      performed_test_ids: parsedPerformedTestIds,
       registration_url: regUrl,
       address: address?.trim() || null,
+      has_parking: parseHasParking(has_parking),
     })
     .select()
     .single();
@@ -188,7 +181,7 @@ router.post('/companies/:id/branches', adminAuth, upload.none(), async (req, res
 
 // PUT /api/screening/branches/:id  (admin)
 router.put('/branches/:id', adminAuth, upload.none(), async (req, res) => {
-  const { name, contacts, test_types, registration_url, address, required_device_ids, performed_tests } = req.body;
+  const { name, contacts, registration_url, address, performed_test_ids, has_parking } = req.body;
   if (!name?.trim() || name.trim().length > 200) return res.status(400).json({ error: 'נדרש שם סניף תקין' });
   if (address && address.trim().length > 300) return res.status(400).json({ error: 'כתובת ארוכה מדי' });
 
@@ -196,27 +189,24 @@ router.put('/branches/:id', adminAuth, upload.none(), async (req, res) => {
   if (regUrl && !isSafeUrl(regUrl)) return res.status(400).json({ error: 'כתובת ההרשמה חייבת להיות קישור http/https תקין' });
 
   let parsedContacts;
-  let parsedTestTypes;
-  let parsedPerformedTests;
+  let parsedPerformedTestIds;
   try {
     parsedContacts = contacts
       ? (typeof contacts === 'string' ? JSON.parse(contacts) : contacts)
       : [];
-    parsedTestTypes = Array.isArray(test_types) ? test_types : (test_types ? JSON.parse(test_types) : []);
-    if (!Array.isArray(parsedContacts) || !Array.isArray(parsedTestTypes)) throw new Error('not an array');
-    parsedPerformedTests = parsePerformedTests(performed_tests);
+    if (!Array.isArray(parsedContacts)) throw new Error('not an array');
+    parsedPerformedTestIds = await parseValidCatalogIds(performed_test_ids, 'screening_test_catalog');
   } catch {
-    return res.status(400).json({ error: 'פורמט אנשי קשר, סוגי בדיקות או רשימת בדיקות לא תקין' });
+    return res.status(400).json({ error: 'פורמט אנשי קשר או רשימת בדיקות לא תקין' });
   }
 
   const updates = {
     name: name.trim(),
     contacts: parsedContacts,
-    required_device_ids: await parseValidDeviceIds(required_device_ids),
-    test_types: parsedTestTypes,
-    performed_tests: parsedPerformedTests,
+    performed_test_ids: parsedPerformedTestIds,
     registration_url: regUrl,
     address: address?.trim() || null,
+    has_parking: parseHasParking(has_parking),
   };
 
   const { data, error } = await supabase
@@ -233,6 +223,63 @@ router.put('/branches/:id', adminAuth, upload.none(), async (req, res) => {
 router.delete('/branches/:id', adminAuth, async (req, res) => {
   const { error } = await supabase
     .from('screening_branches')
+    .delete()
+    .eq('id', req.params.id);
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ success: true });
+});
+
+// ── Performed-tests catalog ──────────────────────────────────────────────────
+
+function validTestName(name) {
+  const trimmed = typeof name === 'string' ? name.trim() : '';
+  return trimmed && trimmed.length <= 200 ? trimmed : null;
+}
+
+// GET /api/screening/tests-catalog
+router.get('/tests-catalog', async (req, res) => {
+  const { data, error } = await supabase
+    .from('screening_test_catalog')
+    .select('id, name, sort_order')
+    .order('sort_order', { ascending: true })
+    .order('name', { ascending: true });
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data || []);
+});
+
+// POST /api/screening/tests-catalog  (admin)
+router.post('/tests-catalog', adminAuth, async (req, res) => {
+  const name = validTestName(req.body?.name);
+  if (!name) return res.status(400).json({ error: 'נדרש שם בדיקה תקין' });
+  const { data, error } = await supabase
+    .from('screening_test_catalog')
+    .insert({ name })
+    .select('id, name, sort_order')
+    .single();
+  if (error?.code === '23505') return res.status(400).json({ error: 'בדיקה בשם זה כבר קיימת' });
+  if (error) return res.status(500).json({ error: error.message });
+  res.status(201).json(data);
+});
+
+// PUT /api/screening/tests-catalog/:id  (admin)
+router.put('/tests-catalog/:id', adminAuth, async (req, res) => {
+  const name = validTestName(req.body?.name);
+  if (!name) return res.status(400).json({ error: 'נדרש שם בדיקה תקין' });
+  const { data, error } = await supabase
+    .from('screening_test_catalog')
+    .update({ name })
+    .eq('id', req.params.id)
+    .select('id, name, sort_order')
+    .single();
+  if (error?.code === '23505') return res.status(400).json({ error: 'בדיקה בשם זה כבר קיימת' });
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data);
+});
+
+// DELETE /api/screening/tests-catalog/:id  (admin)
+router.delete('/tests-catalog/:id', adminAuth, async (req, res) => {
+  const { error } = await supabase
+    .from('screening_test_catalog')
     .delete()
     .eq('id', req.params.id);
   if (error) return res.status(500).json({ error: error.message });

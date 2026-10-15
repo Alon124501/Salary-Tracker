@@ -1,18 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import api from '../api.js';
 
-const TEST_TYPES = ['early_detection', 'cardio', 'fit_wellness'];
-const TEST_LABELS = {
-  early_detection: 'גילוי מוקדם',
-  cardio: 'קרדיו',
-  fit_wellness: 'כושר ורווחה',
-};
-const TEST_COLORS = {
-  early_detection: 'bg-emerald-50 text-emerald-700',
-  cardio: 'bg-red-50 text-red-600',
-  fit_wellness: 'bg-sky-50 text-sky-600',
-};
-
 function localDateStr(d) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
@@ -20,7 +8,7 @@ function localDateStr(d) {
 const EMPTY_COMPANY_FORM = { name: '', requires_vouchers: false };
 const EMPTY_BRANCH_FORM = {
   name: '', contacts: [],
-  required_device_ids: [], performed_tests: [], test_types: [], registration_url: '', address: '',
+  performed_test_ids: [], registration_url: '', address: '', has_parking: null,
 };
 
 function whatsappLink(phone) {
@@ -63,11 +51,46 @@ function WhatsAppIcon() {
 
 const isPdf = (url) => url?.toLowerCase().endsWith('.pdf');
 
+function TestCatalogRow({ test, onRename, onDelete }) {
+  const [name, setName] = useState(test.name);
+  useEffect(() => { setName(test.name); }, [test.name]);
+
+  function commit() {
+    const trimmed = name.trim();
+    if (!trimmed) { setName(test.name); return; }
+    if (trimmed !== test.name) onRename(test, trimmed).catch(() => setName(test.name));
+  }
+
+  return (
+    <div className="flex gap-2 items-center">
+      <input
+        className="flex-1 px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-purple/30 text-right"
+        maxLength={200}
+        value={name}
+        onChange={e => setName(e.target.value)}
+        onBlur={commit}
+        onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+      />
+      <button
+        type="button"
+        onClick={() => onDelete(test)}
+        className="w-8 h-8 flex items-center justify-center rounded-xl text-slate-300 hover:text-red-500 hover:bg-red-50 transition-colors flex-shrink-0"
+      >
+        <span className="material-symbols-outlined text-sm">delete</span>
+      </button>
+    </div>
+  );
+}
+
 export default function ScreeningLocationsPage() {
   const [companies, setCompanies] = useState([]);
   const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [deviceCatalog, setDeviceCatalog] = useState([]);
+  const [testCatalog, setTestCatalog] = useState([]);
+  const [showTestCatalog, setShowTestCatalog] = useState(false);
+  const [newTestName, setNewTestName] = useState('');
+  const [catalogNewName, setCatalogNewName] = useState('');
+  const [testCatalogError, setTestCatalogError] = useState('');
 
   // Branches sheet
   const [selectedCompany, setSelectedCompany] = useState(null);
@@ -132,8 +155,8 @@ export default function ScreeningLocationsPage() {
       .catch(() => {})
       .finally(() => setLoading(false));
 
-    api.get('/devices/catalog')
-      .then(res => setDeviceCatalog(res.data))
+    api.get('/screening/tests-catalog')
+      .then(res => setTestCatalog(res.data))
       .catch(() => {});
   }, []);
 
@@ -265,11 +288,10 @@ export default function ScreeningLocationsPage() {
     setBranchForm({
       name: branch.name,
       contacts: branch.contacts || [],
-      required_device_ids: branch.required_device_ids || [],
-      performed_tests: branch.performed_tests || [],
-      test_types: branch.test_types || [],
+      performed_test_ids: branch.performed_test_ids || [],
       registration_url: branch.registration_url || '',
       address: branch.address || '',
+      has_parking: branch.has_parking ?? null,
     });
     setBranchFormError('');
     setShowBranchForm(true);
@@ -290,37 +312,76 @@ export default function ScreeningLocationsPage() {
     }));
   }
 
-  function addPerformedTest() {
-    setBranchForm(p => ({ ...p, performed_tests: [...p.performed_tests, ''] }));
-  }
-
-  function removePerformedTest(index) {
-    setBranchForm(p => ({ ...p, performed_tests: p.performed_tests.filter((_, i) => i !== index) }));
-  }
-
-  function updatePerformedTest(index, value) {
-    setBranchForm(p => ({
-      ...p,
-      performed_tests: p.performed_tests.map((t, i) => i === index ? value : t),
-    }));
-  }
-
-  function toggleTestType(type) {
+  function togglePerformedTest(id) {
     setBranchForm(prev => ({
       ...prev,
-      test_types: prev.test_types.includes(type)
-        ? prev.test_types.filter(t => t !== type)
-        : [...prev.test_types, type],
+      performed_test_ids: prev.performed_test_ids.includes(id)
+        ? prev.performed_test_ids.filter(t => t !== id)
+        : [...prev.performed_test_ids, id],
     }));
   }
 
-  function toggleRequiredDevice(id) {
-    setBranchForm(prev => ({
-      ...prev,
-      required_device_ids: prev.required_device_ids.includes(id)
-        ? prev.required_device_ids.filter(d => d !== id)
-        : [...prev.required_device_ids, id],
-    }));
+  // ── Performed-tests catalog ────────────────────────────────────────────
+
+  function sortTests(list) {
+    return [...list].sort((a, b) => (a.sort_order - b.sort_order) || a.name.localeCompare(b.name, 'he'));
+  }
+
+  async function addCatalogTest(name) {
+    const { data } = await api.post('/screening/tests-catalog', { name });
+    setTestCatalog(prev => sortTests([...prev, data]));
+    return data;
+  }
+
+  async function addTestFromBranchForm() {
+    const name = newTestName.trim();
+    if (!name) return;
+    setBranchFormError('');
+    try {
+      const test = await addCatalogTest(name);
+      setNewTestName('');
+      setBranchForm(p => ({ ...p, performed_test_ids: [...p.performed_test_ids, test.id] }));
+    } catch (err) {
+      const msg = err.response?.data?.error;
+      setBranchFormError(typeof msg === 'string' ? msg : 'שגיאה בהוספת בדיקה');
+    }
+  }
+
+  async function addTestFromCatalogModal() {
+    const name = catalogNewName.trim();
+    if (!name) return;
+    setTestCatalogError('');
+    try {
+      await addCatalogTest(name);
+      setCatalogNewName('');
+    } catch (err) {
+      const msg = err.response?.data?.error;
+      setTestCatalogError(typeof msg === 'string' ? msg : 'שגיאה בהוספת בדיקה');
+    }
+  }
+
+  async function renameCatalogTest(test, name) {
+    setTestCatalogError('');
+    try {
+      const { data } = await api.put(`/screening/tests-catalog/${test.id}`, { name });
+      setTestCatalog(prev => sortTests(prev.map(t => t.id === data.id ? data : t)));
+    } catch (err) {
+      const msg = err.response?.data?.error;
+      setTestCatalogError(typeof msg === 'string' ? msg : 'שגיאה בשמירה');
+      throw err;
+    }
+  }
+
+  async function deleteCatalogTest(test) {
+    if (!confirm(`למחוק את "${test.name}"? הבדיקה תוסר מכל הסניפים.`)) return;
+    setTestCatalogError('');
+    try {
+      await api.delete(`/screening/tests-catalog/${test.id}`);
+      setTestCatalog(prev => prev.filter(t => t.id !== test.id));
+    } catch (err) {
+      const msg = err.response?.data?.error;
+      setTestCatalogError(typeof msg === 'string' ? msg : 'שגיאה במחיקה');
+    }
   }
 
   async function submitBranch() {
@@ -331,11 +392,10 @@ export default function ScreeningLocationsPage() {
       const fd = new FormData();
       fd.append('name', branchForm.name.trim());
       fd.append('contacts', JSON.stringify(branchForm.contacts.filter(c => c.name.trim() || c.phone.trim())));
-      fd.append('required_device_ids', JSON.stringify(branchForm.required_device_ids));
-      fd.append('performed_tests', JSON.stringify(branchForm.performed_tests.map(t => t.trim()).filter(Boolean)));
-      fd.append('test_types', JSON.stringify(branchForm.test_types));
+      fd.append('performed_test_ids', JSON.stringify(branchForm.performed_test_ids.filter(id => testCatalog.some(t => t.id === id))));
       fd.append('registration_url', branchForm.registration_url.trim());
       fd.append('address', branchForm.address.trim());
+      fd.append('has_parking', branchForm.has_parking === null ? '' : String(branchForm.has_parking));
 
       const headers = { 'Content-Type': 'multipart/form-data' };
       if (editingBranch) {
@@ -480,13 +540,22 @@ export default function ScreeningLocationsPage() {
           <p className="text-sm text-slate-400 font-medium mt-1">חברות וסניפי בדיקות</p>
         </div>
         {isAdmin && (
-          <button
-            onClick={openAddCompany}
-            className="flex items-center gap-2 brand-gradient text-white text-sm font-semibold px-4 py-2.5 rounded-full brand-shadow active:scale-95 transition-transform"
-          >
-            <span className="material-symbols-outlined text-base">add</span>
-            הוסף חברה
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => { setTestCatalogError(''); setCatalogNewName(''); setShowTestCatalog(true); }}
+              className="flex items-center gap-2 text-brand-purple bg-purple-50 text-sm font-semibold px-4 py-2.5 rounded-full hover:bg-purple-100 active:scale-95 transition-all"
+            >
+              <span className="material-symbols-outlined text-base">checklist</span>
+              ניהול בדיקות
+            </button>
+            <button
+              onClick={openAddCompany}
+              className="flex items-center gap-2 brand-gradient text-white text-sm font-semibold px-4 py-2.5 rounded-full brand-shadow active:scale-95 transition-transform"
+            >
+              <span className="material-symbols-outlined text-base">add</span>
+              הוסף חברה
+            </button>
+          </div>
         )}
       </section>
 
@@ -712,6 +781,21 @@ export default function ScreeningLocationsPage() {
                   </a>
                 )}
 
+                {/* Parking */}
+                {selectedBranch.has_parking != null && (
+                  <div className="bg-slate-50 rounded-2xl p-4 flex items-center gap-3">
+                    <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${selectedBranch.has_parking ? 'bg-emerald-50' : 'bg-red-50'}`}>
+                      <span className={`material-symbols-outlined text-base ${selectedBranch.has_parking ? 'text-emerald-600' : 'text-red-500'}`} style={{ fontVariationSettings: "'FILL' 1" }}>local_parking</span>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">חניה</p>
+                      <p className={`font-semibold text-sm ${selectedBranch.has_parking ? 'text-emerald-700' : 'text-red-600'}`}>
+                        {selectedBranch.has_parking ? 'יש חניה' : 'אין חניה'}
+                      </p>
+                    </div>
+                  </div>
+                )}
+
                 {/* Contacts */}
                 {selectedBranch.contacts?.map((contact, i) => (
                   <div key={i} className="space-y-3">
@@ -754,56 +838,22 @@ export default function ScreeningLocationsPage() {
                   </div>
                 ))}
 
-                {/* Required devices */}
-                {selectedBranch.required_device_ids?.length > 0 && (
+                {/* Performed tests */}
+                {selectedBranch.performed_test_ids?.length > 0 && (
                   <div>
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-3">מכשירים נדרשים</p>
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-3">בדיקות שמבצעים בסניף</p>
                     <div className="flex flex-wrap gap-2">
-                      {selectedBranch.required_device_ids.map(id => {
-                        const device = deviceCatalog.find(d => d.id === id);
-                        return device ? (
+                      {selectedBranch.performed_test_ids.map(id => {
+                        const test = testCatalog.find(t => t.id === id);
+                        return test ? (
                           <span
                             key={id}
                             className="bg-purple-50 text-brand-purple font-semibold text-xs px-3 py-1.5 rounded-full"
                           >
-                            {device.name}
+                            {test.name}
                           </span>
                         ) : null;
                       })}
-                    </div>
-                  </div>
-                )}
-
-                {/* Performed tests */}
-                {selectedBranch.performed_tests?.length > 0 && (
-                  <div>
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-3">בדיקות שמבצעים בסניף</p>
-                    <div className="flex flex-wrap gap-2">
-                      {selectedBranch.performed_tests.map((test, i) => (
-                        <span
-                          key={i}
-                          className="bg-purple-50 text-brand-purple font-semibold text-xs px-3 py-1.5 rounded-full"
-                        >
-                          {test}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Test types */}
-                {selectedBranch.test_types?.length > 0 && (
-                  <div>
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-3">בדיקות סקר רלוונטיות</p>
-                    <div className="flex flex-wrap gap-2">
-                      {selectedBranch.test_types.map(type => (
-                        <span
-                          key={type}
-                          className={`${TEST_COLORS[type] || 'bg-purple-50 text-brand-purple'} font-semibold text-xs px-3 py-1.5 rounded-full`}
-                        >
-                          {TEST_LABELS[type] || type}
-                        </span>
-                      ))}
                     </div>
                   </div>
                 )}
@@ -833,7 +883,7 @@ export default function ScreeningLocationsPage() {
                   </div>
                 )}
 
-                {!selectedBranch.contacts?.length && !selectedBranch.test_types?.length && !selectedBranch.registration_url && !selectedBranch.address && !selectedBranch.required_device_ids?.length && !selectedBranch.performed_tests?.length && (
+                {!selectedBranch.contacts?.length && selectedBranch.has_parking == null && !selectedBranch.registration_url && !selectedBranch.address && !selectedBranch.performed_test_ids?.length && (
                   <p className="text-sm text-slate-400 text-center py-4">אין פרטים נוספים לסניף זה</p>
                 )}
               </>)}
@@ -1230,92 +1280,51 @@ export default function ScreeningLocationsPage() {
                 )}
               </div>
 
-              {/* Required devices */}
-              {deviceCatalog.length > 0 && (
-                <div>
-                  <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">מכשירים נדרשים</p>
-                  <div className="space-y-2">
-                    {deviceCatalog.map(device => (
-                      <label key={device.id} className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl cursor-pointer select-none hover:bg-slate-100 transition-colors">
-                        <div
-                          className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-colors ${
-                            branchForm.required_device_ids.includes(device.id)
-                              ? 'bg-brand-purple border-brand-purple'
-                              : 'border-slate-300 bg-white'
-                          }`}
-                          onClick={() => toggleRequiredDevice(device.id)}
-                        >
-                          {branchForm.required_device_ids.includes(device.id) && (
-                            <span className="material-symbols-outlined text-white text-xs">check</span>
-                          )}
-                        </div>
-                        <span className="text-sm font-medium text-slate-700">{device.name}</span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-              )}
-
               {/* Performed tests */}
               <div>
-                <div className="flex items-center justify-between mb-2">
-                  <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">בדיקות שמבצעים בסניף</label>
+                <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">בדיקות שמבצעים בסניף</p>
+                {testCatalog.length === 0 ? (
+                  <p className="text-xs text-slate-400 text-center py-2">לא הוגדרו בדיקות במאגר</p>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    {testCatalog.map(test => {
+                      const selected = branchForm.performed_test_ids.includes(test.id);
+                      return (
+                        <button
+                          key={test.id}
+                          type="button"
+                          onClick={() => togglePerformedTest(test.id)}
+                          className={`flex items-center gap-1 text-xs font-semibold px-3 py-1.5 rounded-full border transition-colors ${
+                            selected
+                              ? 'bg-brand-purple border-brand-purple text-white'
+                              : 'bg-white border-slate-200 text-slate-600 hover:border-brand-purple/40'
+                          }`}
+                        >
+                          {selected && <span className="material-symbols-outlined text-xs">check</span>}
+                          {test.name}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+                <div className="flex gap-2 items-center mt-3">
+                  <input
+                    className="flex-1 px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-purple/30 text-right"
+                    placeholder="בדיקה חדשה שלא ברשימה"
+                    maxLength={200}
+                    value={newTestName}
+                    onChange={e => setNewTestName(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addTestFromBranchForm(); } }}
+                  />
                   <button
                     type="button"
-                    onClick={addPerformedTest}
-                    className="flex items-center gap-1 text-xs font-bold text-brand-purple bg-purple-50 px-2.5 py-1 rounded-full hover:bg-purple-100 transition-colors"
+                    onClick={addTestFromBranchForm}
+                    disabled={!newTestName.trim()}
+                    className="flex items-center gap-1 text-xs font-bold text-brand-purple bg-purple-50 px-2.5 py-2 rounded-full hover:bg-purple-100 transition-colors disabled:opacity-50 flex-shrink-0"
                   >
                     <span className="material-symbols-outlined text-sm">add</span>
                     הוסף
                   </button>
-                </div>
-                {branchForm.performed_tests.length === 0 ? (
-                  <p className="text-xs text-slate-400 text-center py-2">לא הוגדרו בדיקות</p>
-                ) : (
-                  <div className="space-y-2">
-                    {branchForm.performed_tests.map((test, i) => (
-                      <div key={i} className="flex gap-2 items-center">
-                        <input
-                          className="flex-1 px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-purple/30 text-right"
-                          placeholder="שם הבדיקה"
-                          maxLength={200}
-                          value={test}
-                          onChange={e => updatePerformedTest(i, e.target.value)}
-                        />
-                        <button
-                          type="button"
-                          onClick={() => removePerformedTest(i)}
-                          className="w-8 h-8 flex items-center justify-center rounded-xl text-slate-300 hover:text-red-500 hover:bg-red-50 transition-colors flex-shrink-0"
-                        >
-                          <span className="material-symbols-outlined text-sm">delete</span>
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* Test types */}
-              <div>
-                <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">סוגי בדיקות</p>
-                <div className="space-y-2">
-                  {TEST_TYPES.map(type => (
-                    <label key={type} className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl cursor-pointer select-none hover:bg-slate-100 transition-colors">
-                      <div
-                        className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-colors ${
-                          branchForm.test_types.includes(type)
-                            ? 'bg-brand-purple border-brand-purple'
-                            : 'border-slate-300 bg-white'
-                        }`}
-                        onClick={() => toggleTestType(type)}
-                      >
-                        {branchForm.test_types.includes(type) && (
-                          <span className="material-symbols-outlined text-white text-xs">check</span>
-                        )}
-                      </div>
-                      <span className="text-sm font-medium text-slate-700">{TEST_LABELS[type]}</span>
-                    </label>
-                  ))}
                 </div>
               </div>
 
@@ -1340,6 +1349,31 @@ export default function ScreeningLocationsPage() {
                 />
               </div>
 
+              {/* Parking */}
+              <div>
+                <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">חניה</p>
+                <div className="flex gap-2">
+                  {[{ value: true, label: 'יש חניה' }, { value: false, label: 'אין חניה' }].map(opt => {
+                    const selected = branchForm.has_parking === opt.value;
+                    return (
+                      <button
+                        key={opt.label}
+                        type="button"
+                        onClick={() => setBranchForm(p => ({ ...p, has_parking: selected ? null : opt.value }))}
+                        className={`flex-1 flex items-center justify-center gap-1 text-sm font-semibold py-2.5 rounded-full border transition-colors ${
+                          selected
+                            ? 'bg-brand-purple border-brand-purple text-white'
+                            : 'bg-white border-slate-200 text-slate-600 hover:border-brand-purple/40'
+                        }`}
+                      >
+                        {selected && <span className="material-symbols-outlined text-sm">check</span>}
+                        {opt.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
               {branchFormError && (
                 <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-xl">{branchFormError}</p>
               )}
@@ -1361,6 +1395,69 @@ export default function ScreeningLocationsPage() {
                 <span className="material-symbols-outlined text-sm">{branchSubmitting ? 'hourglass_top' : 'save'}</span>
                 {branchSubmitting ? 'שומר...' : 'שמור'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══ Performed-tests catalog modal ═════════════════════════════ */}
+      {showTestCatalog && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+          onClick={() => setShowTestCatalog(false)}
+        >
+          <div
+            className="w-full max-w-sm bg-white rounded-3xl shadow-2xl flex flex-col"
+            style={{ maxHeight: '90vh' }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b border-slate-100">
+              <h3 className="font-bold text-lg text-slate-900">ניהול מאגר בדיקות</h3>
+              <button onClick={() => setShowTestCatalog(false)} className="w-8 h-8 flex items-center justify-center rounded-xl text-slate-400 hover:bg-slate-100">
+                <span className="material-symbols-outlined text-base">close</span>
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
+              <div className="flex gap-2 items-center">
+                <input
+                  className="flex-1 px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-purple/30 text-right"
+                  placeholder="שם בדיקה חדשה"
+                  maxLength={200}
+                  value={catalogNewName}
+                  onChange={e => setCatalogNewName(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') addTestFromCatalogModal(); }}
+                />
+                <button
+                  type="button"
+                  onClick={addTestFromCatalogModal}
+                  disabled={!catalogNewName.trim()}
+                  className="flex items-center gap-1 text-xs font-bold text-brand-purple bg-purple-50 px-2.5 py-2 rounded-full hover:bg-purple-100 transition-colors disabled:opacity-50 flex-shrink-0"
+                >
+                  <span className="material-symbols-outlined text-sm">add</span>
+                  הוסף
+                </button>
+              </div>
+
+              {testCatalogError && (
+                <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-xl">{testCatalogError}</p>
+              )}
+
+              {testCatalog.length === 0 ? (
+                <p className="text-xs text-slate-400 text-center py-2">לא הוגדרו בדיקות במאגר</p>
+              ) : (
+                <div className="space-y-2">
+                  <p className="text-xs text-slate-400">לחיצה על שם מאפשרת לערוך אותו. השינוי יחול בכל הסניפים.</p>
+                  {testCatalog.map(test => (
+                    <TestCatalogRow
+                      key={test.id}
+                      test={test}
+                      onRename={renameCatalogTest}
+                      onDelete={deleteCatalogTest}
+                    />
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>
