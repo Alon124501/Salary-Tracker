@@ -174,12 +174,22 @@ export default function AdminDashboard() {
     name: '', sku: '', supplier_contact_name: '', supplier_email: '', supplier_phone: '',
     supplier_whatsapp: '', supplier_company_id: '', price_excl_vat: '', price_incl_vat: '',
     vat_amount: '', units_per_box: '', stock_qty: '',
+    reorder_threshold: '', reorder_qty_boxes: '', stock_unit: 'box',
   };
   const [productModal, setProductModal] = useState(null); // { id } for edit, {} for new, null closed
   const [productForm, setProductForm] = useState(EMPTY_PRODUCT_FORM);
   const [savingProduct, setSavingProduct] = useState(false);
   const [eqOrderModal, setEqOrderModal] = useState(null);
   const [completingOrderId, setCompletingOrderId] = useState(null);
+  const { data: supplierOrders = [], loading: supplierOrdersLoading, reload: loadSupplierOrders } =
+    useFetch('/equipment/supplier-orders');
+  const draftSupplierOrdersCount = supplierOrders.filter(o => o.status === 'draft').length;
+  const [supplierBusyId, setSupplierBusyId] = useState(null);
+  const [checkingStock, setCheckingStock] = useState(false);
+  const [checkingReplies, setCheckingReplies] = useState(false);
+  const [supplierQtyEdits, setSupplierQtyEdits] = useState({}); // itemId -> draft qty string
+  const [composer, setComposer] = useState(null); // { order, items, channel: 'email' | 'whatsapp', text }
+  const [composerSending, setComposerSending] = useState(false);
 
   // Time-off requests tab state
   const { data: timeOffRequests = [], setData: setTimeOffRequests, loading: timeOffLoading, error: timeOffError } =
@@ -290,6 +300,8 @@ export default function AdminDashboard() {
         price_excl_vat: item.price_excl_vat ?? '', price_incl_vat: item.price_incl_vat ?? '',
         vat_amount: item.vat_amount ?? '', units_per_box: item.units_per_box ?? '',
         stock_qty: item.stock_qty ?? '',
+        reorder_threshold: item.reorder_threshold ?? '', reorder_qty_boxes: item.reorder_qty_boxes ?? '',
+        stock_unit: item.stock_unit || 'box',
       });
     } else {
       setProductModal({});
@@ -317,6 +329,144 @@ export default function AdminDashboard() {
       await api.delete(`/equipment/catalog/${id}`);
       loadEqCatalog();
     } catch (err) { showToast(err?.response?.data?.error || 'מחיקת הפריט נכשלה'); }
+  }
+
+  // ── Supplier reorder actions ────────────────────────────────────────────
+  function apiErrorMsg(err, fallback) {
+    const msg = err?.response?.data?.error;
+    return typeof msg === 'string' ? msg : fallback;
+  }
+
+  async function checkStockNow() {
+    setCheckingStock(true);
+    try {
+      const { data } = await api.post('/equipment/supplier-orders/check-now');
+      const count = data?.drafted?.reduce((n, d) => n + d.items.length, 0) || 0;
+      showToast(count ? `נוצרו טיוטות הזמנה עבור ${count} פריטים` : 'אין פריטים חדשים במלאי נמוך', 'success');
+      loadSupplierOrders();
+    } catch (err) { showToast(apiErrorMsg(err, 'בדיקת המלאי נכשלה')); }
+    finally { setCheckingStock(false); }
+  }
+
+  async function checkRepliesNow() {
+    setCheckingReplies(true);
+    try {
+      const { data } = await api.post('/equipment/supplier-orders/check-replies');
+      if (data?.skipped) showToast(`בדיקת תשובות לא זמינה: ${data.skipped}`);
+      else showToast(data?.updated?.length ? `נמצאו ${data.updated.length} תשובות חדשות מספקים` : 'אין תשובות חדשות מספקים', 'success');
+      loadSupplierOrders();
+    } catch (err) { showToast(apiErrorMsg(err, 'בדיקת התשובות נכשלה')); }
+    finally { setCheckingReplies(false); }
+  }
+
+  async function saveSupplierQty(order, item, qty) {
+    const n = Number(qty);
+    if (!Number.isInteger(n) || n <= 0 || n === item.qty_boxes) return;
+    setSupplierBusyId(order.id);
+    try {
+      await api.put(`/equipment/supplier-orders/${order.id}/items/${item.id}`, { qty_boxes: n });
+      setSupplierQtyEdits(e => { const { [item.id]: _, ...rest } = e; return rest; });
+      loadSupplierOrders();
+    } catch (err) { showToast(apiErrorMsg(err, 'עדכון הכמות נכשל')); }
+    finally { setSupplierBusyId(null); }
+  }
+
+  async function removeSupplierItem(order, item) {
+    setSupplierBusyId(order.id);
+    try {
+      await api.delete(`/equipment/supplier-orders/${order.id}/items/${item.id}`);
+      loadSupplierOrders();
+    } catch (err) { showToast(apiErrorMsg(err, 'הסרת הפריט נכשלה')); }
+    finally { setSupplierBusyId(null); }
+  }
+
+  function supplierOrderText(order, items) {
+    const greeting = order.supplier_contact_name ? `שלום ${order.supplier_contact_name},` : 'שלום,';
+    const lines = items.map(i =>
+      `• ${i.name}${i.sku ? ` (מק״ט ${i.sku})` : ''} — כמות: ${i.qty_boxes}`);
+    return [greeting, '', 'נבקש להזמין את הפריטים הבאים:', ...lines, '', 'תודה,', 'אלון מועלם', 'MPCHECK'].join('\n');
+  }
+
+  // Saves any quantity typed but not yet saved (the send click can beat the input's blur save),
+  // so the supplier never gets a stale quantity. Returns the items with final quantities.
+  async function flushSupplierQtyEdits(order) {
+    const items = [];
+    for (const item of order.supplier_order_items) {
+      const n = Number(supplierQtyEdits[item.id]);
+      if (supplierQtyEdits[item.id] !== undefined && n !== item.qty_boxes) {
+        if (!Number.isInteger(n) || n <= 0) throw new Error(`כמות לא תקינה עבור ${item.name}`);
+        await api.put(`/equipment/supplier-orders/${order.id}/items/${item.id}`, { qty_boxes: n });
+        items.push({ ...item, qty_boxes: n });
+      } else {
+        items.push(item);
+      }
+    }
+    setSupplierQtyEdits(e => {
+      const rest = { ...e };
+      order.supplier_order_items.forEach(i => delete rest[i.id]);
+      return rest;
+    });
+    return items;
+  }
+
+  // Opens the send dialog with the generated message, which the admin can edit before sending
+  async function openComposer(order, channel) {
+    setSupplierBusyId(order.id);
+    try {
+      const items = await flushSupplierQtyEdits(order);
+      setComposer({ order, items, channel, text: supplierOrderText(order, items) });
+    } catch (err) { showToast(apiErrorMsg(err, err?.message || 'עדכון הכמויות נכשל')); }
+    finally { setSupplierBusyId(null); }
+  }
+
+  async function sendComposed() {
+    const { order, channel, text } = composer;
+    if (!text.trim()) return showToast('ההודעה ריקה');
+
+    // Open the window synchronously so mobile popup blockers allow it (same as shareRecapWhatsApp).
+    const win = channel === 'whatsapp' ? window.open('', '_blank') : null;
+    setComposerSending(true);
+    try {
+      if (channel === 'whatsapp') {
+        const digits = (order.supplier_whatsapp || order.supplier_phone || '').replace(/\D/g, '');
+        const phone = digits.startsWith('0') ? '972' + digits.slice(1) : digits;
+        const url = `https://wa.me/${phone}?text=${encodeURIComponent(text)}`;
+        if (win) win.location.href = url; else window.location.href = url;
+        await api.post(`/equipment/supplier-orders/${order.id}/mark-sent`);
+      } else {
+        await api.post(`/equipment/supplier-orders/${order.id}/send-email`, { text });
+        showToast('ההזמנה נשלחה לספק במייל', 'success');
+      }
+      setComposer(null);
+      loadSupplierOrders();
+    } catch (err) {
+      win?.close();
+      showToast(apiErrorMsg(err, 'שליחת ההזמנה נכשלה'));
+    } finally { setComposerSending(false); }
+  }
+
+  async function receiveSupplierOrder(order) {
+    setSupplierBusyId(order.id);
+    try {
+      const { data } = await api.post(`/equipment/supplier-orders/${order.id}/receive`);
+      if (data?.unmatched_items?.length) {
+        showToast(`ההזמנה התקבלה, אך המלאי לא עודכן עבור: ${data.unmatched_items.join(', ')} (הפריט הוסר מהקטלוג)`);
+      } else {
+        showToast('ההזמנה התקבלה והמלאי עודכן', 'success');
+      }
+      loadSupplierOrders();
+      loadEqCatalog();
+    } catch (err) { showToast(apiErrorMsg(err, 'עדכון קבלת ההזמנה נכשל')); }
+    finally { setSupplierBusyId(null); }
+  }
+
+  async function cancelSupplierOrder(order) {
+    setSupplierBusyId(order.id);
+    try {
+      await api.post(`/equipment/supplier-orders/${order.id}/cancel`);
+      loadSupplierOrders();
+    } catch (err) { showToast(apiErrorMsg(err, 'ביטול ההזמנה נכשל')); }
+    finally { setSupplierBusyId(null); }
   }
 
   // ── Device catalog actions ──────────────────────────────────────────────
@@ -814,9 +964,9 @@ export default function AdminDashboard() {
               >
                 <span className="material-symbols-outlined text-base" style={{ fontVariationSettings: active ? "'FILL' 1" : "'FILL' 0" }}>{tab.icon}</span>
                 {tab.label}
-                {tab.id === 'eq_orders' && pendingOrdersCount > 0 && (
+                {tab.id === 'eq_orders' && pendingOrdersCount + draftSupplierOrdersCount > 0 && (
                   <span className="bg-blue-500 text-white text-[10px] font-bold min-w-[17px] h-[17px] px-1 rounded-full flex items-center justify-center leading-none">
-                    {pendingOrdersCount}
+                    {pendingOrdersCount + draftSupplierOrdersCount}
                   </span>
                 )}
                 {tab.id === 'timeoff' && pendingTimeOffCount > 0 && (
@@ -1924,7 +2074,7 @@ export default function AdminDashboard() {
         <motion.div key="eq_orders" {...panelMotionProps} className="px-4 space-y-4">
           {/* Sub-tab toggle */}
           <div className="flex gap-2">
-            {[{ id: 'catalog', label: 'קטלוג', icon: 'list' }, { id: 'orders', label: 'הזמנות', icon: 'inventory' }].map(st => (
+            {[{ id: 'catalog', label: 'קטלוג', icon: 'list' }, { id: 'orders', label: 'הזמנות', icon: 'inventory' }, { id: 'suppliers', label: 'ספקים', icon: 'local_shipping' }].map(st => (
               <button
                 key={st.id}
                 onClick={() => setEqSubTab(st.id)}
@@ -1966,7 +2116,7 @@ export default function AdminDashboard() {
                 <div className="flex flex-col gap-2">
                   {eqCatalog.map(item => {
                     const stock = item.stock_qty ?? 0;
-                    const lowStock = stock <= 0;
+                    const lowStock = stock <= (item.reorder_threshold ?? 0);
                     return (
                       <div key={item.id} className="bg-white rounded-2xl border border-slate-100 px-4 py-3.5 flex items-center justify-between"
                         style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
@@ -2038,6 +2188,220 @@ export default function AdminDashboard() {
                           {order.status === 'completed' ? 'הושלם' : 'ממתין'}
                         </span>
                       </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Suppliers sub-tab: reorder drafts created when stock drops to the threshold */}
+          {eqSubTab === 'suppliers' && (
+            <div>
+              <div className="flex items-center justify-between mb-4 gap-3">
+                <p className="text-xs text-slate-400">כל בוקר: טיוטות למוצרים שירדו לסף, ובדיקת תשובות מספקים במייל. שום הזמנה לא נשלחת בלי אישור.</p>
+                <div className="flex gap-2 shrink-0 flex-wrap justify-end">
+                  <button
+                    onClick={checkRepliesNow}
+                    disabled={checkingReplies}
+                    className="px-4 py-2.5 rounded-xl text-sm font-bold text-brand-purple bg-white border border-purple-200 active:scale-95 transition-all flex items-center gap-1.5 disabled:opacity-50"
+                  >
+                    <span className={`material-symbols-outlined text-base ${checkingReplies ? 'animate-spin' : ''}`}>{checkingReplies ? 'progress_activity' : 'mark_email_unread'}</span>
+                    בדוק תשובות
+                  </button>
+                  <button
+                    onClick={checkStockNow}
+                    disabled={checkingStock}
+                    className="px-4 py-2.5 rounded-xl text-sm font-bold text-white brand-gradient active:scale-95 transition-all flex items-center gap-1.5 disabled:opacity-50"
+                    style={{ boxShadow: '0 4px 14px rgba(139,53,217,0.25)' }}
+                  >
+                    <span className={`material-symbols-outlined text-base ${checkingStock ? 'animate-spin' : ''}`}>{checkingStock ? 'progress_activity' : 'inventory_2'}</span>
+                    בדוק מלאי עכשיו
+                  </button>
+                </div>
+              </div>
+              {supplierOrdersLoading ? (
+                <div className="flex justify-center py-10">
+                  <span className="material-symbols-outlined text-3xl text-slate-300 animate-spin">progress_activity</span>
+                </div>
+              ) : supplierOrders.length === 0 ? (
+                <div className="bg-white rounded-2xl border border-slate-100 py-10 flex flex-col items-center gap-2 text-slate-400"
+                  style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
+                  <span className="material-symbols-outlined text-3xl opacity-30">local_shipping</span>
+                  <p className="text-sm">אין הזמנות מספקים</p>
+                  <p className="text-xs">הגדירו "סף להזמנה חוזרת" למוצרים בקטלוג כדי להפעיל</p>
+                </div>
+              ) : (
+                <div className="flex flex-col gap-3">
+                  {supplierOrders.map(order => {
+                    const busy = supplierBusyId === order.id;
+                    const isDraft = order.status === 'draft';
+                    const items = order.supplier_order_items || [];
+                    // Catalog price is per box (purchase unit), e.g. capillaries ₪7,986 per box of 2,000
+                    const total = items.reduce((sum, i) => sum + (Number(i.unit_price_incl_vat) || 0) * i.qty_boxes, 0);
+                    const statusMeta = {
+                      draft: { label: 'ממתין לאישור', cls: 'bg-amber-50 text-amber-700' },
+                      sent: { label: order.channel === 'whatsapp' ? 'נשלח בוואטסאפ' : 'נשלח במייל', cls: 'bg-blue-50 text-blue-700' },
+                      received: { label: 'התקבל', cls: 'bg-emerald-50 text-emerald-700' },
+                      cancelled: { label: 'בוטל', cls: 'bg-slate-100 text-slate-500' },
+                    }[order.status];
+                    return (
+                      <div key={order.id} className={`bg-white rounded-2xl border border-slate-100 px-4 py-3.5 ${['received', 'cancelled'].includes(order.status) ? 'opacity-60' : ''}`}
+                        style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="text-sm font-bold text-slate-800 truncate">{order.supplier_contact_name || order.supplier_key}</p>
+                            <p className="text-xs text-slate-400 mt-0.5">
+                              #{order.order_number} · {formatDate(order.created_at)}{total > 0 && ` · כ-₪${total.toLocaleString('he-IL', { maximumFractionDigits: 0 })}`}
+                            </p>
+                          </div>
+                          <span className={`shrink-0 text-xs font-bold px-2.5 py-1 rounded-xl ${statusMeta.cls}`}>{statusMeta.label}</span>
+                        </div>
+
+                        <div className="mt-3 flex flex-col gap-2">
+                          {items.map(item => {
+                            const cat = item.equipment_catalog;
+                            const editValue = supplierQtyEdits[item.id] ?? String(item.qty_boxes);
+                            const aiDiffers = item.ai_qty_boxes != null && item.ai_qty_boxes !== item.qty_boxes;
+                            return (
+                              <div key={item.id} className="rounded-xl bg-slate-50 px-3 py-2.5">
+                                <div className="flex items-center justify-between gap-2">
+                                  <div className="min-w-0">
+                                    <p className="text-sm font-semibold text-slate-800 truncate">{item.name}</p>
+                                    {cat && isDraft && (
+                                      <p className="text-[11px] text-slate-400">מלאי: {cat.stock_qty} · סף: {cat.reorder_threshold ?? '—'}</p>
+                                    )}
+                                  </div>
+                                  {isDraft ? (
+                                    <div className="flex items-center gap-1.5 shrink-0">
+                                      <input
+                                        type="number" min="1" step="1"
+                                        value={editValue}
+                                        disabled={busy}
+                                        onChange={e => setSupplierQtyEdits(ed => ({ ...ed, [item.id]: e.target.value }))}
+                                        onBlur={() => saveSupplierQty(order, item, editValue)}
+                                        className="w-16 px-2 py-1.5 text-sm text-center rounded-lg border border-slate-200 bg-white focus:outline-none focus:border-brand-purple/50"
+                                      />
+                                      <button
+                                        onClick={() => removeSupplierItem(order, item)}
+                                        disabled={busy}
+                                        className="w-7 h-7 flex items-center justify-center rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all"
+                                      >
+                                        <span className="material-symbols-outlined text-base">close</span>
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <span className="text-sm font-bold text-slate-700 shrink-0">כמות: {item.qty_boxes}</span>
+                                  )}
+                                </div>
+                                {isDraft && item.ai_reason && (
+                                  <div className="mt-2 flex items-start gap-1.5 text-[11px] text-brand-purple">
+                                    <span className="material-symbols-outlined text-sm shrink-0">auto_awesome</span>
+                                    <p className="flex-1">
+                                      הצעת AI: <b>{item.ai_qty_boxes}</b> — {item.ai_reason}
+                                    </p>
+                                    {aiDiffers && (
+                                      <button
+                                        onClick={() => saveSupplierQty(order, item, item.ai_qty_boxes)}
+                                        disabled={busy}
+                                        className="shrink-0 font-bold underline"
+                                      >
+                                        השתמש בהצעה
+                                      </button>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                        {order.reply_status && (() => {
+                          const replyMeta = {
+                            confirmed: { label: 'אושר', icon: 'check_circle', cls: 'bg-emerald-50 text-emerald-700' },
+                            partial: { label: 'אישור חלקי', icon: 'rule', cls: 'bg-amber-50 text-amber-700' },
+                            out_of_stock: { label: 'חסר במלאי', icon: 'error', cls: 'bg-red-50 text-red-600' },
+                            price_change: { label: 'שינוי מחיר', icon: 'payments', cls: 'bg-amber-50 text-amber-700' },
+                            question: { label: 'שאלה מהספק', icon: 'help', cls: 'bg-blue-50 text-blue-700' },
+                            other: { label: 'תשובה מהספק', icon: 'mail', cls: 'bg-slate-100 text-slate-600' },
+                          }[order.reply_status];
+                          return (
+                            <div className="mt-3 rounded-xl border border-slate-100 px-3 py-2.5 space-y-1.5">
+                              <div className="flex items-center justify-between gap-2">
+                                <span className={`inline-flex items-center gap-1 text-xs font-bold px-2 py-1 rounded-lg ${replyMeta.cls}`}>
+                                  <span className="material-symbols-outlined text-sm">{replyMeta.icon}</span>
+                                  {replyMeta.label}
+                                </span>
+                                <span className="text-[11px] text-slate-400">{formatDate(order.reply_received_at)}</span>
+                              </div>
+                              <p className="text-xs text-slate-700 leading-relaxed">{order.reply_summary}</p>
+                              {order.reply_delivery_date && (
+                                <p className="text-xs text-slate-500">מועד אספקה: <span className="font-semibold text-slate-700">{order.reply_delivery_date}</span></p>
+                              )}
+                              {order.reply_web_link && (
+                                <a href={order.reply_web_link} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs font-semibold text-brand-purple underline">
+                                  פתח את המייל ב-Outlook
+                                  <span className="material-symbols-outlined text-sm">open_in_new</span>
+                                </a>
+                              )}
+                            </div>
+                          );
+                        })()}
+
+                        {isDraft && (
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            {order.supplier_email && (
+                              <button
+                                onClick={() => openComposer(order, 'email')}
+                                disabled={busy}
+                                className="flex-1 min-w-[140px] py-2.5 rounded-xl text-sm font-bold text-white brand-gradient active:scale-95 transition-all flex items-center justify-center gap-1.5 disabled:opacity-50"
+                              >
+                                <span className="material-symbols-outlined text-base">mail</span>
+                                אשר ושלח במייל
+                              </button>
+                            )}
+                            {(order.supplier_whatsapp || order.supplier_phone) && (
+                              <button
+                                onClick={() => openComposer(order, 'whatsapp')}
+                                disabled={busy}
+                                className="flex-1 min-w-[140px] py-2.5 rounded-xl text-sm font-bold text-white bg-emerald-500 active:scale-95 transition-all flex items-center justify-center gap-1.5 disabled:opacity-50"
+                              >
+                                <span className="material-symbols-outlined text-base">chat</span>
+                                שלח בוואטסאפ
+                              </button>
+                            )}
+                            {!order.supplier_email && !order.supplier_whatsapp && !order.supplier_phone && (
+                              <p className="flex-1 text-xs text-red-500 self-center">לספק אין אימייל או וואטסאפ בקטלוג</p>
+                            )}
+                            <button
+                              onClick={() => cancelSupplierOrder(order)}
+                              disabled={busy}
+                              className="px-4 py-2.5 rounded-xl text-sm font-semibold text-slate-500 bg-slate-100 active:scale-95 transition-all disabled:opacity-50"
+                            >
+                              בטל
+                            </button>
+                          </div>
+                        )}
+                        {order.status === 'sent' && (
+                          <div className="mt-3 flex gap-2">
+                            <button
+                              onClick={() => receiveSupplierOrder(order)}
+                              disabled={busy}
+                              className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white brand-gradient active:scale-95 transition-all flex items-center justify-center gap-1.5 disabled:opacity-50"
+                            >
+                              <span className="material-symbols-outlined text-base">inventory</span>
+                              סמן כהתקבל (מעדכן מלאי)
+                            </button>
+                            <button
+                              onClick={() => cancelSupplierOrder(order)}
+                              disabled={busy}
+                              className="px-4 py-2.5 rounded-xl text-sm font-semibold text-slate-500 bg-slate-100 active:scale-95 transition-all disabled:opacity-50"
+                            >
+                              בטל
+                            </button>
+                          </div>
+                        )}
+                      </div>
                     );
                   })}
                 </div>
@@ -2290,6 +2654,62 @@ export default function AdminDashboard() {
         )}
       </AnimatedModal>
 
+      {/* ── Supplier order send dialog: review and edit the message before it goes out ── */}
+      <AnimatedModal open={!!composer} onBackdropClick={() => !composerSending && setComposer(null)} zIndex={40}>
+        {composer && (
+          <div className="relative z-50 bg-white rounded-3xl w-full max-w-md shadow-2xl" style={{ maxHeight: '85vh', display: 'flex', flexDirection: 'column' }}>
+            <div className="px-5 py-4 flex items-center justify-between border-b border-slate-100 flex-shrink-0">
+              <h2 className="text-base font-extrabold text-slate-900">
+                {composer.channel === 'email' ? 'שליחת הזמנה במייל' : 'שליחת הזמנה בוואטסאפ'}
+              </h2>
+              <button onClick={() => setComposer(null)} disabled={composerSending} className="w-8 h-8 flex items-center justify-center rounded-xl bg-slate-100 text-slate-500">
+                <span className="material-symbols-outlined text-base">close</span>
+              </button>
+            </div>
+            <div className="overflow-y-auto flex-1 px-5 py-4 space-y-3">
+              <p className="text-xs text-slate-500">
+                אל: <span className="font-semibold text-slate-700">{composer.order.supplier_contact_name || composer.order.supplier_key}</span>
+                {' '}
+                <span dir="ltr">({composer.channel === 'email' ? composer.order.supplier_email : (composer.order.supplier_whatsapp || composer.order.supplier_phone)})</span>
+              </p>
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label htmlFor="supplier-message" className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider">תוכן ההודעה</label>
+                  <button
+                    onClick={() => setComposer(c => ({ ...c, text: supplierOrderText(c.order, c.items) }))}
+                    disabled={composerSending}
+                    className="text-[11px] font-semibold text-brand-purple underline"
+                  >
+                    שחזר טקסט מקורי
+                  </button>
+                </div>
+                <textarea
+                  id="supplier-message"
+                  value={composer.text}
+                  onChange={e => setComposer(c => ({ ...c, text: e.target.value }))}
+                  disabled={composerSending}
+                  rows={12}
+                  className="w-full px-3 py-2.5 text-sm leading-relaxed rounded-xl border border-slate-200 focus:border-brand-purple/50 focus:outline-none bg-white resize-y"
+                />
+              </div>
+              {composer.channel === 'whatsapp' && (
+                <p className="text-[11px] text-slate-400">וואטסאפ ייפתח עם ההודעה מוכנה, והשליחה עצמה נעשית מהטלפון.</p>
+              )}
+            </div>
+            <div className="px-5 py-4 border-t border-slate-100 flex-shrink-0">
+              <button
+                onClick={sendComposed}
+                disabled={composerSending || !composer.text.trim()}
+                className={`w-full py-3 rounded-2xl text-sm font-bold text-white active:scale-[0.98] transition-all disabled:opacity-50 flex items-center justify-center gap-1.5 ${composer.channel === 'email' ? 'brand-gradient' : 'bg-emerald-500'}`}
+              >
+                <span className="material-symbols-outlined text-base">{composer.channel === 'email' ? 'send' : 'chat'}</span>
+                {composerSending ? 'שולח...' : composer.channel === 'email' ? 'שלח לספק' : 'פתח וואטסאפ'}
+              </button>
+            </div>
+          </div>
+        )}
+      </AnimatedModal>
+
       {/* ── Product Modal (equipment catalog: SKU/supplier/pricing/stock) ── */}
       <AnimatedModal open={!!productModal} onBackdropClick={() => setProductModal(null)} zIndex={40}>
         {productModal && (
@@ -2312,6 +2732,25 @@ export default function AdminDashboard() {
                 <Field label="מחיר כולל מע״מ" type="number" step="0.01" value={productForm.price_incl_vat} onChange={v => setProductForm(f => ({ ...f, price_incl_vat: v }))} />
               </div>
               <Field label="סכום מע״מ" type="number" step="0.01" value={productForm.vat_amount} onChange={v => setProductForm(f => ({ ...f, vat_amount: v }))} />
+              <div className="pt-2 mt-1 border-t border-slate-100">
+                <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">הזמנה חוזרת מספק</p>
+                <p className="text-[11px] text-slate-400 mb-2">כשהמלאי יורד לסף, נוצרת טיוטת הזמנה לאישורך. השאירו ריק כדי לכבות.</p>
+              </div>
+              <div>
+                <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">יחידת מלאי</label>
+                <select
+                  value={productForm.stock_unit}
+                  onChange={e => setProductForm(f => ({ ...f, stock_unit: e.target.value }))}
+                  className="w-full px-3 py-2.5 text-sm rounded-xl border border-slate-200 focus:border-brand-purple/50 focus:outline-none bg-white"
+                >
+                  <option value="box">חבילה / קרטון (המלאי נספר בחבילות)</option>
+                  <option value="unit">יחידה בודדת (חבילה = יחידות בקופסה)</option>
+                </select>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="סף להזמנה חוזרת" type="number" value={productForm.reorder_threshold} onChange={v => setProductForm(f => ({ ...f, reorder_threshold: v }))} />
+                <Field label="כמות להזמנה" type="number" value={productForm.reorder_qty_boxes} onChange={v => setProductForm(f => ({ ...f, reorder_qty_boxes: v }))} />
+              </div>
               <div className="pt-2 mt-1 border-t border-slate-100">
                 <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-2">פרטי ספק</p>
               </div>

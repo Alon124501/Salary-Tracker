@@ -5,6 +5,8 @@ const supabase = require('../supabase');
 const { computeNextOccurrence } = require('../utils/scheduling');
 const { sendPushToAll } = require('../lib/webPush');
 const { safeExt } = require('../lib/safeExt');
+const { runStockCheck } = require('../lib/reorder');
+const { runReplyCheck } = require('../lib/supplierReplies');
 
 const router = express.Router();
 
@@ -156,6 +158,32 @@ router.get('/process-notifications', async (req, res) => {
   }
 
   res.json({ success: true, activated: dueIds.length });
+});
+
+// Runs daily. Equipment agent: (1) drafts supplier orders for low-stock catalog items
+// (lib/reorder.js) — drafts only, an admin approves and sends each one; (2) reads supplier
+// replies to sent orders from the company mailbox and tags them (lib/supplierReplies.js).
+// The two steps are independent: one failing doesn't skip the other.
+router.get('/equipment-agent', async (req, res) => {
+  const secret = process.env.CRON_SECRET;
+  if (!secret || req.headers.authorization !== `Bearer ${secret}`) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  const result = {};
+  try {
+    result.stock = await runStockCheck();
+  } catch (err) {
+    console.error('[cron/equipment-agent] stock check:', err.message);
+    result.stock = { error: err.message };
+  }
+  try {
+    result.replies = await runReplyCheck();
+  } catch (err) {
+    console.error('[cron/equipment-agent] reply check:', err.message);
+    result.replies = { error: err.message };
+  }
+  const failed = result.stock.error || result.replies.error;
+  res.status(failed ? 500 : 200).json({ success: !failed, ...result });
 });
 
 module.exports = router;

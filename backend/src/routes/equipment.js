@@ -4,10 +4,14 @@ const supabase = require('../supabase');
 const auth = require('../middleware/auth');
 const adminAuth = require('../middleware/adminAuth');
 const asyncHandler = require('../middleware/asyncHandler');
+const { runStockCheck, sendOrderEmail } = require('../lib/reorder');
+const { runReplyCheck } = require('../lib/supplierReplies');
 
 const router = express.Router();
 
 const emptyToUndefined = (val) => (val === '' || val === null || val === undefined ? undefined : val);
+// Reorder fields can be cleared (empty input = auto-reorder off), so empty maps to null, not undefined
+const emptyToNull = (val) => (val === '' || val === null ? null : val);
 const optionalString = (max) => z.preprocess(emptyToUndefined, z.string().trim().max(max).optional());
 const optionalNumber = () => z.preprocess(emptyToUndefined, z.coerce.number().optional());
 const optionalNonnegativeNumber = () => z.preprocess(emptyToUndefined, z.coerce.number().nonnegative().optional());
@@ -25,6 +29,9 @@ const CatalogItemSchema = z.object({
   vat_amount: optionalNonnegativeNumber(),
   units_per_box: optionalNonnegativeNumber(),
   stock_qty: optionalNumber(),
+  reorder_threshold: z.preprocess(emptyToNull, z.coerce.number().int().nonnegative().nullable().optional()),
+  reorder_qty_boxes: z.preprocess(emptyToNull, z.coerce.number().int().positive().nullable().optional()),
+  stock_unit: z.enum(['unit', 'box']).optional(),
 });
 
 const OrderSchema = z.object({
@@ -117,20 +124,23 @@ router.get('/orders', auth, adminAuth, asyncHandler(async (req, res) => {
   const { data, error } = await supabase
     .from('equipment_orders')
     .select('id, user_id, items, needed_date, status, created_at, completed_at, profiles(first_name, last_name, username)')
+    .eq('status', 'pending')
     .order('created_at', { ascending: false });
   if (error) return res.status(500).json({ error: error.message });
   res.json(data || []);
 }));
 
-// DELETE /api/equipment/orders/:id — admin marks fulfilled: decrements stock, then removes the order
+// DELETE /api/equipment/orders/:id — admin marks fulfilled: decrements stock, then marks the order
+// completed (kept, not deleted, as consumption history for supplier reorder suggestions)
 router.delete('/orders/:id', auth, adminAuth, asyncHandler(async (req, res) => {
   const { data: order, error: fetchError } = await supabase
     .from('equipment_orders')
-    .select('id, items')
+    .select('id, items, status')
     .eq('id', req.params.id)
     .single();
   if (fetchError) return res.status(500).json({ error: fetchError.message });
   if (!order) return res.status(404).json({ error: 'ההזמנה לא נמצאה' });
+  if (order.status !== 'pending') return res.status(409).json({ error: 'ההזמנה כבר הושלמה' });
 
   const unmatchedItems = [];
   for (const item of order.items) {
@@ -144,12 +154,190 @@ router.delete('/orders/:id', auth, adminAuth, asyncHandler(async (req, res) => {
 
   const { data, error } = await supabase
     .from('equipment_orders')
-    .delete()
+    .update({ status: 'completed', completed_at: new Date().toISOString() })
     .eq('id', req.params.id)
     .select()
     .single();
   if (error) return res.status(500).json({ error: error.message });
   res.json({ ...data, unmatched_items: unmatchedItems });
+}));
+
+// ── Supplier reorders (admin) ─────────────────────────────────────────────
+
+const SUPPLIER_ORDER_SELECT =
+  '*, supplier_order_items(*, equipment_catalog(stock_qty, reorder_threshold, stock_unit, units_per_box))';
+
+async function loadSupplierOrder(id) {
+  const { data, error } = await supabase
+    .from('supplier_orders')
+    .select(SUPPLIER_ORDER_SELECT)
+    .eq('id', id)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return data;
+}
+
+// GET /api/equipment/supplier-orders — open (draft/sent) first, then the 30 most recent closed
+router.get('/supplier-orders', auth, adminAuth, asyncHandler(async (req, res) => {
+  const { data: open, error: openErr } = await supabase
+    .from('supplier_orders')
+    .select(SUPPLIER_ORDER_SELECT)
+    .in('status', ['draft', 'sent'])
+    .order('created_at', { ascending: false });
+  if (openErr) return res.status(500).json({ error: openErr.message });
+
+  const { data: closed, error: closedErr } = await supabase
+    .from('supplier_orders')
+    .select(SUPPLIER_ORDER_SELECT)
+    .in('status', ['received', 'cancelled'])
+    .order('created_at', { ascending: false })
+    .limit(30);
+  if (closedErr) return res.status(500).json({ error: closedErr.message });
+
+  res.json([...(open || []), ...(closed || [])]);
+}));
+
+// POST /api/equipment/supplier-orders/check-now — run the daily stock check immediately
+router.post('/supplier-orders/check-now', auth, adminAuth, asyncHandler(async (req, res) => {
+  res.json(await runStockCheck());
+}));
+
+// POST /api/equipment/supplier-orders/check-replies — read supplier replies from the mailbox now
+router.post('/supplier-orders/check-replies', auth, adminAuth, asyncHandler(async (req, res) => {
+  res.json(await runReplyCheck());
+}));
+
+const QtySchema = z.object({
+  qty_boxes: z.coerce.number().int().positive('כמות חייבת להיות מספר שלם חיובי'),
+});
+
+// PUT /api/equipment/supplier-orders/:id/items/:itemId — edit quantity (draft only)
+router.put('/supplier-orders/:id/items/:itemId', auth, adminAuth, asyncHandler(async (req, res) => {
+  const parsed = QtySchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
+
+  const order = await loadSupplierOrder(req.params.id);
+  if (!order) return res.status(404).json({ error: 'ההזמנה לא נמצאה' });
+  if (order.status !== 'draft') return res.status(409).json({ error: 'ניתן לערוך רק טיוטה' });
+
+  const { data, error } = await supabase
+    .from('supplier_order_items')
+    .update({ qty_boxes: parsed.data.qty_boxes })
+    .eq('id', req.params.itemId)
+    .eq('order_id', req.params.id)
+    .select()
+    .single();
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data);
+}));
+
+// DELETE /api/equipment/supplier-orders/:id/items/:itemId — drop a line from a draft
+router.delete('/supplier-orders/:id/items/:itemId', auth, adminAuth, asyncHandler(async (req, res) => {
+  const order = await loadSupplierOrder(req.params.id);
+  if (!order) return res.status(404).json({ error: 'ההזמנה לא נמצאה' });
+  if (order.status !== 'draft') return res.status(409).json({ error: 'ניתן לערוך רק טיוטה' });
+
+  const { error } = await supabase
+    .from('supplier_order_items')
+    .delete()
+    .eq('id', req.params.itemId)
+    .eq('order_id', req.params.id);
+  if (error) return res.status(500).json({ error: error.message });
+
+  // Last line removed → nothing left to order
+  if (order.supplier_order_items.length <= 1) {
+    const { error: cancelErr } = await supabase
+      .from('supplier_orders').update({ status: 'cancelled' }).eq('id', req.params.id);
+    if (cancelErr) return res.status(500).json({ error: cancelErr.message });
+  }
+  res.json({ success: true });
+}));
+
+async function markSent(id, channel, adminId) {
+  const { data, error } = await supabase
+    .from('supplier_orders')
+    .update({ status: 'sent', channel, sent_at: new Date().toISOString(), approved_by: adminId })
+    .eq('id', id)
+    .eq('status', 'draft')
+    .select()
+    .single();
+  if (error) throw new Error(error.message);
+  return data;
+}
+
+const SendEmailSchema = z.object({
+  text: z.preprocess(emptyToUndefined, z.string().trim().min(1).max(5000, 'ההודעה ארוכה מדי').optional()),
+});
+
+// POST /api/equipment/supplier-orders/:id/send-email — admin approves; email goes to the supplier.
+// Body { text } is the message as edited in the send dialog (optional; generated text otherwise).
+router.post('/supplier-orders/:id/send-email', auth, adminAuth, asyncHandler(async (req, res) => {
+  const parsed = SendEmailSchema.safeParse(req.body || {});
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
+
+  const order = await loadSupplierOrder(req.params.id);
+  if (!order) return res.status(404).json({ error: 'ההזמנה לא נמצאה' });
+  if (order.status !== 'draft') return res.status(409).json({ error: 'ההזמנה כבר נשלחה' });
+  if (!order.supplier_order_items.length) return res.status(400).json({ error: 'אין פריטים בהזמנה' });
+
+  try {
+    await sendOrderEmail(order, order.supplier_order_items, parsed.data.text);
+  } catch (err) {
+    return res.status(500).json({ error: `שליחת המייל נכשלה: ${err.message}` });
+  }
+  res.json(await markSent(order.id, 'email', req.userId));
+}));
+
+// POST /api/equipment/supplier-orders/:id/mark-sent — admin sent it via WhatsApp from the browser
+router.post('/supplier-orders/:id/mark-sent', auth, adminAuth, asyncHandler(async (req, res) => {
+  const order = await loadSupplierOrder(req.params.id);
+  if (!order) return res.status(404).json({ error: 'ההזמנה לא נמצאה' });
+  if (order.status !== 'draft') return res.status(409).json({ error: 'ההזמנה כבר נשלחה' });
+  res.json(await markSent(order.id, 'whatsapp', req.userId));
+}));
+
+// POST /api/equipment/supplier-orders/:id/receive — goods arrived: add boxes to stock
+router.post('/supplier-orders/:id/receive', auth, adminAuth, asyncHandler(async (req, res) => {
+  const order = await loadSupplierOrder(req.params.id);
+  if (!order) return res.status(404).json({ error: 'ההזמנה לא נמצאה' });
+  if (order.status !== 'sent') return res.status(409).json({ error: 'ניתן לסמן כהתקבל רק הזמנה שנשלחה' });
+
+  // Claim the order first so a double click can't add the stock twice
+  const { data: claimed, error: claimErr } = await supabase
+    .from('supplier_orders')
+    .update({ status: 'received', received_at: new Date().toISOString() })
+    .eq('id', order.id)
+    .eq('status', 'sent')
+    .select('id');
+  if (claimErr) return res.status(500).json({ error: claimErr.message });
+  if (!claimed?.length) return res.status(409).json({ error: 'ההזמנה כבר סומנה כהתקבלה' });
+
+  const unmatchedItems = [];
+  for (const item of order.supplier_order_items) {
+    const cat = item.equipment_catalog;
+    if (!item.catalog_id || !cat) { unmatchedItems.push(item.name); continue; }
+    const perBox = cat.stock_unit === 'unit' ? (cat.units_per_box || 1) : 1;
+    const { data: matched, error: incError } = await supabase.rpc('increment_catalog_stock', {
+      p_catalog_id: item.catalog_id,
+      p_qty: item.qty_boxes * perBox,
+    });
+    if (incError) return res.status(500).json({ error: incError.message });
+    if (!matched) unmatchedItems.push(item.name);
+  }
+  res.json({ success: true, unmatched_items: unmatchedItems });
+}));
+
+// POST /api/equipment/supplier-orders/:id/cancel
+router.post('/supplier-orders/:id/cancel', auth, adminAuth, asyncHandler(async (req, res) => {
+  const { data, error } = await supabase
+    .from('supplier_orders')
+    .update({ status: 'cancelled' })
+    .eq('id', req.params.id)
+    .in('status', ['draft', 'sent'])
+    .select();
+  if (error) return res.status(500).json({ error: error.message });
+  if (!data?.length) return res.status(409).json({ error: 'לא ניתן לבטל הזמנה זו' });
+  res.json(data[0]);
 }));
 
 module.exports = router;

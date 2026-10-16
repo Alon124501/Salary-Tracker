@@ -13,9 +13,22 @@ if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
 // broadcast-to-all model (see routes/notifications.js). Fire-and-forget: a push
 // failure should never block the notification's own create/activate response.
 async function sendPushToAll({ title, body }) {
+  return sendPush({ title, body });
+}
+
+// Same as sendPushToAll, limited to admins (for admin-only alerts like supplier reorder drafts).
+async function sendPushToAdmins({ title, body }) {
+  const { data: admins, error } = await supabase.from('profiles').select('id').eq('is_admin', true);
+  if (error || !admins?.length) return;
+  return sendPush({ title, body }, admins.map(a => a.id));
+}
+
+async function sendPush({ title, body }, userIds) {
   if (!process.env.VAPID_PUBLIC_KEY || !process.env.VAPID_PRIVATE_KEY) return;
 
-  const { data: subs, error } = await supabase.from('push_subscriptions').select('*');
+  let query = supabase.from('push_subscriptions').select('*');
+  if (userIds) query = query.in('user_id', userIds);
+  const { data: subs, error } = await query;
   if (error || !subs?.length) return;
 
   const payload = JSON.stringify({ title, body });
@@ -37,4 +50,4 @@ async function sendPushToAll({ title, body }) {
   }));
 }
 
-module.exports = { sendPushToAll };
+module.exports = { sendPushToAll, sendPushToAdmins };
