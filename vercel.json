@@ -13,6 +13,6 @@
   "crons": [
     { "path": "/api/cron/monthly-receipts",      "schedule": "0 2 1 * *" },
     { "path": "/api/cron/process-notifications", "schedule": "0 8 * * *" },
-    { "path": "/api/cron/equipment-agent",       "schedule": "0 6 * * *" }
+    { "path": "/api/cron/equipment-agent",       "schedule": "0 6 * * 0-4" }
   ]
 }
