@@ -45,7 +45,7 @@ function prevMonth() {
   return new Date(d.getFullYear(), d.getMonth() - 1, 15).toISOString().slice(0, 7);
 }
 
-function Field({ label, value, onChange, type = 'text', dir, placeholder, step }) {
+function Field({ label, value, onChange, type = 'text', dir, placeholder, step, disabled }) {
   return (
     <div>
       <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">{label}</label>
@@ -56,7 +56,8 @@ function Field({ label, value, onChange, type = 'text', dir, placeholder, step }
         dir={dir}
         placeholder={placeholder || label}
         step={step}
-        className="w-full px-3 py-2.5 text-sm rounded-xl border border-slate-200 focus:border-brand-purple/50 focus:outline-none bg-white"
+        disabled={disabled}
+        className="w-full px-3 py-2.5 text-sm rounded-xl border border-slate-200 focus:border-brand-purple/50 focus:outline-none bg-white disabled:bg-slate-50 disabled:text-slate-500"
       />
     </div>
   );
@@ -174,7 +175,7 @@ export default function AdminDashboard() {
     name: '', sku: '', supplier_contact_name: '', supplier_email: '', supplier_phone: '',
     supplier_whatsapp: '', supplier_company_id: '', price_excl_vat: '', price_incl_vat: '',
     vat_amount: '', units_per_box: '', stock_qty: '',
-    reorder_threshold: '', reorder_qty_boxes: '', stock_unit: 'box',
+    reorder_threshold: '', reorder_qty_boxes: '', stock_unit: 'box', supplier_id: '',
   };
   const [productModal, setProductModal] = useState(null); // { id } for edit, {} for new, null closed
   const [productForm, setProductForm] = useState(EMPTY_PRODUCT_FORM);
@@ -190,6 +191,13 @@ export default function AdminDashboard() {
   const [supplierQtyEdits, setSupplierQtyEdits] = useState({}); // itemId -> draft qty string
   const [composer, setComposer] = useState(null); // { order, items, channel: 'email' | 'whatsapp', text }
   const [composerSending, setComposerSending] = useState(false);
+  const { data: suppliers = [], reload: loadSuppliers } =
+    useFetch('/equipment/suppliers', { enabled: activeTab === 'eq_orders' });
+  const EMPTY_SUPPLIER_FORM = { company_name: '', contact_name: '', email: '', phone: '', whatsapp: '', company_id: '' };
+  const [supplierModal, setSupplierModal] = useState(null); // { id } for edit, {} for new, null closed
+  const [supplierForm, setSupplierForm] = useState(EMPTY_SUPPLIER_FORM);
+  const [savingSupplier, setSavingSupplier] = useState(false);
+  const supplierLabel = (s) => s.company_name || s.contact_name || 'ספק';
 
   // Time-off requests tab state
   const { data: timeOffRequests = [], setData: setTimeOffRequests, loading: timeOffLoading, error: timeOffError } =
@@ -301,7 +309,7 @@ export default function AdminDashboard() {
         vat_amount: item.vat_amount ?? '', units_per_box: item.units_per_box ?? '',
         stock_qty: item.stock_qty ?? '',
         reorder_threshold: item.reorder_threshold ?? '', reorder_qty_boxes: item.reorder_qty_boxes ?? '',
-        stock_unit: item.stock_unit || 'box',
+        stock_unit: item.stock_unit || 'box', supplier_id: item.supplier_id || '',
       });
     } else {
       setProductModal({});
@@ -329,6 +337,56 @@ export default function AdminDashboard() {
       await api.delete(`/equipment/catalog/${id}`);
       loadEqCatalog();
     } catch (err) { showToast(err?.response?.data?.error || 'מחיקת הפריט נכשלה'); }
+  }
+
+  // Picking a supplier fills the product's supplier fields; "no supplier" leaves them editable
+  function selectProductSupplier(id) {
+    const s = suppliers.find(x => x.id === id);
+    setProductForm(f => s ? {
+      ...f, supplier_id: s.id,
+      supplier_contact_name: s.contact_name || '', supplier_email: s.email || '',
+      supplier_phone: s.phone || '', supplier_whatsapp: s.whatsapp || '',
+      supplier_company_id: s.company_id || '',
+    } : { ...f, supplier_id: '' });
+  }
+
+  // ── Supplier list actions ───────────────────────────────────────────────
+  function openSupplierModal(s) {
+    if (s) {
+      setSupplierModal(s);
+      setSupplierForm({
+        company_name: s.company_name || '', contact_name: s.contact_name || '', email: s.email || '',
+        phone: s.phone || '', whatsapp: s.whatsapp || '', company_id: s.company_id || '',
+      });
+    } else {
+      setSupplierModal({});
+      setSupplierForm(EMPTY_SUPPLIER_FORM);
+    }
+  }
+
+  async function saveSupplier() {
+    if (!supplierForm.company_name.trim() && !supplierForm.contact_name.trim()) return;
+    setSavingSupplier(true);
+    try {
+      if (supplierModal?.id) {
+        await api.put(`/equipment/suppliers/${supplierModal.id}`, supplierForm);
+      } else {
+        await api.post('/equipment/suppliers', supplierForm);
+      }
+      setSupplierModal(null);
+      loadSuppliers();
+      loadEqCatalog();
+    } catch (err) { showToast(apiErrorMsg(err, 'שמירת הספק נכשלה')); }
+    finally { setSavingSupplier(false); }
+  }
+
+  async function deleteSupplier(s) {
+    if (!confirm(`למחוק את הספק ${supplierLabel(s)}? פרטי הספק יישארו על המוצרים, אך הם לא יהיו מקושרים אליו יותר.`)) return;
+    try {
+      await api.delete(`/equipment/suppliers/${s.id}`);
+      loadSuppliers();
+      loadEqCatalog();
+    } catch (err) { showToast(apiErrorMsg(err, 'מחיקת הספק נכשלה')); }
   }
 
   // ── Supplier reorder actions ────────────────────────────────────────────
@@ -2074,7 +2132,7 @@ export default function AdminDashboard() {
         <motion.div key="eq_orders" {...panelMotionProps} className="px-4 space-y-4">
           {/* Sub-tab toggle */}
           <div className="flex gap-2">
-            {[{ id: 'catalog', label: 'קטלוג', icon: 'list' }, { id: 'orders', label: 'הזמנות', icon: 'inventory' }, { id: 'suppliers', label: 'ספקים', icon: 'local_shipping' }].map(st => (
+            {[{ id: 'catalog', label: 'קטלוג', icon: 'list' }, { id: 'orders', label: 'הזמנות', icon: 'inventory' }, { id: 'suppliers', label: 'הזמנות ספק', icon: 'local_shipping' }, { id: 'supplier_list', label: 'ספקים', icon: 'store' }].map(st => (
               <button
                 key={st.id}
                 onClick={() => setEqSubTab(st.id)}
@@ -2123,6 +2181,12 @@ export default function AdminDashboard() {
                         <button onClick={() => openProductModal(item)} className="flex-1 text-right min-w-0">
                           <p className="text-sm font-semibold text-slate-800 truncate">{item.name}</p>
                           {item.sku && <p className="text-xs text-slate-400 mt-0.5">{item.sku}</p>}
+                          {(() => {
+                            const s = suppliers.find(x => x.id === item.supplier_id);
+                            if (s) return <p className="text-xs text-slate-500 mt-0.5 truncate">ספק: {supplierLabel(s)}</p>;
+                            if (!item.supplier_contact_name && !item.supplier_email) return <p className="text-xs text-amber-600 mt-0.5">ללא ספק</p>;
+                            return null;
+                          })()}
                         </button>
                         <div className="flex items-center gap-2 shrink-0">
                           <span className={`text-xs font-bold px-2.5 py-1 rounded-xl ${lowStock ? 'bg-red-50 text-red-600' : 'bg-emerald-50 text-emerald-700'}`}>
@@ -2136,6 +2200,67 @@ export default function AdminDashboard() {
                           </button>
                           <button
                             onClick={() => deleteCatalogItem(item.id)}
+                            className="w-8 h-8 flex items-center justify-center rounded-xl text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all"
+                          >
+                            <span className="material-symbols-outlined text-base">delete</span>
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Supplier list sub-tab */}
+          {eqSubTab === 'supplier_list' && (
+            <div>
+              <div className="flex justify-end mb-4">
+                <button
+                  onClick={() => openSupplierModal(null)}
+                  className="px-4 py-2.5 rounded-xl text-sm font-bold text-white brand-gradient active:scale-95 transition-all flex items-center gap-1.5"
+                  style={{ boxShadow: '0 4px 14px rgba(139,53,217,0.25)' }}
+                >
+                  <span className="material-symbols-outlined text-base">add</span>
+                  ספק חדש
+                </button>
+              </div>
+              {suppliers.length === 0 ? (
+                <div className="bg-white rounded-2xl border border-slate-100 py-10 flex flex-col items-center gap-2 text-slate-400"
+                  style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
+                  <span className="material-symbols-outlined text-3xl opacity-30">store</span>
+                  <p className="text-sm">אין עדיין ספקים</p>
+                </div>
+              ) : (
+                <div className="flex flex-col gap-2">
+                  {suppliers.map(s => {
+                    const itemCount = eqCatalog.filter(i => i.supplier_id === s.id).length;
+                    return (
+                      <div key={s.id} className="bg-white rounded-2xl border border-slate-100 px-4 py-3.5 flex items-center justify-between"
+                        style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
+                        <button onClick={() => openSupplierModal(s)} className="flex-1 text-right min-w-0">
+                          <p className="text-sm font-semibold text-slate-800 truncate">{supplierLabel(s)}</p>
+                          {s.company_name && s.contact_name && s.contact_name !== s.company_name && (
+                            <p className="text-xs text-slate-500 mt-0.5 truncate">איש קשר: {s.contact_name}</p>
+                          )}
+                          {!s.company_name && <p className="text-xs text-amber-600 mt-0.5">חסר שם חברה</p>}
+                          {(s.phone || s.email) && (
+                            <p className="text-xs text-slate-400 mt-0.5 truncate" dir="ltr">{[s.phone, s.email].filter(Boolean).join(' · ')}</p>
+                          )}
+                        </button>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className="text-xs font-bold px-2.5 py-1 rounded-xl bg-slate-50 text-slate-600">
+                            {itemCount} מוצרים
+                          </span>
+                          <button
+                            onClick={() => openSupplierModal(s)}
+                            className="w-8 h-8 flex items-center justify-center rounded-xl text-slate-400 hover:text-brand-purple hover:bg-purple-50 transition-all"
+                          >
+                            <span className="material-symbols-outlined text-base">edit</span>
+                          </button>
+                          <button
+                            onClick={() => deleteSupplier(s)}
                             className="w-8 h-8 flex items-center justify-center rounded-xl text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all"
                           >
                             <span className="material-symbols-outlined text-base">delete</span>
@@ -2754,13 +2879,27 @@ export default function AdminDashboard() {
               <div className="pt-2 mt-1 border-t border-slate-100">
                 <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-2">פרטי ספק</p>
               </div>
-              <Field label="איש קשר" value={productForm.supplier_contact_name} onChange={v => setProductForm(f => ({ ...f, supplier_contact_name: v }))} />
-              <div className="grid grid-cols-2 gap-3">
-                <Field label="טלפון" value={productForm.supplier_phone} onChange={v => setProductForm(f => ({ ...f, supplier_phone: v }))} dir="ltr" />
-                <Field label="וואטסאפ" value={productForm.supplier_whatsapp} onChange={v => setProductForm(f => ({ ...f, supplier_whatsapp: v }))} dir="ltr" />
+              <div>
+                <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">בחירת ספק</label>
+                <select
+                  value={productForm.supplier_id}
+                  onChange={e => selectProductSupplier(e.target.value)}
+                  className="w-full px-3 py-2.5 text-sm rounded-xl border border-slate-200 focus:border-brand-purple/50 focus:outline-none bg-white"
+                >
+                  <option value="">ללא ספק (הזנה ידנית)</option>
+                  {suppliers.map(s => <option key={s.id} value={s.id}>{supplierLabel(s)}</option>)}
+                </select>
+                {productForm.supplier_id && (
+                  <p className="text-[11px] text-slate-400 mt-1">הפרטים נלקחים מהספק. לעריכתם — לשונית ״ספקים״.</p>
+                )}
               </div>
-              <Field label="אימייל" type="email" value={productForm.supplier_email} onChange={v => setProductForm(f => ({ ...f, supplier_email: v }))} dir="ltr" />
-              <Field label="ח.פ. הספק" value={productForm.supplier_company_id} onChange={v => setProductForm(f => ({ ...f, supplier_company_id: v }))} />
+              <Field label="איש קשר" disabled={!!productForm.supplier_id} value={productForm.supplier_contact_name} onChange={v => setProductForm(f => ({ ...f, supplier_contact_name: v }))} />
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="טלפון" disabled={!!productForm.supplier_id} value={productForm.supplier_phone} onChange={v => setProductForm(f => ({ ...f, supplier_phone: v }))} dir="ltr" />
+                <Field label="וואטסאפ" disabled={!!productForm.supplier_id} value={productForm.supplier_whatsapp} onChange={v => setProductForm(f => ({ ...f, supplier_whatsapp: v }))} dir="ltr" />
+              </div>
+              <Field label="אימייל" type="email" disabled={!!productForm.supplier_id} value={productForm.supplier_email} onChange={v => setProductForm(f => ({ ...f, supplier_email: v }))} dir="ltr" />
+              <Field label="ח.פ. הספק" disabled={!!productForm.supplier_id} value={productForm.supplier_company_id} onChange={v => setProductForm(f => ({ ...f, supplier_company_id: v }))} />
             </div>
             <div className="px-5 py-4 border-t border-slate-100 flex-shrink-0">
               <button
@@ -2770,6 +2909,43 @@ export default function AdminDashboard() {
                 style={{ boxShadow: '0 4px 14px rgba(139,53,217,0.3)' }}
               >
                 {savingProduct ? 'שומר...' : 'שמירה'}
+              </button>
+            </div>
+          </div>
+        )}
+      </AnimatedModal>
+
+      {/* ── Supplier Modal (shared supplier list) ── */}
+      <AnimatedModal open={!!supplierModal} onBackdropClick={() => setSupplierModal(null)} zIndex={40}>
+        {supplierModal && (
+          <div className="relative z-50 bg-white rounded-3xl w-full max-w-md shadow-2xl" style={{ maxHeight: '85vh', display: 'flex', flexDirection: 'column' }}>
+            <div className="px-5 py-4 flex items-center justify-between border-b border-slate-100 flex-shrink-0">
+              <h2 className="text-base font-extrabold text-slate-900">{supplierModal.id ? 'עריכת ספק' : 'ספק חדש'}</h2>
+              <button onClick={() => setSupplierModal(null)} className="w-8 h-8 flex items-center justify-center rounded-xl bg-slate-100 text-slate-500">
+                <span className="material-symbols-outlined text-base">close</span>
+              </button>
+            </div>
+            <div className="overflow-y-auto flex-1 px-5 py-4 space-y-3">
+              <Field label="שם חברה" value={supplierForm.company_name} onChange={v => setSupplierForm(f => ({ ...f, company_name: v }))} />
+              <Field label="איש קשר" value={supplierForm.contact_name} onChange={v => setSupplierForm(f => ({ ...f, contact_name: v }))} />
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="טלפון" value={supplierForm.phone} onChange={v => setSupplierForm(f => ({ ...f, phone: v }))} dir="ltr" />
+                <Field label="וואטסאפ" value={supplierForm.whatsapp} onChange={v => setSupplierForm(f => ({ ...f, whatsapp: v }))} dir="ltr" />
+              </div>
+              <Field label="אימייל" type="email" value={supplierForm.email} onChange={v => setSupplierForm(f => ({ ...f, email: v }))} dir="ltr" />
+              <Field label="ח.פ. הספק" value={supplierForm.company_id} onChange={v => setSupplierForm(f => ({ ...f, company_id: v }))} />
+              {supplierModal.id && (
+                <p className="text-[11px] text-slate-400">שינוי הפרטים יעודכן בכל המוצרים המקושרים לספק זה.</p>
+              )}
+            </div>
+            <div className="px-5 py-4 border-t border-slate-100 flex-shrink-0">
+              <button
+                onClick={saveSupplier}
+                disabled={savingSupplier || (!supplierForm.company_name.trim() && !supplierForm.contact_name.trim())}
+                className="w-full py-3 rounded-2xl text-sm font-bold text-white brand-gradient active:scale-[0.98] transition-all disabled:opacity-50"
+                style={{ boxShadow: '0 4px 14px rgba(139,53,217,0.3)' }}
+              >
+                {savingSupplier ? 'שומר...' : 'שמירה'}
               </button>
             </div>
           </div>

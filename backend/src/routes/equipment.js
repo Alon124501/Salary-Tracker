@@ -32,7 +32,35 @@ const CatalogItemSchema = z.object({
   reorder_threshold: z.preprocess(emptyToNull, z.coerce.number().int().nonnegative().nullable().optional()),
   reorder_qty_boxes: z.preprocess(emptyToNull, z.coerce.number().int().positive().nullable().optional()),
   stock_unit: z.enum(['unit', 'box']).optional(),
+  supplier_id: z.preprocess(emptyToNull, z.uuid().nullable().optional()),
 });
+
+const SupplierSchema = z.object({
+  company_name: optionalString(200),
+  contact_name: optionalString(200),
+  email:        optionalString(200),
+  phone:        optionalString(50),
+  whatsapp:     optionalString(50),
+  company_id:   optionalString(50),
+}).refine(s => s.company_name || s.contact_name, { message: 'נדרש שם חברה או איש קשר' });
+
+// Supplier record → the inline snapshot columns on equipment_catalog
+const supplierSnapshot = (s) => ({
+  supplier_contact_name: s.contact_name ?? null,
+  supplier_email:        s.email ?? null,
+  supplier_phone:        s.phone ?? null,
+  supplier_whatsapp:     s.whatsapp ?? null,
+  supplier_company_id:   s.company_id ?? null,
+});
+
+// When a catalog item is linked to a supplier, its inline supplier fields always come from that supplier
+async function withSupplierSnapshot(item) {
+  if (!item.supplier_id) return item;
+  const { data: supplier, error } = await supabase
+    .from('suppliers').select('*').eq('id', item.supplier_id).single();
+  if (error || !supplier) throw Object.assign(new Error('ספק לא נמצא'), { status: 400 });
+  return { ...item, ...supplierSnapshot(supplier) };
+}
 
 const OrderSchema = z.object({
   items: z.array(z.object({
@@ -70,9 +98,13 @@ router.post('/catalog', auth, adminAuth, asyncHandler(async (req, res) => {
   const parsed = CatalogItemSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
 
+  let item;
+  try { item = await withSupplierSnapshot(parsed.data); }
+  catch (e) { return res.status(e.status || 500).json({ error: e.message }); }
+
   const { data, error } = await supabase
     .from('equipment_catalog')
-    .insert(parsed.data)
+    .insert(item)
     .select()
     .single();
   if (error) return res.status(500).json({ error: error.message });
@@ -84,9 +116,13 @@ router.put('/catalog/:id', auth, adminAuth, asyncHandler(async (req, res) => {
   const parsed = CatalogItemSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
 
+  let item;
+  try { item = await withSupplierSnapshot(parsed.data); }
+  catch (e) { return res.status(e.status || 500).json({ error: e.message }); }
+
   const { data, error } = await supabase
     .from('equipment_catalog')
-    .update(parsed.data)
+    .update(item)
     .eq('id', req.params.id)
     .select()
     .single();
@@ -98,6 +134,69 @@ router.put('/catalog/:id', auth, adminAuth, asyncHandler(async (req, res) => {
 router.delete('/catalog/:id', auth, adminAuth, asyncHandler(async (req, res) => {
   const { error } = await supabase
     .from('equipment_catalog')
+    .delete()
+    .eq('id', req.params.id);
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ success: true });
+}));
+
+// ── Suppliers (admin) ─────────────────────────────────────────────────────
+
+// GET /api/equipment/suppliers — admin
+router.get('/suppliers', auth, adminAuth, asyncHandler(async (req, res) => {
+  const { data, error } = await supabase
+    .from('suppliers')
+    .select('*')
+    .order('created_at', { ascending: true });
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data || []);
+}));
+
+// POST /api/equipment/suppliers — admin
+router.post('/suppliers', auth, adminAuth, asyncHandler(async (req, res) => {
+  const parsed = SupplierSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
+
+  const { data, error } = await supabase
+    .from('suppliers')
+    .insert(parsed.data)
+    .select()
+    .single();
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data);
+}));
+
+// PUT /api/equipment/suppliers/:id — admin; also refreshes the snapshot on every linked catalog item
+router.put('/suppliers/:id', auth, adminAuth, asyncHandler(async (req, res) => {
+  const parsed = SupplierSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
+
+  // Cleared inputs arrive as undefined; store them as null so the field is actually emptied
+  const update = Object.fromEntries(
+    ['company_name', 'contact_name', 'email', 'phone', 'whatsapp', 'company_id']
+      .map(k => [k, parsed.data[k] ?? null]));
+
+  const { data, error } = await supabase
+    .from('suppliers')
+    .update(update)
+    .eq('id', req.params.id)
+    .select()
+    .single();
+  if (error) return res.status(500).json({ error: error.message });
+
+  const { error: syncErr } = await supabase
+    .from('equipment_catalog')
+    .update(supplierSnapshot(data))
+    .eq('supplier_id', req.params.id);
+  if (syncErr) return res.status(500).json({ error: syncErr.message });
+
+  res.json(data);
+}));
+
+// DELETE /api/equipment/suppliers/:id — admin; linked items keep their snapshot, link becomes null
+router.delete('/suppliers/:id', auth, adminAuth, asyncHandler(async (req, res) => {
+  const { error } = await supabase
+    .from('suppliers')
     .delete()
     .eq('id', req.params.id);
   if (error) return res.status(500).json({ error: error.message });
