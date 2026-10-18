@@ -175,7 +175,7 @@ export default function AdminDashboard() {
     name: '', sku: '', supplier_contact_name: '', supplier_email: '', supplier_phone: '',
     supplier_whatsapp: '', supplier_company_id: '', price_excl_vat: '', price_incl_vat: '',
     vat_amount: '', units_per_box: '', stock_qty: '',
-    reorder_threshold: '', reorder_qty_boxes: '', stock_unit: 'box', supplier_id: '',
+    reorder_threshold: '', stock_unit: 'box', supplier_id: '',
   };
   const [productModal, setProductModal] = useState(null); // { id } for edit, {} for new, null closed
   const [productForm, setProductForm] = useState(EMPTY_PRODUCT_FORM);
@@ -308,7 +308,7 @@ export default function AdminDashboard() {
         price_excl_vat: item.price_excl_vat ?? '', price_incl_vat: item.price_incl_vat ?? '',
         vat_amount: item.vat_amount ?? '', units_per_box: item.units_per_box ?? '',
         stock_qty: item.stock_qty ?? '',
-        reorder_threshold: item.reorder_threshold ?? '', reorder_qty_boxes: item.reorder_qty_boxes ?? '',
+        reorder_threshold: item.reorder_threshold ?? '',
         stock_unit: item.stock_unit || 'box', supplier_id: item.supplier_id || '',
       });
     } else {
@@ -2872,10 +2872,7 @@ export default function AdminDashboard() {
                   <option value="unit">יחידה בודדת (חבילה = יחידות בקופסה)</option>
                 </select>
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                <Field label="סף להזמנה חוזרת" type="number" value={productForm.reorder_threshold} onChange={v => setProductForm(f => ({ ...f, reorder_threshold: v }))} />
-                <Field label="כמות להזמנה" type="number" value={productForm.reorder_qty_boxes} onChange={v => setProductForm(f => ({ ...f, reorder_qty_boxes: v }))} />
-              </div>
+              <Field label="סף להזמנה חוזרת" type="number" value={productForm.reorder_threshold} onChange={v => setProductForm(f => ({ ...f, reorder_threshold: v }))} />
               <div className="pt-2 mt-1 border-t border-slate-100">
                 <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-2">פרטי ספק</p>
               </div>

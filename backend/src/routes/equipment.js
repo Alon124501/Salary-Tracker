@@ -30,7 +30,6 @@ const CatalogItemSchema = z.object({
   units_per_box: optionalNonnegativeNumber(),
   stock_qty: optionalNumber(),
   reorder_threshold: z.preprocess(emptyToNull, z.coerce.number().int().nonnegative().nullable().optional()),
-  reorder_qty_boxes: z.preprocess(emptyToNull, z.coerce.number().int().positive().nullable().optional()),
   stock_unit: z.enum(['unit', 'box']).optional(),
   supplier_id: z.preprocess(emptyToNull, z.uuid().nullable().optional()),
 });

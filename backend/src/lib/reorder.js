@@ -74,8 +74,11 @@ const SUGGESTION_JSON_SCHEMA = {
   additionalProperties: false,
 };
 
+// Draft quantity when the AI can't suggest one; the admin reviews every draft before sending anyway
+const FALLBACK_QTY_BOXES = 1;
+
 // Returns { suggested_boxes, reason } or null (no key, no history, API failure, refusal).
-// Null means the draft simply keeps the admin's rule quantity.
+// Null means the draft line starts at FALLBACK_QTY_BOXES.
 async function suggestQuantity(item, weeklyUsage) {
   if (!anthropic) return null;
   if (!weeklyUsage.some(n => n > 0)) return null;
@@ -88,11 +91,10 @@ async function suggestQuantity(item, weeklyUsage) {
     `יחידות בקרטון: ${unitsPerBox}`,
     `מלאי נוכחי (ביחידות מלאי): ${item.stock_qty}`,
     `סף הזמנה חוזרת (ביחידות מלאי): ${item.reorder_threshold}`,
-    `כמות ברירת מחדל שהמנהל הגדיר: ${item.reorder_qty_boxes} קרטונים`,
     `צריכה שבועית ב-${weeklyUsage.length} השבועות האחרונים (ביחידות מלאי, מהישן לחדש): ${weeklyUsage.join(', ')}`,
     '',
     'המטרה: מלאי שיספיק לכ-4 שבועות קדימה מעל הסף, בלי להזמין יותר מדי.',
-    'אם אין סיבה ברורה לסטות מכמות ברירת המחדל, החזר אותה. כתוב את ההסבר בעברית.',
+    'כתוב את ההסבר בעברית.',
   ].join('\n');
 
   try {
@@ -138,7 +140,7 @@ async function runStockCheck() {
   if (catErr) throw new Error(catErr.message);
 
   const low = (catalog || []).filter(i =>
-    i.stock_qty <= i.reorder_threshold && Number(i.reorder_qty_boxes) > 0);
+    i.stock_qty <= i.reorder_threshold);
   if (!low.length) return { drafted: [] };
 
   // Skip items already in a draft or sent (not yet received) order
@@ -190,10 +192,10 @@ async function runStockCheck() {
         catalog_id: item.id,
         name: item.name,
         sku: item.sku,
-        rule_qty_boxes: item.reorder_qty_boxes,
+        rule_qty_boxes: FALLBACK_QTY_BOXES,
         ai_qty_boxes: ai?.suggested_boxes ?? null,
         ai_reason: ai?.reason ?? null,
-        qty_boxes: item.reorder_qty_boxes,
+        qty_boxes: ai?.suggested_boxes ?? FALLBACK_QTY_BOXES,
         unit_price_incl_vat: item.price_incl_vat,
       };
     }));
