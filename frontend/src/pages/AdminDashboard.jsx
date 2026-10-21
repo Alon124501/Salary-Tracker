@@ -181,6 +181,8 @@ export default function AdminDashboard() {
   const [productForm, setProductForm] = useState(EMPTY_PRODUCT_FORM);
   const [savingProduct, setSavingProduct] = useState(false);
   const [eqOrderModal, setEqOrderModal] = useState(null);
+  // Quantities admin will actually supply, keyed by catalog_id (starts at the requested qty)
+  const [eqEditQty, setEqEditQty] = useState({});
   const [completingOrderId, setCompletingOrderId] = useState(null);
   const { data: supplierOrders = [], loading: supplierOrdersLoading, reload: loadSupplierOrders } =
     useFetch('/equipment/supplier-orders');
@@ -559,12 +561,21 @@ export default function AdminDashboard() {
     }
   }
 
-  async function completeOrder(id) {
+  function openEqOrder(order) {
+    setEqEditQty(Object.fromEntries((order.items || []).map(i => [i.catalog_id, i.quantity])));
+    setEqOrderModal(order);
+  }
+
+  async function completeOrder(order) {
+    const id = order.id;
+    const changed = (order.items || []).some(i => eqEditQty[i.catalog_id] !== i.quantity);
     setCompletingOrderId(id);
     try {
-      const { data } = await api.delete(`/equipment/orders/${id}`);
+      const { data } = await api.delete(`/equipment/orders/${id}`,
+        changed ? { params: { quantities: JSON.stringify(eqEditQty) } } : undefined);
       setEqOrders(prev => prev.filter(o => o.id !== id));
       setEqOrderModal(null);
+      loadEqCatalog();
       if (data?.unmatched_items?.length) {
         showToast(`ההזמנה הושלמה, אך המלאי לא עודכן עבור: ${data.unmatched_items.join(', ')} (הפריט הוסר מהקטלוג)`);
       } else {
@@ -2296,7 +2307,7 @@ export default function AdminDashboard() {
                     return (
                       <button
                         key={order.id}
-                        onClick={() => setEqOrderModal(order)}
+                        onClick={() => openEqOrder(order)}
                         className="bg-white rounded-2xl border border-slate-100 px-4 py-3.5 flex items-center justify-between text-left w-full active:scale-[0.99] transition-all"
                         style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}
                       >
@@ -2308,6 +2319,12 @@ export default function AdminDashboard() {
                           <p className="text-xs font-semibold text-brand-purple mt-0.5">
                             נדרש: {order.needed_date ? formatDate(order.needed_date) : '—'}
                           </p>
+                          {order.note && (
+                            <p className="text-xs font-semibold text-amber-700 mt-0.5 flex items-center gap-1">
+                              <span className="material-symbols-outlined text-sm">sticky_note_2</span>
+                              יש הערה
+                            </p>
+                          )}
                         </div>
                         <span className={`text-xs font-bold px-2.5 py-1 rounded-xl ${order.status === 'completed' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
                           {order.status === 'completed' ? 'הושלם' : 'ממתין'}
@@ -2757,17 +2774,65 @@ export default function AdminDashboard() {
               </button>
             </div>
             <div className="overflow-y-auto flex-1 px-5 py-4 space-y-2">
-              {(eqOrderModal.items || []).map((item, i) => (
-                <div key={i} className="flex items-center justify-between py-2.5 border-b border-slate-50 last:border-0">
-                  <p className="text-sm text-slate-700">{item.name}</p>
-                  <span className="text-sm font-bold text-slate-900 bg-slate-100 px-2.5 py-1 rounded-lg">×{item.quantity}</span>
+              {eqOrderModal.note && (
+                <div className="bg-amber-50 border border-amber-100 rounded-2xl px-4 py-3 mb-2">
+                  <p className="text-xs font-bold text-amber-700 flex items-center gap-1 mb-1">
+                    <span className="material-symbols-outlined text-sm">chat</span>
+                    הערת העובד
+                  </p>
+                  <p className="text-sm text-slate-800 whitespace-pre-wrap break-words">{eqOrderModal.note}</p>
                 </div>
-              ))}
+              )}
+              {(eqOrderModal.items || []).map((item, i) => {
+                const qty = eqEditQty[item.catalog_id] ?? item.quantity;
+                const setQty = n => setEqEditQty(q => ({ ...q, [item.catalog_id]: Math.min(item.quantity, Math.max(0, n)) }));
+                const cat = eqCatalog.find(c => c.id === item.catalog_id);
+                const stock = cat ? Number(cat.stock_qty || 0) : null;
+                return (
+                  <div key={i} className="flex items-center justify-between py-2.5 border-b border-slate-50 last:border-0">
+                    <div>
+                      <p className={`text-sm ${qty === 0 ? 'text-slate-400 line-through' : 'text-slate-700'}`}>{item.name}</p>
+                      {stock !== null && (
+                        <p className={`text-[11px] mt-0.5 ${qty > stock ? 'text-red-600 font-semibold' : 'text-slate-400'}`}>
+                          במלאי: {stock} {cat.stock_unit === 'unit' ? "יח'" : 'חבילות'}
+                        </p>
+                      )}
+                      {qty !== item.quantity && (
+                        <p className="text-[11px] text-amber-700 mt-0.5">הוזמן: {item.quantity}</p>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setQty(qty - 1)}
+                        className="w-8 h-8 flex items-center justify-center rounded-xl bg-slate-100 text-slate-600 font-bold active:scale-95 transition-all"
+                      >−</button>
+                      <input
+                        type="number"
+                        min="0"
+                        max={item.quantity}
+                        inputMode="numeric"
+                        value={qty}
+                        onChange={e => {
+                          const n = parseInt(e.target.value, 10);
+                          setQty(Number.isFinite(n) ? n : 0);
+                        }}
+                        onFocus={e => e.target.select()}
+                        className="w-12 text-center text-sm font-bold text-slate-800 rounded-xl border border-slate-200 py-1 focus:outline-none focus:ring-2 focus:ring-brand-purple/30"
+                      />
+                      <button
+                        onClick={() => setQty(qty + 1)}
+                        disabled={qty >= item.quantity}
+                        className="w-8 h-8 flex items-center justify-center rounded-xl bg-slate-100 text-slate-600 font-bold active:scale-95 transition-all disabled:opacity-30"
+                      >+</button>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
             <div className="px-5 py-4 border-t border-slate-100 flex-shrink-0 space-y-2">
-              <p className="text-[11px] text-slate-400 text-center">סימון כהושלם יפחית את הכמויות שהוזמנו מהמלאי</p>
+              <p className="text-[11px] text-slate-400 text-center">סימון כהושלם יפחית מהמלאי את הכמויות שסופקו</p>
               <button
-                onClick={() => completeOrder(eqOrderModal.id)}
+                onClick={() => completeOrder(eqOrderModal)}
                 disabled={completingOrderId === eqOrderModal.id}
                 className="w-full py-3 rounded-2xl text-sm font-bold text-white brand-gradient active:scale-[0.98] transition-all disabled:opacity-50"
                 style={{ boxShadow: '0 4px 14px rgba(139,53,217,0.3)' }}

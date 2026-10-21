@@ -116,6 +116,7 @@ export default function PortalPage() {
     useFetch('/equipment/catalog', { enabled: tab === 'equipment' });
   const [eqQty, setEqQty] = useState({});
   const [eqNeededDate, setEqNeededDate] = useState('');
+  const [eqNote, setEqNote] = useState('');
   const [eqSubmitting, setEqSubmitting] = useState(false);
 
   // Tutorial videos state
@@ -142,12 +143,14 @@ export default function PortalPage() {
     const items = eqCatalog
       .filter(item => (eqQty[item.id] || 0) > 0)
       .map(item => ({ catalog_id: item.id, name: item.name, quantity: eqQty[item.id] }));
-    if (items.length === 0 || !eqNeededDate) return;
+    const note = eqNote.trim();
+    if ((items.length === 0 && !note) || !eqNeededDate) return;
     setEqSubmitting(true);
     try {
-      await api.post('/equipment/orders', { items, needed_date: eqNeededDate });
+      await api.post('/equipment/orders', { items, needed_date: eqNeededDate, note });
       setEqQty({});
       setEqNeededDate('');
+      setEqNote('');
       showToast('ההזמנה נשלחה', 'success');
     } catch (err) { showToast(err?.response?.data?.error || 'שליחת ההזמנה נכשלה'); }
     finally { setEqSubmitting(false); }
@@ -353,6 +356,18 @@ export default function PortalPage() {
                         </div>
                       ))}
                     </div>
+                    <div className="bg-white rounded-2xl border border-slate-100 px-4 py-3.5 mb-3"
+                      style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
+                      <label className="text-sm font-semibold text-slate-800 block mb-2">הערות / בקשה מיוחדת</label>
+                      <textarea
+                        value={eqNote}
+                        onChange={e => setEqNote(e.target.value)}
+                        maxLength={1000}
+                        rows={3}
+                        placeholder="פריט שלא מופיע ברשימה, מידה, הערה..."
+                        className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-800 resize-none focus:outline-none focus:ring-2 focus:ring-brand-purple/30"
+                      />
+                    </div>
                     <div className="bg-white rounded-2xl border border-slate-100 px-4 py-3.5 mb-5"
                       style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
                       <label className="text-sm font-semibold text-slate-800 block mb-2">תאריך נדרש *</label>
@@ -366,7 +381,7 @@ export default function PortalPage() {
                     </div>
                     <button
                       onClick={submitOrder}
-                      disabled={eqSubmitting || Object.values(eqQty).every(v => !v) || !eqNeededDate}
+                      disabled={eqSubmitting || (Object.values(eqQty).every(v => !v) && !eqNote.trim()) || !eqNeededDate}
                       className="w-full py-3 rounded-2xl text-sm font-bold text-white brand-gradient active:scale-[0.98] transition-all disabled:opacity-40"
                       style={{ boxShadow: '0 4px 14px rgba(139,53,217,0.3)' }}
                     >

@@ -66,9 +66,13 @@ const OrderSchema = z.object({
     catalog_id: z.uuid(),
     name:       z.string().trim().min(1).max(200),
     quantity:   z.coerce.number().positive(),
-  })).min(1, 'נדרש מערך פריטים'),
+  })).default([]),
   needed_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'נדרש תאריך תקין'),
-});
+  note: optionalString(1000),
+}).refine(o => o.items.length > 0 || o.note, { message: 'נדרש לבחור פריט או לכתוב הערה' });
+
+// Admin-edited delivered quantities on completion: { catalog_id: qty }, sent as a JSON query param
+const DeliveredQtySchema = z.record(z.string(), z.coerce.number().nonnegative('כמות לא תקינה'));
 
 // GET /api/equipment/catalog — all authenticated (minimal fields; no supplier/pricing data)
 router.get('/catalog', auth, asyncHandler(async (req, res) => {
@@ -206,11 +210,11 @@ router.delete('/suppliers/:id', auth, adminAuth, asyncHandler(async (req, res) =
 router.post('/orders', auth, asyncHandler(async (req, res) => {
   const parsed = OrderSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
-  const { items, needed_date } = parsed.data;
+  const { items, needed_date, note } = parsed.data;
 
   const { data, error } = await supabase
     .from('equipment_orders')
-    .insert({ user_id: req.userId, items, needed_date })
+    .insert({ user_id: req.userId, items, needed_date, note: note ?? null })
     .select()
     .single();
   if (error) return res.status(500).json({ error: error.message });
@@ -221,7 +225,7 @@ router.post('/orders', auth, asyncHandler(async (req, res) => {
 router.get('/orders', auth, adminAuth, asyncHandler(async (req, res) => {
   const { data, error } = await supabase
     .from('equipment_orders')
-    .select('id, user_id, items, needed_date, status, created_at, completed_at, profiles(first_name, last_name, username)')
+    .select('id, user_id, items, needed_date, note, status, created_at, completed_at, profiles(first_name, last_name, username)')
     .eq('status', 'pending')
     .order('created_at', { ascending: false });
   if (error) return res.status(500).json({ error: error.message });
@@ -229,8 +233,19 @@ router.get('/orders', auth, adminAuth, asyncHandler(async (req, res) => {
 }));
 
 // DELETE /api/equipment/orders/:id — admin marks fulfilled: decrements stock, then marks the order
-// completed (kept, not deleted, as consumption history for supplier reorder suggestions)
+// completed (kept, not deleted, as consumption history for supplier reorder suggestions).
+// Optional ?quantities={catalog_id: qty} lets admin supply less than requested (0 = not supplied).
 router.delete('/orders/:id', auth, adminAuth, asyncHandler(async (req, res) => {
+  let delivered = {};
+  if (req.query.quantities) {
+    let raw;
+    try { raw = JSON.parse(req.query.quantities); }
+    catch { return res.status(400).json({ error: 'כמויות לא תקינות' }); }
+    const parsedQty = DeliveredQtySchema.safeParse(raw);
+    if (!parsedQty.success) return res.status(400).json({ error: parsedQty.error.issues[0].message });
+    delivered = parsedQty.data;
+  }
+
   const { data: order, error: fetchError } = await supabase
     .from('equipment_orders')
     .select('id, items, status')
@@ -240,8 +255,18 @@ router.delete('/orders/:id', auth, adminAuth, asyncHandler(async (req, res) => {
   if (!order) return res.status(404).json({ error: 'ההזמנה לא נמצאה' });
   if (order.status !== 'pending') return res.status(409).json({ error: 'ההזמנה כבר הושלמה' });
 
-  const unmatchedItems = [];
+  // quantity becomes what was actually supplied; the original ask is kept as requested_quantity
+  const finalItems = [];
   for (const item of order.items) {
+    const qty = delivered[item.catalog_id];
+    if (qty === undefined || qty === item.quantity) { finalItems.push(item); continue; }
+    if (qty > item.quantity) return res.status(400).json({ error: 'לא ניתן לספק יותר מהכמות שהוזמנה' });
+    finalItems.push({ ...item, quantity: qty, requested_quantity: item.quantity });
+  }
+
+  const unmatchedItems = [];
+  for (const item of finalItems) {
+    if (!item.quantity) continue;
     const { data: matched, error: decError } = await supabase.rpc('decrement_catalog_stock', {
       p_catalog_id: item.catalog_id,
       p_qty: item.quantity,
@@ -252,7 +277,7 @@ router.delete('/orders/:id', auth, adminAuth, asyncHandler(async (req, res) => {
 
   const { data, error } = await supabase
     .from('equipment_orders')
-    .update({ status: 'completed', completed_at: new Date().toISOString() })
+    .update({ items: finalItems, status: 'completed', completed_at: new Date().toISOString() })
     .eq('id', req.params.id)
     .select()
     .single();
