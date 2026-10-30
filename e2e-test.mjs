@@ -22,9 +22,11 @@ if (!SUPA_URL || !SUPA_KEY) {
   process.exit(1);
 }
 
-const supabase = createClient(SUPA_URL, SUPA_KEY, {
-  auth: { autoRefreshToken: false, persistSession: false },
-});
+const clientOpts = { auth: { autoRefreshToken: false, persistSession: false } };
+const supabase = createClient(SUPA_URL, SUPA_KEY, clientOpts);
+// Logins get their own client: signInWithPassword stores a user session on the
+// client, after which its queries run as that user instead of bypassing RLS.
+const supabaseAuth = createClient(SUPA_URL, SUPA_KEY, clientOpts);
 
 const ADMIN_EMAIL  = `e2e-admin-${Date.now()}@salary-tracker.app`;
 const TESTER_EMAIL = `e2e-tester-${Date.now()}@salary-tracker.app`;
@@ -105,13 +107,13 @@ async function setup() {
   info(`Tester profile inserted`);
 
   // Log in as admin
-  const { data: as } = await supabase.auth.signInWithPassword({ email: ADMIN_EMAIL, password: PASSWORD });
+  const { data: as } = await supabaseAuth.auth.signInWithPassword({ email: ADMIN_EMAIL, password: PASSWORD });
   adminToken = as?.session?.access_token;
   if (!adminToken) { fail('Admin login'); process.exit(1); }
   info('Admin token obtained');
 
   // Log in as tester
-  const { data: ts } = await supabase.auth.signInWithPassword({ email: TESTER_EMAIL, password: PASSWORD });
+  const { data: ts } = await supabaseAuth.auth.signInWithPassword({ email: TESTER_EMAIL, password: PASSWORD });
   testerToken = ts?.session?.access_token;
   if (!testerToken) { fail('Tester login'); process.exit(1); }
   info('Tester token obtained');
