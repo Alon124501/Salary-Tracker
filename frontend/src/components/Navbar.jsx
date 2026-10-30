@@ -6,7 +6,6 @@ import { unsubscribePush } from '../push.js';
 
 const navItems = [
   { path: '/', icon: 'home', label: 'בית' },
-  { path: '/stats', icon: 'insights', label: 'סטטיסטיקה' },
   { path: '/entry', icon: 'add_circle', label: 'דיווח' },
   { path: '/screening-locations', icon: 'business', label: 'סקר' },
   { path: '/portal', icon: 'hub', label: 'פורטל' },

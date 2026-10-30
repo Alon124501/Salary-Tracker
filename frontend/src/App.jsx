@@ -14,7 +14,6 @@ function ScrollToTop() {
 import Login from './pages/Login.jsx';
 import Dashboard from './pages/Dashboard.jsx';
 import EntryPage from './pages/EntryPage.jsx';
-import StatsPage from './pages/StatsPage.jsx';
 import SettingsPage from './pages/SettingsPage.jsx';
 import EditProfilePage from './pages/EditProfilePage.jsx';
 import ResetPasswordPage from './pages/ResetPasswordPage.jsx';
@@ -111,7 +110,6 @@ export default function App() {
         <Route element={<PrivateRoute><AppLayout /></PrivateRoute>}>
           <Route path="/" element={<Dashboard />} />
           <Route path="/entry/:date?" element={<EntryPage />} />
-          <Route path="/stats" element={<StatsPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/edit-profile" element={<EditProfilePage />} />
           <Route path="/screening-locations" element={<ScreeningLocationsPage />} />
