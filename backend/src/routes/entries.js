@@ -6,6 +6,7 @@ const auth     = require('../middleware/auth');
 const asyncHandler = require('../middleware/asyncHandler');
 const { foodAudit, foodQualifyingCountFor, dailyExpenses, FOOD_BONUS_TEST_THRESHOLD } = require('../lib/payCalc');
 const { safeExt } = require('../lib/safeExt');
+const { loadCancelReasons, applyCancellationBreakdown } = require('../lib/cancelReasons');
 
 const router = express.Router();
 router.use(auth);
@@ -35,6 +36,12 @@ function isReasonableDate(s) {
   return year >= nowYear - 3 && year <= nowYear + 1;
 }
 
+// Per-reason breakdown; entries.cancellations is derived from its sum.
+const CancellationReasonsField = z.array(z.object({
+  reason_id: z.string().uuid(),
+  count:     z.coerce.number().int().min(0),
+})).max(50).optional();
+
 const EntryBodySchema = z.object({
   date:                  z.string().refine(isReasonableDate, 'תאריך לא תקין או מחוץ לטווח המותר').optional(),
   insurance_tests:       NumericField,
@@ -46,7 +53,9 @@ const EntryBodySchema = z.object({
   food_expense:          NumericField,
   parking_expense:       NumericField,
   toll_expense:          NumericField,
-  cancellations:         NumericField,
+  cancellations:         z.coerce.number().min(0).optional(),
+  cancellation_reasons:  CancellationReasonsField,
+  cancellation_other_note: z.string().max(200).optional(),
   notes:                 z.string().max(500).optional().default(''),
 });
 
@@ -64,6 +73,8 @@ const PutBodySchema = z.object({
   parking_expense:       PutNumericField,
   toll_expense:          PutNumericField,
   cancellations:         PutNumericField,
+  cancellation_reasons:  CancellationReasonsField,
+  cancellation_other_note: z.string().max(200).optional(),
   notes:                 z.string().max(500).optional(),
 });
 
@@ -144,7 +155,9 @@ router.post('/', asyncHandler(async (req, res) => {
   if (!date) return res.status(400).json({ error: 'נדרש תאריך' });
 
   const { data: existing } = await supabase.from('entries')
-    .select('food_expense').eq('user_id', req.userId).eq('date', date).maybeSingle();
+    .select('food_expense, cancellations, cancellation_reasons').eq('user_id', req.userId).eq('date', date).maybeSingle();
+  const cancelErr = applyCancellationBreakdown(fields, existing, await loadCancelReasons());
+  if (cancelErr) return res.status(400).json({ error: cancelErr });
   enforceFoodGate(fields, existing?.food_expense);
 
   const { data: entry, error } = await supabase.from('entries').upsert({
@@ -420,9 +433,13 @@ router.put('/:id', asyncHandler(async (req, res) => {
     food_expense:          fields.food_expense          ?? entry.food_expense,
     parking_expense:       fields.parking_expense       ?? entry.parking_expense,
     toll_expense:          fields.toll_expense          ?? entry.toll_expense,
-    cancellations:         fields.cancellations         ?? entry.cancellations,
+    cancellations:         fields.cancellations,
+    cancellation_reasons:  fields.cancellation_reasons,
+    cancellation_other_note: fields.cancellation_other_note,
     notes:                 fields.notes                 ?? entry.notes,
   };
+  const cancelErr = applyCancellationBreakdown(updates, entry, await loadCancelReasons());
+  if (cancelErr) return res.status(400).json({ error: cancelErr });
   enforceFoodGate(updates, entry.food_expense);
 
   const { data: updated, error: updateErr } = await supabase.from('entries')
@@ -461,6 +478,8 @@ router.post('/restore', asyncHandler(async (req, res) => {
     parking_expense: Math.max(0, Number(e.parking_expense) || 0),
     toll_expense: Math.max(0, Number(e.toll_expense) || 0),
     cancellations: Math.max(0, Number(e.cancellations) || 0),
+    cancellation_reasons: Array.isArray(e.cancellation_reasons) ? e.cancellation_reasons : [],
+    cancellation_other_note: e.cancellation_other_note || null,
     notes: e.notes || '',
   }));
 

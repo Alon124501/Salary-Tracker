@@ -1,4 +1,5 @@
 const { totalTestsFor } = require('./payCalc');
+const { formatCancelReasons } = require('./cancelReasons');
 
 // Prevents Excel/CSV formula injection: a cell whose text begins with a
 // formula-trigger character (=, +, -, @) is prefixed with a leading quote so
@@ -8,7 +9,9 @@ function sanitizeCell(value) {
   return /^[=+\-@]/.test(value) ? `'${value}` : value;
 }
 
-function buildSheet(sheet, entries, profile = {}, title = '') {
+// cancelLabels (reason id → label) adds the "סיבות ביטול" column — admin
+// reports only; the employee's own export leaves it out.
+function buildSheet(sheet, entries, profile = {}, title = '', cancelLabels = null) {
   const headerFill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4F46E5' } };
   const headerFont = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
   const centerAlign = { horizontal: 'center', vertical: 'middle' };
@@ -23,6 +26,7 @@ function buildSheet(sheet, entries, profile = {}, title = '') {
     { header: 'בדיקות השלמה',     key: 'par',    width: 14 },
     { header: 'סה"כ בדיקות',      key: 'total',  width: 14 },
     { header: 'ביטולים',          key: 'canc',   width: 12 },
+    ...(cancelLabels ? [{ header: 'סיבות ביטול', key: 'cancWhy', width: 34 }] : []),
     { header: 'קילומטרים',        key: 'km',     width: 12 },
     { header: 'שעות משרד',        key: 'hrs',    width: 14 },
     { header: 'אוכל (₪)',         key: 'food',   width: 12 },
@@ -50,6 +54,7 @@ function buildSheet(sheet, entries, profile = {}, title = '') {
       ins: e.insurance_tests || 0, scr: e.screening_tests || 0,
       mix: e.mixed_screening_tests || 0, par: e.partial_tests || 0, total,
       canc: e.cancellations || 0,
+      ...(cancelLabels ? { cancWhy: sanitizeCell(formatCancelReasons(e, cancelLabels)) } : {}),
       km: e.kilometers || 0, hrs: e.office_hours || 0,
       food: e.food_expense || 0, parking: e.parking_expense || 0,
       toll: e.toll_expense || 0,

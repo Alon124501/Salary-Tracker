@@ -1,5 +1,6 @@
 const supabase = require('../supabase');
 const { totalTestsFor, foodAudit } = require('./payCalc');
+const { loadCancelReasons, labelsById, cancelReasonCounts, formatCancelReasons } = require('./cancelReasons');
 
 // Cancellation % is only ranked once an employee has enough volume — otherwise
 // 1 test + 1 cancellation (50%) would outrank 40 tests + 10 cancellations.
@@ -33,8 +34,19 @@ function overlapDays(startDate, endDate, range) {
 
 const round1 = n => Math.round(n * 10) / 10;
 
-// Entry columns safe to expose on the link-based recap page — never notes or receipt URLs.
-const ENTRY_FIELDS = 'user_id, date, insurance_tests, screening_tests, mixed_screening_tests, partial_tests, cancellations, kilometers, office_hours, food_expense, parking_expense, toll_expense, toll_receipt_urls';
+// Entry columns the admin recap needs — never general notes or receipt URLs.
+const ENTRY_FIELDS = 'user_id, date, insurance_tests, screening_tests, mixed_screening_tests, partial_tests, cancellations, cancellation_reasons, cancellation_other_note, kilometers, office_hours, food_expense, parking_expense, toll_expense, toll_receipt_urls';
+
+// Company-wide cancellations per reason for the month, most frequent first.
+function cancelReasonTotals(entries, labels) {
+  const totals = {};
+  for (const e of entries) {
+    for (const [label, n] of Object.entries(cancelReasonCounts(e, labels))) {
+      totals[label] = (totals[label] || 0) + n;
+    }
+  }
+  return Object.entries(totals).map(([label, count]) => ({ label, count })).sort((a, b) => b.count - a.count);
+}
 
 function statsFor(entries, timeOff, range) {
   const s = {
@@ -107,11 +119,13 @@ async function buildRecap(month) {
     { data: profiles, error: pErr },
     { data: entries, error: eErr },
     { data: timeOff, error: tErr },
+    reasons,
   ] = await Promise.all([
     supabase.from('profiles').select('id, first_name, last_name, username, created_at').eq('is_admin', false).order('first_name'),
     supabase.from('entries').select(ENTRY_FIELDS).gte('date', prev.start).lte('date', cur.end),
     supabase.from('time_off_requests').select('user_id, category, start_date, end_date')
       .eq('status', 'approved').lte('start_date', cur.end).gte('end_date', prev.start),
+    loadCancelReasons(),
   ]);
   if (pErr) throw pErr;
   if (eErr) throw eErr;
@@ -143,6 +157,9 @@ async function buildRecap(month) {
   });
 
   const company = sumStats(employees);
+  const curIds = new Set(relevant.map(p => p.id));
+  company.cancelReasons = cancelReasonTotals(
+    entries.filter(e => e.date >= cur.start && curIds.has(e.user_id)), labelsById(reasons));
   const companyPrev = sumStats(employees.map(e => e._prev));
   for (const e of employees) delete e._prev;
 
@@ -181,9 +198,13 @@ async function buildDrilldown(month, userId) {
   const { start, end } = monthRange(month);
   const { data: profile } = await supabase.from('profiles').select('id, is_admin').eq('id', userId).maybeSingle();
   if (!profile || profile.is_admin) return null;
-  const { data, error } = await supabase.from('entries').select(ENTRY_FIELDS)
-    .eq('user_id', userId).gte('date', start).lte('date', end).order('date');
+  const [{ data, error }, reasons] = await Promise.all([
+    supabase.from('entries').select(ENTRY_FIELDS)
+      .eq('user_id', userId).gte('date', start).lte('date', end).order('date'),
+    loadCancelReasons(),
+  ]);
   if (error) throw error;
+  const labels = labelsById(reasons);
   return data.map(e => ({
     date: e.date,
     tests: totalTestsFor(e),
@@ -192,6 +213,7 @@ async function buildDrilldown(month, userId) {
     mixed: e.mixed_screening_tests || 0,
     partial: e.partial_tests || 0,
     cancellations: Number(e.cancellations) || 0,
+    cancelReasons: formatCancelReasons(e, labels),
     km: e.kilometers || 0,
     officeHours: e.office_hours || 0,
     food: e.food_expense || 0,

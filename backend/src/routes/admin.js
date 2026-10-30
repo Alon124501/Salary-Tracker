@@ -8,6 +8,7 @@ const adminAuth = require('../middleware/adminAuth');
 const asyncHandler = require('../middleware/asyncHandler');
 const { foodAudit, totalTestsFor } = require('../lib/payCalc');
 const { buildSheet } = require('../lib/reportSheet');
+const { loadCancelReasons, labelsById } = require('../lib/cancelReasons');
 const { monthRange } = require('../lib/monthSummary');
 
 const router = express.Router();
@@ -231,6 +232,7 @@ router.post('/reports/approve', asyncHandler(async (req, res) => {
     entriesByUser[e.user_id].push(e);
   }
 
+  const cancelLabels = labelsById(await loadCancelReasons());
   // Build ZIP of one Excel per user
   const zipBuffer = await new Promise((resolve, reject) => {
     const archive = archiver('zip', { zlib: { level: 6 } });
@@ -246,7 +248,7 @@ router.post('/reports/approve', asyncHandler(async (req, res) => {
         const name = `${p.first_name || ''} ${p.last_name || ''}`.trim() || p.username;
 
         const workbook = new ExcelJS.Workbook();
-        buildSheet(workbook.addWorksheet('Salary Report'), entries, p, `${name} — ${monthName} ${year}`);
+        buildSheet(workbook.addWorksheet('Salary Report'), entries, p, `${name} — ${monthName} ${year}`, cancelLabels);
         const buf = await workbook.xlsx.writeBuffer();
         archive.append(Buffer.from(buf), { name: `${name} - ${monthName} ${year}.xlsx` });
       }
@@ -292,9 +294,10 @@ router.get('/users/:userId/report/excel', asyncHandler(async (req, res) => {
   if (!entries || entries.length === 0)
     return res.status(404).json({ error: 'אין רשומות לחודש זה' });
 
+  const cancelLabels = labelsById(await loadCancelReasons());
   const name = `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || profile.username;
   const workbook = new ExcelJS.Workbook();
-  buildSheet(workbook.addWorksheet('Salary Report'), entries || [], profile, `${name} — ${monthName} ${year}`);
+  buildSheet(workbook.addWorksheet('Salary Report'), entries || [], profile, `${name} — ${monthName} ${year}`, cancelLabels);
   const buf = await workbook.xlsx.writeBuffer();
 
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
@@ -326,9 +329,10 @@ router.post('/users/:userId/report/approve', asyncHandler(async (req, res) => {
       return res.status(404).json({ error: 'אין רשומות לחודש זה' });
     const entries = entriesRaw || [];
 
+    const cancelLabels = labelsById(await loadCancelReasons());
     const name = `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || profile.username;
     const workbook = new ExcelJS.Workbook();
-    buildSheet(workbook.addWorksheet('Salary Report'), entries, profile, `${name} — ${monthName} ${year}`);
+    buildSheet(workbook.addWorksheet('Salary Report'), entries, profile, `${name} — ${monthName} ${year}`, cancelLabels);
     const buf = await workbook.xlsx.writeBuffer();
 
     const gmailUser = process.env.GMAIL_USER;

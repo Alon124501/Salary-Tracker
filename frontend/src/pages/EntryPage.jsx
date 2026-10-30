@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import api from '../api.js';
+import { useFetch } from '../hooks/useFetch.js';
 import { compressImage } from '../utils/compressImage.js';
 
 function today() {
@@ -24,6 +25,13 @@ const defaultForm = {
   cancellations: 0, notes: '',
 };
 
+const TEST_ROWS = [
+  { key: 'insurance_tests',       label: 'ביטוח' },
+  { key: 'screening_tests',       label: 'סקר' },
+  { key: 'mixed_screening_tests', label: 'סקר משולב' },
+  { key: 'partial_tests',         label: 'השלמה' },
+];
+
 export default function EntryPage() {
   const navigate = useNavigate();
   const { date } = useParams();
@@ -38,6 +46,14 @@ export default function EntryPage() {
   const [viewingUrl, setViewingUrl] = useState(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  // Cancellations are entered per reason; the day total is their sum.
+  // Untouched, the stored breakdown is left alone, so an old day that has a
+  // bare count (no reasons) can still be edited without re-entering them.
+  const { data: cancelReasons = [] } = useFetch('/cancellation-reasons', { initialData: [] });
+  const [cancelCounts, setCancelCounts] = useState({});
+  const [cancelNote, setCancelNote] = useState('');
+  const [cancelTouched, setCancelTouched] = useState(false);
+  const [cancelOpen, setCancelOpen] = useState(false);
 
   useEffect(() => { if (date) loadExisting(date); }, [date]);
 
@@ -60,6 +76,9 @@ export default function EntryPage() {
           cancellations: existing.cancellations,
           notes: existing.notes || '',
         });
+        setCancelCounts(Object.fromEntries((existing.cancellation_reasons || []).map(r => [r.reason_id, r.count])));
+        setCancelNote(existing.cancellation_other_note || '');
+        setCancelOpen((existing.cancellations || 0) > 0);
         setEntryId(existing.id);
         if (existing.food_receipt_urls?.length > 0) {
           try {
@@ -144,7 +163,15 @@ export default function EntryPage() {
     setError('');
     setLoading(true);
     try {
-      const { data: saved } = await api.post('/entries', form);
+      const { cancellations: _total, ...rest } = form;
+      const payload = cancelTouched
+        ? {
+            ...rest,
+            cancellation_reasons: Object.entries(cancelCounts).map(([reason_id, count]) => ({ reason_id, count })),
+            cancellation_other_note: cancelNote,
+          }
+        : rest;
+      const { data: saved } = await api.post('/entries', payload);
       setEntryId(saved.id);
       for (const { file } of pendingFoodFiles) {
         const fd = new FormData();
@@ -176,8 +203,21 @@ export default function EntryPage() {
   }
 
   const totalTests = form.insurance_tests + form.screening_tests + form.mixed_screening_tests + form.partial_tests;
+  const breakdownTotal = Object.values(cancelCounts).reduce((s, n) => s + (Number(n) || 0), 0);
+  const cancelTotal = cancelTouched ? breakdownTotal : (form.cancellations || 0);
+  const unexplainedCancels = cancelTouched ? 0 : Math.max(0, (form.cancellations || 0) - breakdownTotal);
+  // Active reasons, plus any since-disabled reason this day already uses.
+  const shownReasons = cancelReasons.filter(r => r.active || cancelCounts[r.id] > 0);
+  const otherReason = cancelReasons.find(r => r.is_other);
+  const needsOtherNote = otherReason && (cancelCounts[otherReason.id] || 0) > 0;
+
+  function setCancelCount(reasonId, value) {
+    setCancelTouched(true);
+    setCancelCounts(c => ({ ...c, [reasonId]: Math.max(0, Number(value) || 0) }));
+  }
+
   // Cancellations count toward the food unlock, but not toward test totals/pay.
-  const foodLocked = totalTests + (form.cancellations || 0) < 4;
+  const foodLocked = totalTests + cancelTotal < 4;
 
   return (
     <div className="bg-[#F2F2F7] min-h-screen pb-56 lg:pb-24">
@@ -199,19 +239,81 @@ export default function EntryPage() {
           {/* Tests */}
           <div className="space-y-3">
             <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest px-1">בדיקות</h3>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-              <TestField label="ביטוח" value={form.insurance_tests} onChange={v => set('insurance_tests', v)} />
-              <TestField label="סקר" value={form.screening_tests} onChange={v => set('screening_tests', v)} />
-              <TestField label="סקר משולב" value={form.mixed_screening_tests} onChange={v => set('mixed_screening_tests', v)} />
-              <TestField label="השלמה" value={form.partial_tests} onChange={v => set('partial_tests', v)} />
+            <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+              <div className="p-4 flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-purple-100 flex items-center justify-center">
+                  <span className="material-symbols-outlined text-brand-purple" style={{ fontSize: 20 }}>biotech</span>
+                </div>
+                <p className="text-[13px] font-bold text-slate-900">בדיקות: {totalTests}</p>
+              </div>
+              <div className="p-4 pt-0">
+                {TEST_ROWS.map(t => (
+                  <div key={t.key} className="flex items-center justify-between py-2.5 border-b border-slate-50 last:border-0">
+                    <p className="text-[13px] font-bold text-slate-900">{t.label}</p>
+                    <InlineStepper value={form[t.key]} onChange={v => set(t.key, v)} />
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
 
-          {/* Cancellations — not a test type, tracked separately */}
+          {/* Cancellations — not a test type, tracked separately, one count per reason */}
           <div className="space-y-3">
             <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest px-1">ביטולים</h3>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-              <TestField label="ביטולים" value={form.cancellations} onChange={v => set('cancellations', v)} />
+            <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+              <button
+                type="button"
+                onClick={() => setCancelOpen(o => !o)}
+                className="w-full p-4 flex items-center justify-between active:bg-slate-50 transition-colors"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-rose-100 flex items-center justify-center">
+                    <span className="material-symbols-outlined text-rose-600" style={{ fontSize: 20 }}>event_busy</span>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-[13px] font-bold text-slate-900">ביטולים: {cancelTotal}</p>
+                    <p className="text-[11px] text-slate-400">הקש כדי לבחור סיבה לכל ביטול</p>
+                  </div>
+                </div>
+                <span className={`material-symbols-outlined text-slate-400 transition-transform duration-200 ${cancelOpen ? 'rotate-180' : ''}`}>
+                  expand_more
+                </span>
+              </button>
+              {cancelOpen && (
+                <div className="p-4 pt-0 space-y-4">
+                  {unexplainedCancels > 0 && (
+                    <p className="text-[11px] text-amber-600 font-semibold">
+                      {unexplainedCancels} ביטולים ללא סיבה — יש לפרט סיבה לכל ביטול אם משנים
+                    </p>
+                  )}
+                  <div>
+                    {shownReasons.map(r => (
+                      <div key={r.id} className="flex items-center justify-between py-2.5 border-b border-slate-50 last:border-0">
+                        <p className="text-[13px] font-bold text-slate-900">
+                          {r.label}
+                          {!r.active && <span className="text-[11px] font-medium text-slate-400"> (מושבתת)</span>}
+                        </p>
+                        <InlineStepper value={cancelCounts[r.id] || 0} onChange={v => setCancelCount(r.id, v)} />
+                      </div>
+                    ))}
+                  </div>
+                  {needsOtherNote && (
+                    <div>
+                      <label className="block text-xs font-bold text-slate-400 mb-2 uppercase tracking-wider">פירוט סיבת "אחר"</label>
+                      <input
+                        type="text"
+                        value={cancelNote}
+                        onChange={e => { setCancelTouched(true); setCancelNote(e.target.value); }}
+                        maxLength={200}
+                        required
+                        dir="rtl"
+                        className="w-full bg-[#F2F2F7] border-none rounded-xl p-3 text-sm focus:ring-2 focus:ring-brand-purple transition-all text-slate-900"
+                        placeholder="מה הייתה סיבת הביטול?"
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 
@@ -271,6 +373,79 @@ export default function EntryPage() {
               {foodLocked && (
                 <p className="text-[10px] text-amber-600 font-semibold px-4 pb-2 -mt-1">הוסף 4 בדיקות או ביטולים ומעלה כדי לפתוח את הוצאות האוכל</p>
               )}
+              {/* Food Receipt Upload — multiple */}
+              <div className="p-4 space-y-3 border-b border-slate-50">
+                {(foodReceipts.length > 0 || pendingFoodFiles.length > 0) && (
+                  <div className="flex flex-wrap gap-2">
+                    {foodReceipts.map(r => (
+                      <div key={r.path} className="relative w-16 h-16 flex-shrink-0">
+                        {r.signedUrl ? (
+                          <img
+                            src={r.signedUrl}
+                            alt="receipt"
+                            className="w-16 h-16 object-cover rounded-xl cursor-pointer border-2 border-white shadow"
+                            onClick={() => openReceipt(r.path, 'food')}
+                          />
+                        ) : (
+                          <div
+                            className="w-16 h-16 rounded-xl bg-slate-200 flex items-center justify-center border-2 border-slate-300"
+                          >
+                            <span className="material-symbols-outlined text-slate-400" style={{ fontSize: 20 }}>broken_image</span>
+                          </div>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => deleteReceipt(r.path)}
+                          className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center shadow"
+                        >
+                          <span className="material-symbols-outlined text-white" style={{ fontSize: 12 }}>close</span>
+                        </button>
+                      </div>
+                    ))}
+                    {pendingFoodFiles.map((item, i) => (
+                      <div key={i} className="relative w-16 h-16 flex-shrink-0">
+                        <img
+                          src={item.previewUrl}
+                          alt="pending"
+                          className="w-16 h-16 object-cover rounded-xl opacity-70 border-2 border-dashed border-orange-300 cursor-pointer"
+                          onClick={() => setViewingUrl(item.previewUrl)}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setPendingFoodFiles(prev => prev.filter((_, idx) => idx !== i))}
+                          className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-slate-400 rounded-full flex items-center justify-center shadow"
+                        >
+                          <span className="material-symbols-outlined text-white" style={{ fontSize: 12 }}>close</span>
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <label className={`flex items-center gap-3 rounded-xl transition-colors py-1 ${foodLocked ? 'opacity-40 pointer-events-none' : 'cursor-pointer hover:bg-slate-50'}`}>
+                  <div className="w-10 h-10 rounded-full bg-orange-100 flex items-center justify-center flex-shrink-0">
+                    <span className="material-symbols-outlined text-orange-600" style={{ fontSize: 20 }}>add_a_photo</span>
+                  </div>
+                  <div>
+                    <p className="text-[13px] font-bold text-slate-900">הוסף קבלת אוכל</p>
+                    <p className="text-[11px] text-slate-400">{foodLocked ? 'הוסף 4 בדיקות או ביטולים ומעלה כדי לפתוח' : 'הקש כדי להוסיף תמונות'}</p>
+                  </div>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    disabled={foodLocked}
+                    className="hidden"
+                    onChange={e => {
+                      const files = Array.from(e.target.files).map(file => ({
+                        file,
+                        previewUrl: URL.createObjectURL(file),
+                      }));
+                      setPendingFoodFiles(prev => [...prev, ...files]);
+                      e.target.value = '';
+                    }}
+                  />
+                </label>
+              </div>
               {/* Parking */}
               <div className="p-4 flex items-center justify-between border-b border-slate-50">
                 <div className="flex items-center gap-3">
@@ -391,7 +566,7 @@ export default function EntryPage() {
               </div>
 
               {/* Toll Receipt Upload — multiple, images or PDF (invoices often arrive later) */}
-              <div className="p-4 space-y-3 border-b border-slate-50">
+              <div className="p-4 space-y-3">
                 {(tollReceipts.length > 0 || pendingTollFiles.length > 0) && (
                   <div className="flex flex-wrap gap-2">
                     {tollReceipts.map(r => (
@@ -463,80 +638,6 @@ export default function EntryPage() {
                         previewUrl: URL.createObjectURL(file),
                       }));
                       setPendingTollFiles(prev => [...prev, ...files]);
-                      e.target.value = '';
-                    }}
-                  />
-                </label>
-              </div>
-
-              {/* Food Receipt Upload — multiple */}
-              <div className="p-4 space-y-3">
-                {(foodReceipts.length > 0 || pendingFoodFiles.length > 0) && (
-                  <div className="flex flex-wrap gap-2">
-                    {foodReceipts.map(r => (
-                      <div key={r.path} className="relative w-16 h-16 flex-shrink-0">
-                        {r.signedUrl ? (
-                          <img
-                            src={r.signedUrl}
-                            alt="receipt"
-                            className="w-16 h-16 object-cover rounded-xl cursor-pointer border-2 border-white shadow"
-                            onClick={() => openReceipt(r.path, 'food')}
-                          />
-                        ) : (
-                          <div
-                            className="w-16 h-16 rounded-xl bg-slate-200 flex items-center justify-center border-2 border-slate-300"
-                          >
-                            <span className="material-symbols-outlined text-slate-400" style={{ fontSize: 20 }}>broken_image</span>
-                          </div>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => deleteReceipt(r.path)}
-                          className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center shadow"
-                        >
-                          <span className="material-symbols-outlined text-white" style={{ fontSize: 12 }}>close</span>
-                        </button>
-                      </div>
-                    ))}
-                    {pendingFoodFiles.map((item, i) => (
-                      <div key={i} className="relative w-16 h-16 flex-shrink-0">
-                        <img
-                          src={item.previewUrl}
-                          alt="pending"
-                          className="w-16 h-16 object-cover rounded-xl opacity-70 border-2 border-dashed border-orange-300 cursor-pointer"
-                          onClick={() => setViewingUrl(item.previewUrl)}
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setPendingFoodFiles(prev => prev.filter((_, idx) => idx !== i))}
-                          className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-slate-400 rounded-full flex items-center justify-center shadow"
-                        >
-                          <span className="material-symbols-outlined text-white" style={{ fontSize: 12 }}>close</span>
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                <label className={`flex items-center gap-3 rounded-xl transition-colors py-1 ${foodLocked ? 'opacity-40 pointer-events-none' : 'cursor-pointer hover:bg-slate-50'}`}>
-                  <div className="w-10 h-10 rounded-full bg-orange-100 flex items-center justify-center flex-shrink-0">
-                    <span className="material-symbols-outlined text-orange-600" style={{ fontSize: 20 }}>add_a_photo</span>
-                  </div>
-                  <div>
-                    <p className="text-[13px] font-bold text-slate-900">הוסף קבלת אוכל</p>
-                    <p className="text-[11px] text-slate-400">{foodLocked ? 'הוסף 4 בדיקות או ביטולים ומעלה כדי לפתוח' : 'הקש כדי להוסיף תמונות'}</p>
-                  </div>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    multiple
-                    disabled={foodLocked}
-                    className="hidden"
-                    onChange={e => {
-                      const files = Array.from(e.target.files).map(file => ({
-                        file,
-                        previewUrl: URL.createObjectURL(file),
-                      }));
-                      setPendingFoodFiles(prev => [...prev, ...files]);
                       e.target.value = '';
                     }}
                   />
@@ -761,33 +862,27 @@ function PdfThumb({ href, pending = false }) {
   );
 }
 
-function TestField({ label, value, onChange }) {
+// Slim one-line stepper for list rows (cancellation reasons).
+function InlineStepper({ value, onChange }) {
   const num = Number(value) || 0;
   return (
-    <div className="bg-white rounded-2xl shadow-card border border-slate-100 flex flex-col overflow-hidden">
-      <div className="px-3 pt-3 pb-2 text-center">
-        <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">{label}</p>
-      </div>
-      <div className="text-center py-2">
-        <span className="text-3xl font-extrabold text-slate-900 font-headline tabular-nums">{num}</span>
-      </div>
-      <div className="grid grid-cols-2 border-t border-slate-100 mt-1">
-        <button
-          type="button"
-          onClick={() => onChange(Math.max(0, num - 1))}
-          disabled={num === 0}
-          className="py-3 flex items-center justify-center text-slate-400 hover:bg-slate-50 active:bg-slate-100 disabled:opacity-30 transition-all font-bold text-xl border-r border-slate-100"
-        >
-          −
-        </button>
-        <button
-          type="button"
-          onClick={() => onChange(num + 1)}
-          className="py-3 flex items-center justify-center text-brand-purple hover:bg-purple-50 active:bg-purple-100 transition-all"
-        >
-          <span className="material-symbols-outlined text-lg">add</span>
-        </button>
-      </div>
+    <div className="flex items-center bg-[#F2F2F7] rounded-lg flex-shrink-0">
+      <button
+        type="button"
+        onClick={() => onChange(Math.max(0, num - 1))}
+        disabled={num === 0}
+        className="w-9 h-9 flex items-center justify-center text-slate-400 font-bold text-xl hover:bg-slate-200/60 active:bg-slate-200 rounded-lg disabled:opacity-30 transition-all"
+      >
+        −
+      </button>
+      <span className={`w-6 text-center font-extrabold tabular-nums ${num > 0 ? 'text-brand-purple' : 'text-slate-900'}`}>{num}</span>
+      <button
+        type="button"
+        onClick={() => onChange(num + 1)}
+        className="w-9 h-9 flex items-center justify-center text-brand-purple hover:bg-purple-50 active:bg-purple-100 rounded-lg transition-all"
+      >
+        <span className="material-symbols-outlined text-lg">add</span>
+      </button>
     </div>
   );
 }

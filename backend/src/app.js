@@ -57,6 +57,7 @@ app.use('/api/devices',       require('./routes/devices'));
 app.use('/api/tutorials',     require('./routes/tutorials'));
 app.use('/api/push',          require('./routes/push'));
 app.use('/api/recap',         require('./routes/recap'));
+app.use('/api/cancellation-reasons', require('./routes/cancellationReasons'));
 app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
 
 // ── Global error handler ───────────────────────────────────────────────────

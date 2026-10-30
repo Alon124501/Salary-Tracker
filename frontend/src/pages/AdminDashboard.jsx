@@ -141,6 +141,12 @@ export default function AdminDashboard() {
   const [downloadingId, setDownloadingId] = useState(null);
   const [approvingId, setApprovingId] = useState(null);
   const [approveMsgs, setApproveMsgs] = useState({});
+  const [reportSubTab, setReportSubTab] = useState('summary');
+  const { data: cancelReasons = [], loading: cancelReasonsLoading, reload: loadCancelReasons } =
+    useFetch('/cancellation-reasons', { enabled: activeTab === 'reports' && reportSubTab === 'cancel_reasons' });
+  const [newReasonLabel, setNewReasonLabel] = useState('');
+  const [editingReasonId, setEditingReasonId] = useState(null);
+  const [editReasonLabel, setEditReasonLabel] = useState('');
 
   // Notifications tab state
   const { data: notifList = [], setData: setNotifList, loading: notifLoading, reload: loadNotifications } =
@@ -527,6 +533,25 @@ export default function AdminDashboard() {
       loadSupplierOrders();
     } catch (err) { showToast(apiErrorMsg(err, 'ביטול ההזמנה נכשל')); }
     finally { setSupplierBusyId(null); }
+  }
+
+  // ── Cancellation reason actions ─────────────────────────────────────────
+  async function addCancelReason() {
+    if (!newReasonLabel.trim()) return;
+    try {
+      await api.post('/cancellation-reasons', { label: newReasonLabel.trim() });
+      setNewReasonLabel('');
+      loadCancelReasons();
+    } catch (err) { showToast(err?.response?.data?.error || 'הוספת הסיבה נכשלה'); }
+  }
+
+  async function updateCancelReason(id, changes) {
+    if (changes.label === '') return;
+    try {
+      await api.patch(`/cancellation-reasons/${id}`, changes);
+      setEditingReasonId(null);
+      loadCancelReasons();
+    } catch (err) { showToast(err?.response?.data?.error || 'עדכון הסיבה נכשל'); }
   }
 
   // ── Device catalog actions ──────────────────────────────────────────────
@@ -1207,6 +1232,24 @@ export default function AdminDashboard() {
       {/* ── Tab: Reports ───────────────────────────────────────────────── */}
       {activeTab === 'reports' && (
         <motion.div key="reports" {...panelMotionProps} className="px-4 space-y-4">
+          {/* Sub-tab toggle */}
+          <div className="flex gap-2">
+            {[{ id: 'summary', label: 'דוחות חודשיים', icon: 'assignment' }, { id: 'cancel_reasons', label: 'סיבות ביטול', icon: 'event_busy' }].map(st => (
+              <button
+                key={st.id}
+                onClick={() => setReportSubTab(st.id)}
+                className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold transition-all active:scale-95 ${
+                  reportSubTab === st.id ? 'brand-gradient text-white' : 'bg-white border border-slate-200 text-slate-500'
+                }`}
+                style={reportSubTab === st.id ? { boxShadow: '0 4px 14px rgba(139,53,217,0.25)' } : {}}
+              >
+                <span className="material-symbols-outlined text-base" style={{ fontVariationSettings: reportSubTab === st.id ? "'FILL' 1" : "'FILL' 0" }}>{st.icon}</span>
+                {st.label}
+              </button>
+            ))}
+          </div>
+
+          {reportSubTab === 'summary' && (<>
           {/* Month picker */}
           <div className="bg-white rounded-2xl border border-slate-100 p-4 flex items-center gap-3">
             <span className="material-symbols-outlined text-slate-400">calendar_month</span>
@@ -1298,6 +1341,99 @@ export default function AdminDashboard() {
                   </div>
                 );
               })}
+            </div>
+          )}
+          </>)}
+
+          {/* Cancellation reasons sub-tab — soft-disable only, "אחר" is built-in and locked */}
+          {reportSubTab === 'cancel_reasons' && (
+            <div>
+              <div className="flex gap-2 mb-4">
+                <input
+                  type="text"
+                  value={newReasonLabel}
+                  onChange={e => setNewReasonLabel(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && addCancelReason()}
+                  maxLength={100}
+                  placeholder="סיבת ביטול חדשה..."
+                  className="flex-1 px-3 py-2.5 text-sm rounded-xl border border-slate-200 focus:border-brand-purple/50 focus:outline-none bg-white"
+                />
+                <button
+                  onClick={addCancelReason}
+                  className="px-4 py-2.5 rounded-xl text-sm font-bold text-white brand-gradient active:scale-95 transition-all"
+                  style={{ boxShadow: '0 4px 14px rgba(139,53,217,0.25)' }}
+                >
+                  הוספה
+                </button>
+              </div>
+              {cancelReasonsLoading && cancelReasons.length === 0 ? (
+                <div className="flex justify-center py-10">
+                  <span className="material-symbols-outlined text-3xl text-slate-300 animate-spin">progress_activity</span>
+                </div>
+              ) : (
+                <div className="flex flex-col gap-2">
+                  {cancelReasons.map(r => (
+                    <div key={r.id} className={`bg-white rounded-2xl border border-slate-100 px-4 py-3.5 flex items-center justify-between gap-2 ${r.active ? '' : 'opacity-60'}`}
+                      style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
+                      {editingReasonId === r.id ? (
+                        <input
+                          type="text"
+                          value={editReasonLabel}
+                          onChange={e => setEditReasonLabel(e.target.value)}
+                          onKeyDown={e => e.key === 'Enter' && updateCancelReason(r.id, { label: editReasonLabel.trim() })}
+                          maxLength={100}
+                          autoFocus
+                          className="flex-1 px-3 py-1.5 text-sm rounded-xl border border-slate-200 focus:border-brand-purple/50 focus:outline-none bg-white"
+                        />
+                      ) : (
+                        <div className="flex items-center gap-2 min-w-0">
+                          <p className="text-sm font-semibold text-slate-800 truncate">{r.label}</p>
+                          {r.is_other && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-500">קבועה · דורשת פירוט</span>}
+                          {!r.active && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-600">מושבתת</span>}
+                        </div>
+                      )}
+                      {!r.is_other && (
+                        <div className="flex items-center gap-1 flex-shrink-0">
+                          {editingReasonId === r.id ? (
+                            <>
+                              <button
+                                onClick={() => updateCancelReason(r.id, { label: editReasonLabel.trim() })}
+                                className="w-8 h-8 flex items-center justify-center rounded-xl text-green-600 hover:bg-green-50 transition-all"
+                              >
+                                <span className="material-symbols-outlined text-base">check</span>
+                              </button>
+                              <button
+                                onClick={() => setEditingReasonId(null)}
+                                className="w-8 h-8 flex items-center justify-center rounded-xl text-slate-400 hover:bg-slate-50 transition-all"
+                              >
+                                <span className="material-symbols-outlined text-base">close</span>
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              <button
+                                onClick={() => { setEditingReasonId(r.id); setEditReasonLabel(r.label); }}
+                                className="w-8 h-8 flex items-center justify-center rounded-xl text-slate-400 hover:text-brand-purple hover:bg-purple-50 transition-all"
+                                title="שינוי שם"
+                              >
+                                <span className="material-symbols-outlined text-base">edit</span>
+                              </button>
+                              <button
+                                onClick={() => updateCancelReason(r.id, { active: !r.active })}
+                                className="w-8 h-8 flex items-center justify-center rounded-xl text-slate-400 hover:text-amber-600 hover:bg-amber-50 transition-all"
+                                title={r.active ? 'השבתה' : 'הפעלה מחדש'}
+                              >
+                                <span className="material-symbols-outlined text-base">{r.active ? 'visibility_off' : 'visibility'}</span>
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+              <p className="text-[11px] text-slate-400 mt-3 px-1">סיבה מושבתת לא תוצג לעובדים, אך תמשיך להופיע בדוחות של ימים שבהם נבחרה.</p>
             </div>
           )}
         </motion.div>
