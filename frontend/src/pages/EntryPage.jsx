@@ -54,6 +54,12 @@ export default function EntryPage() {
   const [cancelNote, setCancelNote] = useState('');
   const [cancelTouched, setCancelTouched] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
+  // "אחר" tests (Medix etc.): one count per admin-managed type; the stored
+  // breakdown is only resent once the employee changes it.
+  const { data: otherTypes = [] } = useFetch('/other-test-types', { initialData: [] });
+  const [otherCounts, setOtherCounts] = useState({});
+  const [otherTouched, setOtherTouched] = useState(false);
+  const [otherOpen, setOtherOpen] = useState(false);
 
   useEffect(() => { if (date) loadExisting(date); }, [date]);
 
@@ -79,6 +85,8 @@ export default function EntryPage() {
         setCancelCounts(Object.fromEntries((existing.cancellation_reasons || []).map(r => [r.reason_id, r.count])));
         setCancelNote(existing.cancellation_other_note || '');
         setCancelOpen((existing.cancellations || 0) > 0);
+        setOtherCounts(Object.fromEntries((existing.other_test_breakdown || []).map(b => [b.type_id, b.count])));
+        setOtherOpen((existing.other_tests || 0) > 0);
         setEntryId(existing.id);
         if (existing.food_receipt_urls?.length > 0) {
           try {
@@ -171,6 +179,9 @@ export default function EntryPage() {
             cancellation_other_note: cancelNote,
           }
         : rest;
+      if (otherTouched) {
+        payload.other_test_breakdown = Object.entries(otherCounts).map(([type_id, count]) => ({ type_id, count }));
+      }
       const { data: saved } = await api.post('/entries', payload);
       setEntryId(saved.id);
       for (const { file } of pendingFoodFiles) {
@@ -202,7 +213,15 @@ export default function EntryPage() {
     }
   }
 
-  const totalTests = form.insurance_tests + form.screening_tests + form.mixed_screening_tests + form.partial_tests;
+  const otherTotal = Object.values(otherCounts).reduce((s, n) => s + (Number(n) || 0), 0);
+  const totalTests = form.insurance_tests + form.screening_tests + form.mixed_screening_tests + form.partial_tests + otherTotal;
+  // Active types, plus any since-disabled type this day already uses.
+  const shownOtherTypes = otherTypes.filter(t => t.active || otherCounts[t.id] > 0);
+
+  function setOtherCount(typeId, value) {
+    setOtherTouched(true);
+    setOtherCounts(c => ({ ...c, [typeId]: Math.max(0, Number(value) || 0) }));
+  }
   const breakdownTotal = Object.values(cancelCounts).reduce((s, n) => s + (Number(n) || 0), 0);
   const cancelTotal = cancelTouched ? breakdownTotal : (form.cancellations || 0);
   const unexplainedCancels = cancelTouched ? 0 : Math.max(0, (form.cancellations || 0) - breakdownTotal);
@@ -253,6 +272,33 @@ export default function EntryPage() {
                     <InlineStepper value={form[t.key]} onChange={v => set(t.key, v)} />
                   </div>
                 ))}
+                {shownOtherTypes.length > 0 && (
+                  <div className="border-t border-slate-50">
+                    <button
+                      type="button"
+                      onClick={() => setOtherOpen(o => !o)}
+                      className="w-full flex items-center justify-between py-2.5 active:bg-slate-50 transition-colors"
+                    >
+                      <p className="text-[13px] font-bold text-slate-900">אחר{otherTotal > 0 ? `: ${otherTotal}` : ''}</p>
+                      <span className={`material-symbols-outlined text-slate-400 transition-transform duration-200 ${otherOpen ? 'rotate-180' : ''}`}>
+                        expand_more
+                      </span>
+                    </button>
+                    {otherOpen && (
+                      <div className="ps-3 border-s-2 border-purple-100">
+                        {shownOtherTypes.map(t => (
+                          <div key={t.id} className="flex items-center justify-between py-2.5 border-b border-slate-50 last:border-0">
+                            <p className="text-[13px] font-bold text-slate-900" dir="auto">
+                              {t.label}
+                              {!t.active && <span className="text-[11px] font-medium text-slate-400"> (מושבת)</span>}
+                            </p>
+                            <InlineStepper value={otherCounts[t.id] || 0} onChange={v => setOtherCount(t.id, v)} />
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -679,6 +725,7 @@ export default function EntryPage() {
                   form.screening_tests > 0 && `סקר: ${form.screening_tests}`,
                   form.mixed_screening_tests > 0 && `משולב: ${form.mixed_screening_tests}`,
                   form.partial_tests > 0 && `השלמה: ${form.partial_tests}`,
+                  ...shownOtherTypes.filter(t => otherCounts[t.id] > 0).map(t => `${t.label}: ${otherCounts[t.id]}`),
                 ].filter(Boolean).join(' · ') || 'מלא את הנתונים שלך'}
               </p>
             </div>

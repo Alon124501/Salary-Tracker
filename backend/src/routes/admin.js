@@ -9,6 +9,7 @@ const asyncHandler = require('../middleware/asyncHandler');
 const { foodAudit, totalTestsFor } = require('../lib/payCalc');
 const { buildSheet } = require('../lib/reportSheet');
 const { loadCancelReasons, labelsById } = require('../lib/cancelReasons');
+const { loadOtherTestTypes } = require('../lib/otherTests');
 const { monthRange } = require('../lib/monthSummary');
 
 const router = express.Router();
@@ -177,12 +178,13 @@ router.get('/reports', asyncHandler(async (req, res) => {
   const summaries = profiles.map(p => {
     const entries = entriesByUser[p.id] || [];
     const totals = { insurance_tests: 0, screening_tests: 0, mixed_screening_tests: 0,
-                     partial_tests: 0, kilometers: 0, office_hours: 0, total_tests: 0, days: entries.length };
+                     partial_tests: 0, other_tests: 0, kilometers: 0, office_hours: 0, total_tests: 0, days: entries.length };
     for (const e of entries) {
       totals.insurance_tests      += e.insurance_tests       || 0;
       totals.screening_tests      += e.screening_tests       || 0;
       totals.mixed_screening_tests += e.mixed_screening_tests || 0;
       totals.partial_tests        += e.partial_tests         || 0;
+      totals.other_tests          += e.other_tests           || 0;
       totals.kilometers           += e.kilometers            || 0;
       totals.office_hours         += e.office_hours          || 0;
       totals.total_tests          += totalTestsFor(e);
@@ -233,6 +235,7 @@ router.post('/reports/approve', asyncHandler(async (req, res) => {
   }
 
   const cancelLabels = labelsById(await loadCancelReasons());
+  const otherTypes = await loadOtherTestTypes();
   // Build ZIP of one Excel per user
   const zipBuffer = await new Promise((resolve, reject) => {
     const archive = archiver('zip', { zlib: { level: 6 } });
@@ -248,7 +251,7 @@ router.post('/reports/approve', asyncHandler(async (req, res) => {
         const name = `${p.first_name || ''} ${p.last_name || ''}`.trim() || p.username;
 
         const workbook = new ExcelJS.Workbook();
-        buildSheet(workbook.addWorksheet('Salary Report'), entries, p, `${name} — ${monthName} ${year}`, cancelLabels);
+        buildSheet(workbook.addWorksheet('Salary Report'), entries, p, `${name} — ${monthName} ${year}`, cancelLabels, otherTypes);
         const buf = await workbook.xlsx.writeBuffer();
         archive.append(Buffer.from(buf), { name: `${name} - ${monthName} ${year}.xlsx` });
       }
@@ -295,9 +298,10 @@ router.get('/users/:userId/report/excel', asyncHandler(async (req, res) => {
     return res.status(404).json({ error: 'אין רשומות לחודש זה' });
 
   const cancelLabels = labelsById(await loadCancelReasons());
+  const otherTypes = await loadOtherTestTypes();
   const name = `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || profile.username;
   const workbook = new ExcelJS.Workbook();
-  buildSheet(workbook.addWorksheet('Salary Report'), entries || [], profile, `${name} — ${monthName} ${year}`, cancelLabels);
+  buildSheet(workbook.addWorksheet('Salary Report'), entries || [], profile, `${name} — ${monthName} ${year}`, cancelLabels, otherTypes);
   const buf = await workbook.xlsx.writeBuffer();
 
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
@@ -330,9 +334,10 @@ router.post('/users/:userId/report/approve', asyncHandler(async (req, res) => {
     const entries = entriesRaw || [];
 
     const cancelLabels = labelsById(await loadCancelReasons());
+    const otherTypes = await loadOtherTestTypes();
     const name = `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || profile.username;
     const workbook = new ExcelJS.Workbook();
-    buildSheet(workbook.addWorksheet('Salary Report'), entries, profile, `${name} — ${monthName} ${year}`, cancelLabels);
+    buildSheet(workbook.addWorksheet('Salary Report'), entries, profile, `${name} — ${monthName} ${year}`, cancelLabels, otherTypes);
     const buf = await workbook.xlsx.writeBuffer();
 
     const gmailUser = process.env.GMAIL_USER;

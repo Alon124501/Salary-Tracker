@@ -1,5 +1,6 @@
 const { totalTestsFor } = require('./payCalc');
 const { formatCancelReasons } = require('./cancelReasons');
+const { otherTestCounts, typesForReport } = require('./otherTests');
 
 // Prevents Excel/CSV formula injection: a cell whose text begins with a
 // formula-trigger character (=, +, -, @) is prefixed with a leading quote so
@@ -11,7 +12,11 @@ function sanitizeCell(value) {
 
 // cancelLabels (reason id → label) adds the "סיבות ביטול" column — admin
 // reports only; the employee's own export leaves it out.
-function buildSheet(sheet, entries, profile = {}, title = '', cancelLabels = null) {
+// otherTypes (all "אחר" test types) adds one column per type — active types
+// plus inactive ones used in these entries.
+function buildSheet(sheet, entries, profile = {}, title = '', cancelLabels = null, otherTypes = []) {
+  const otherCols = typesForReport(otherTypes, entries).map(t => ({ id: t.id, key: `other_${t.id}`, label: t.label }));
+
   const headerFill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4F46E5' } };
   const headerFont = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
   const centerAlign = { horizontal: 'center', vertical: 'middle' };
@@ -24,6 +29,7 @@ function buildSheet(sheet, entries, profile = {}, title = '', cancelLabels = nul
     { header: 'בדיקות סקר',       key: 'scr',    width: 16 },
     { header: 'סקר מעורב',        key: 'mix',    width: 16 },
     { header: 'בדיקות השלמה',     key: 'par',    width: 14 },
+    ...otherCols.map(c => ({ header: sanitizeCell(c.label), key: c.key, width: 14 })),
     { header: 'סה"כ בדיקות',      key: 'total',  width: 14 },
     { header: 'ביטולים',          key: 'canc',   width: 12 },
     ...(cancelLabels ? [{ header: 'סיבות ביטול', key: 'cancWhy', width: 34 }] : []),
@@ -44,15 +50,18 @@ function buildSheet(sheet, entries, profile = {}, title = '', cancelLabels = nul
   sheet.getRow(1).height = 22;
 
   const sums = { ins: 0, scr: 0, mix: 0, par: 0, total: 0, canc: 0, km: 0, hrs: 0, food: 0, parking: 0, toll: 0 };
+  for (const c of otherCols) sums[c.key] = 0;
 
   for (let i = 0; i < entries.length; i++) {
     const e = entries[i];
     const total = totalTestsFor(e);
+    const otherCounts = otherTestCounts(e);
+    const otherValues = Object.fromEntries(otherCols.map(c => [c.key, otherCounts[c.id] || 0]));
 
     const dataRow = sheet.addRow({
       date: e.date ? e.date.split('-').reverse().join('/') : '',
       ins: e.insurance_tests || 0, scr: e.screening_tests || 0,
-      mix: e.mixed_screening_tests || 0, par: e.partial_tests || 0, total,
+      mix: e.mixed_screening_tests || 0, par: e.partial_tests || 0, ...otherValues, total,
       canc: e.cancellations || 0,
       ...(cancelLabels ? { cancWhy: sanitizeCell(formatCancelReasons(e, cancelLabels)) } : {}),
       km: e.kilometers || 0, hrs: e.office_hours || 0,
@@ -71,6 +80,7 @@ function buildSheet(sheet, entries, profile = {}, title = '', cancelLabels = nul
     sums.scr     += e.screening_tests       || 0;
     sums.mix     += e.mixed_screening_tests || 0;
     sums.par     += e.partial_tests         || 0;
+    for (const c of otherCols) sums[c.key] += otherValues[c.key];
     sums.total   += total;
     sums.canc    += e.cancellations         || 0;
     sums.km      += e.kilometers            || 0;

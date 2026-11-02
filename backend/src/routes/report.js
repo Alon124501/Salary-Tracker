@@ -4,6 +4,7 @@ const archiver = require('archiver');
 const supabase = require('../supabase');
 const auth = require('../middleware/auth');
 const { buildSheet } = require('../lib/reportSheet');
+const { loadOtherTestTypes } = require('../lib/otherTests');
 const { currentWeek } = require('../lib/equipmentWeek');
 
 const router = express.Router();
@@ -41,7 +42,7 @@ router.get('/excel', async (req, res) => {
   try {
     const workbook = new ExcelJS.Workbook();
     const sheet = workbook.addWorksheet('Salary Report');
-    buildSheet(sheet, entries || [], user, title);
+    buildSheet(sheet, entries || [], user, title, null, await loadOtherTestTypes());
 
     const buffer = await workbook.xlsx.writeBuffer();
     res.setHeader('Content-Disposition', `attachment; filename="report.xlsx"; filename*=UTF-8''${encodeURIComponent(filename)}`);
@@ -80,7 +81,7 @@ router.get('/download-zip', async (req, res) => {
   try {
     const workbook = new ExcelJS.Workbook();
     const sheet = workbook.addWorksheet('Salary Report');
-    buildSheet(sheet, entries || [], user, title);
+    buildSheet(sheet, entries || [], user, title, null, await loadOtherTestTypes());
     const excelBuffer = await workbook.xlsx.writeBuffer();
 
     const filename = `${name} - ${monthName} ${year}.zip`;

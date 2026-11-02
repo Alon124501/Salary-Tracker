@@ -7,6 +7,7 @@ const asyncHandler = require('../middleware/asyncHandler');
 const { foodAudit, foodQualifyingCountFor, dailyExpenses, FOOD_BONUS_TEST_THRESHOLD } = require('../lib/payCalc');
 const { safeExt } = require('../lib/safeExt');
 const { loadCancelReasons, applyCancellationBreakdown } = require('../lib/cancelReasons');
+const { loadOtherTestTypes, applyOtherTestBreakdown } = require('../lib/otherTests');
 
 const router = express.Router();
 router.use(auth);
@@ -42,6 +43,12 @@ const CancellationReasonsField = z.array(z.object({
   count:     z.coerce.number().int().min(0),
 })).max(50).optional();
 
+// Per-type "אחר" test breakdown; entries.other_tests is derived from its sum.
+const OtherTestBreakdownField = z.array(z.object({
+  type_id: z.string().uuid(),
+  count:   z.coerce.number().int().min(0),
+})).max(50).optional();
+
 const EntryBodySchema = z.object({
   date:                  z.string().refine(isReasonableDate, 'תאריך לא תקין או מחוץ לטווח המותר').optional(),
   insurance_tests:       NumericField,
@@ -56,6 +63,7 @@ const EntryBodySchema = z.object({
   cancellations:         z.coerce.number().min(0).optional(),
   cancellation_reasons:  CancellationReasonsField,
   cancellation_other_note: z.string().max(200).optional(),
+  other_test_breakdown:  OtherTestBreakdownField,
   notes:                 z.string().max(500).optional().default(''),
 });
 
@@ -75,6 +83,7 @@ const PutBodySchema = z.object({
   cancellations:         PutNumericField,
   cancellation_reasons:  CancellationReasonsField,
   cancellation_other_note: z.string().max(200).optional(),
+  other_test_breakdown:  OtherTestBreakdownField,
   notes:                 z.string().max(500).optional(),
 });
 
@@ -120,7 +129,7 @@ router.get('/summary', asyncHandler(async (req, res) => {
   if (error) return res.status(500).json({ error: error.message });
 
   const totals = {
-    insurance_tests: 0, screening_tests: 0, mixed_screening_tests: 0, partial_tests: 0,
+    insurance_tests: 0, screening_tests: 0, mixed_screening_tests: 0, partial_tests: 0, other_tests: 0,
     totalTests: 0, kilometers: 0, office_hours: 0, expenses: 0, days: rows.length
   };
   for (const e of rows) {
@@ -128,12 +137,13 @@ router.get('/summary', asyncHandler(async (req, res) => {
     totals.screening_tests += e.screening_tests || 0;
     totals.mixed_screening_tests += e.mixed_screening_tests || 0;
     totals.partial_tests += e.partial_tests || 0;
+    totals.other_tests += e.other_tests || 0;
     totals.kilometers += e.kilometers || 0;
     totals.office_hours += e.office_hours || 0;
     totals.expenses += dailyExpenses(e);
   }
   totals.totalTests = totals.insurance_tests + totals.screening_tests +
-                       totals.mixed_screening_tests + totals.partial_tests;
+                       totals.mixed_screening_tests + totals.partial_tests + totals.other_tests;
   totals.foodAudit = foodAudit(rows);
   res.json(totals);
 }));
@@ -155,9 +165,11 @@ router.post('/', asyncHandler(async (req, res) => {
   if (!date) return res.status(400).json({ error: 'נדרש תאריך' });
 
   const { data: existing } = await supabase.from('entries')
-    .select('food_expense, cancellations, cancellation_reasons').eq('user_id', req.userId).eq('date', date).maybeSingle();
+    .select('food_expense, cancellations, cancellation_reasons, other_tests, other_test_breakdown').eq('user_id', req.userId).eq('date', date).maybeSingle();
   const cancelErr = applyCancellationBreakdown(fields, existing, await loadCancelReasons());
   if (cancelErr) return res.status(400).json({ error: cancelErr });
+  const otherErr = applyOtherTestBreakdown(fields, existing, await loadOtherTestTypes());
+  if (otherErr) return res.status(400).json({ error: otherErr });
   enforceFoodGate(fields, existing?.food_expense);
 
   const { data: entry, error } = await supabase.from('entries').upsert({
@@ -203,7 +215,7 @@ router.post('/:id/food-receipt', upload.single('food_receipt'), asyncHandler(asy
   if (!req.file) return res.status(400).json({ error: 'לא הועלה קובץ' });
 
   const { data: entry, error: fetchErr } = await supabase.from('entries')
-    .select('id, date, food_receipt_urls, insurance_tests, screening_tests, mixed_screening_tests, partial_tests, cancellations')
+    .select('id, date, food_receipt_urls, insurance_tests, screening_tests, mixed_screening_tests, partial_tests, other_tests, cancellations')
     .eq('id', req.params.id).eq('user_id', req.userId).single();
   if (fetchErr || !entry) return res.status(404).json({ error: 'הרשומה לא נמצאה' });
   if (foodQualifyingCountFor(entry) < FOOD_BONUS_TEST_THRESHOLD) {
@@ -436,10 +448,13 @@ router.put('/:id', asyncHandler(async (req, res) => {
     cancellations:         fields.cancellations,
     cancellation_reasons:  fields.cancellation_reasons,
     cancellation_other_note: fields.cancellation_other_note,
+    other_test_breakdown:  fields.other_test_breakdown,
     notes:                 fields.notes                 ?? entry.notes,
   };
   const cancelErr = applyCancellationBreakdown(updates, entry, await loadCancelReasons());
   if (cancelErr) return res.status(400).json({ error: cancelErr });
+  const otherErr = applyOtherTestBreakdown(updates, entry, await loadOtherTestTypes());
+  if (otherErr) return res.status(400).json({ error: otherErr });
   enforceFoodGate(updates, entry.food_expense);
 
   const { data: updated, error: updateErr } = await supabase.from('entries')
@@ -480,6 +495,8 @@ router.post('/restore', asyncHandler(async (req, res) => {
     cancellations: Math.max(0, Number(e.cancellations) || 0),
     cancellation_reasons: Array.isArray(e.cancellation_reasons) ? e.cancellation_reasons : [],
     cancellation_other_note: e.cancellation_other_note || null,
+    other_tests: Math.max(0, Number(e.other_tests) || 0),
+    other_test_breakdown: Array.isArray(e.other_test_breakdown) ? e.other_test_breakdown : [],
     notes: e.notes || '',
   }));
 

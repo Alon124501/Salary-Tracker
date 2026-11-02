@@ -3,7 +3,7 @@ const FOOD_BONUS_DAILY_AMOUNT = 40;
 
 function totalTestsFor(e) {
   return (e.insurance_tests || 0) + (e.screening_tests || 0) +
-         (e.mixed_screening_tests || 0) + (e.partial_tests || 0);
+         (e.mixed_screening_tests || 0) + (e.partial_tests || 0) + (e.other_tests || 0);
 }
 
 // Food-gate count: cancellations count toward the 4-per-day food threshold,

@@ -147,6 +147,11 @@ export default function AdminDashboard() {
   const [newReasonLabel, setNewReasonLabel] = useState('');
   const [editingReasonId, setEditingReasonId] = useState(null);
   const [editReasonLabel, setEditReasonLabel] = useState('');
+  const { data: otherTestTypes = [], loading: otherTestTypesLoading, reload: loadOtherTestTypes } =
+    useFetch('/other-test-types', { enabled: activeTab === 'reports' && reportSubTab === 'other_tests' });
+  const [newOtherTypeLabel, setNewOtherTypeLabel] = useState('');
+  const [editingOtherTypeId, setEditingOtherTypeId] = useState(null);
+  const [editOtherTypeLabel, setEditOtherTypeLabel] = useState('');
 
   // Notifications tab state
   const { data: notifList = [], setData: setNotifList, loading: notifLoading, reload: loadNotifications } =
@@ -552,6 +557,25 @@ export default function AdminDashboard() {
       setEditingReasonId(null);
       loadCancelReasons();
     } catch (err) { showToast(err?.response?.data?.error || 'עדכון הסיבה נכשל'); }
+  }
+
+  // ── "אחר" test type actions ─────────────────────────────────────────────
+  async function addOtherTestType() {
+    if (!newOtherTypeLabel.trim()) return;
+    try {
+      await api.post('/other-test-types', { label: newOtherTypeLabel.trim() });
+      setNewOtherTypeLabel('');
+      loadOtherTestTypes();
+    } catch (err) { showToast(err?.response?.data?.error || 'הוספת סוג הבדיקה נכשלה'); }
+  }
+
+  async function updateOtherTestType(id, changes) {
+    if (changes.label === '') return;
+    try {
+      await api.patch(`/other-test-types/${id}`, changes);
+      setEditingOtherTypeId(null);
+      loadOtherTestTypes();
+    } catch (err) { showToast(err?.response?.data?.error || 'עדכון סוג הבדיקה נכשל'); }
   }
 
   // ── Device catalog actions ──────────────────────────────────────────────
@@ -1234,7 +1258,7 @@ export default function AdminDashboard() {
         <motion.div key="reports" {...panelMotionProps} className="px-4 space-y-4">
           {/* Sub-tab toggle */}
           <div className="flex gap-2">
-            {[{ id: 'summary', label: 'דוחות חודשיים', icon: 'assignment' }, { id: 'cancel_reasons', label: 'סיבות ביטול', icon: 'event_busy' }].map(st => (
+            {[{ id: 'summary', label: 'דוחות חודשיים', icon: 'assignment' }, { id: 'cancel_reasons', label: 'סיבות ביטול', icon: 'event_busy' }, { id: 'other_tests', label: 'בדיקות אחר', icon: 'biotech' }].map(st => (
               <button
                 key={st.id}
                 onClick={() => setReportSubTab(st.id)}
@@ -1434,6 +1458,95 @@ export default function AdminDashboard() {
                 </div>
               )}
               <p className="text-[11px] text-slate-400 mt-3 px-1">סיבה מושבתת לא תוצג לעובדים, אך תמשיך להופיע בדוחות של ימים שבהם נבחרה.</p>
+            </div>
+          )}
+
+          {/* "אחר" test types sub-tab — types listed under "אחר" on the entry page; soft-disable only */}
+          {reportSubTab === 'other_tests' && (
+            <div>
+              <div className="flex gap-2 mb-4">
+                <input
+                  type="text"
+                  value={newOtherTypeLabel}
+                  onChange={e => setNewOtherTypeLabel(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && addOtherTestType()}
+                  maxLength={100}
+                  placeholder="סוג בדיקה חדש..."
+                  className="flex-1 px-3 py-2.5 text-sm rounded-xl border border-slate-200 focus:border-brand-purple/50 focus:outline-none bg-white"
+                />
+                <button
+                  onClick={addOtherTestType}
+                  className="px-4 py-2.5 rounded-xl text-sm font-bold text-white brand-gradient active:scale-95 transition-all"
+                  style={{ boxShadow: '0 4px 14px rgba(139,53,217,0.25)' }}
+                >
+                  הוספה
+                </button>
+              </div>
+              {otherTestTypesLoading && otherTestTypes.length === 0 ? (
+                <div className="flex justify-center py-10">
+                  <span className="material-symbols-outlined text-3xl text-slate-300 animate-spin">progress_activity</span>
+                </div>
+              ) : (
+                <div className="flex flex-col gap-2">
+                  {otherTestTypes.map(t => (
+                    <div key={t.id} className={`bg-white rounded-2xl border border-slate-100 px-4 py-3.5 flex items-center justify-between gap-2 ${t.active ? '' : 'opacity-60'}`}
+                      style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
+                      {editingOtherTypeId === t.id ? (
+                        <input
+                          type="text"
+                          value={editOtherTypeLabel}
+                          onChange={e => setEditOtherTypeLabel(e.target.value)}
+                          onKeyDown={e => e.key === 'Enter' && updateOtherTestType(t.id, { label: editOtherTypeLabel.trim() })}
+                          maxLength={100}
+                          autoFocus
+                          className="flex-1 px-3 py-1.5 text-sm rounded-xl border border-slate-200 focus:border-brand-purple/50 focus:outline-none bg-white"
+                        />
+                      ) : (
+                        <div className="flex items-center gap-2 min-w-0">
+                          <p className="text-sm font-semibold text-slate-800 truncate" dir="auto">{t.label}</p>
+                          {!t.active && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-600">מושבת</span>}
+                        </div>
+                      )}
+                      <div className="flex items-center gap-1 flex-shrink-0">
+                        {editingOtherTypeId === t.id ? (
+                          <>
+                            <button
+                              onClick={() => updateOtherTestType(t.id, { label: editOtherTypeLabel.trim() })}
+                              className="w-8 h-8 flex items-center justify-center rounded-xl text-green-600 hover:bg-green-50 transition-all"
+                            >
+                              <span className="material-symbols-outlined text-base">check</span>
+                            </button>
+                            <button
+                              onClick={() => setEditingOtherTypeId(null)}
+                              className="w-8 h-8 flex items-center justify-center rounded-xl text-slate-400 hover:bg-slate-50 transition-all"
+                            >
+                              <span className="material-symbols-outlined text-base">close</span>
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <button
+                              onClick={() => { setEditingOtherTypeId(t.id); setEditOtherTypeLabel(t.label); }}
+                              className="w-8 h-8 flex items-center justify-center rounded-xl text-slate-400 hover:text-brand-purple hover:bg-purple-50 transition-all"
+                              title="שינוי שם"
+                            >
+                              <span className="material-symbols-outlined text-base">edit</span>
+                            </button>
+                            <button
+                              onClick={() => updateOtherTestType(t.id, { active: !t.active })}
+                              className="w-8 h-8 flex items-center justify-center rounded-xl text-slate-400 hover:text-amber-600 hover:bg-amber-50 transition-all"
+                              title={t.active ? 'השבתה' : 'הפעלה מחדש'}
+                            >
+                              <span className="material-symbols-outlined text-base">{t.active ? 'visibility_off' : 'visibility'}</span>
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <p className="text-[11px] text-slate-400 mt-3 px-1">סוגי הבדיקות מופיעים תחת "אחר" בדף הרישום ונספרים כבדיקות. סוג מושבת לא יוצג לעובדים, אך ימשיך להופיע בדוחות של ימים שבהם נרשם.</p>
             </div>
           )}
         </motion.div>

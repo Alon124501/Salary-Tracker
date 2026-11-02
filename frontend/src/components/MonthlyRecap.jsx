@@ -159,7 +159,7 @@ export default function MonthlyRecap({ data, loadDrilldown }) {
               </div>
               {m.key === 'tests' && (
                 <p className="text-[10px] text-slate-400 mt-1">
-                  ביטוח {num(data.company.insurance)} · סקר {num(data.company.screening)} · משולב {num(data.company.mixed)} · חלקי {num(data.company.partial)}
+                  ביטוח {num(data.company.insurance)} · סקר {num(data.company.screening)} · משולב {num(data.company.mixed)} · חלקי {num(data.company.partial)} · אחר {num(data.company.other)}
                 </p>
               )}
             </div>
@@ -312,7 +312,7 @@ export default function MonthlyRecap({ data, loadDrilldown }) {
                 <table className="min-w-full text-xs">
                   <thead>
                     <tr className="text-[11px] text-slate-500 bg-slate-50">
-                      {['תאריך', 'בדיקות', 'ביטוח', 'סקר', 'משולב', 'חלקי', 'ביטולים', 'סיבות ביטול', 'ק״מ', 'שעות', 'אוכל', 'חניה', 'אגרה'].map(h => (
+                      {['תאריך', 'בדיקות', 'ביטוח', 'סקר', 'משולב', 'חלקי', 'אחר', 'ביטולים', 'סיבות ביטול', 'ק״מ', 'שעות', 'אוכל', 'חניה', 'אגרה'].map(h => (
                         <th key={h} className="px-2 py-2 whitespace-nowrap text-center first:text-right">{h}</th>
                       ))}
                     </tr>
@@ -328,6 +328,7 @@ export default function MonthlyRecap({ data, loadDrilldown }) {
                         <td className="px-2 py-2 text-center">{num(d.screening)}</td>
                         <td className="px-2 py-2 text-center">{num(d.mixed)}</td>
                         <td className="px-2 py-2 text-center">{num(d.partial)}</td>
+                        <td className="px-2 py-2 text-center">{num(d.other)}</td>
                         <td className="px-2 py-2 text-center">{num(d.cancellations)}</td>
                         <td className="px-2 py-2 text-right whitespace-nowrap">{d.cancelReasons || '—'}</td>
                         <td className="px-2 py-2 text-center">{num(d.km)}</td>

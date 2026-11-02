@@ -35,7 +35,7 @@ function overlapDays(startDate, endDate, range) {
 const round1 = n => Math.round(n * 10) / 10;
 
 // Entry columns the admin recap needs — never general notes or receipt URLs.
-const ENTRY_FIELDS = 'user_id, date, insurance_tests, screening_tests, mixed_screening_tests, partial_tests, cancellations, cancellation_reasons, cancellation_other_note, kilometers, office_hours, food_expense, parking_expense, toll_expense, toll_receipt_urls';
+const ENTRY_FIELDS = 'user_id, date, insurance_tests, screening_tests, mixed_screening_tests, partial_tests, other_tests, cancellations, cancellation_reasons, cancellation_other_note, kilometers, office_hours, food_expense, parking_expense, toll_expense, toll_receipt_urls';
 
 // Company-wide cancellations per reason for the month, most frequent first.
 function cancelReasonTotals(entries, labels) {
@@ -50,7 +50,7 @@ function cancelReasonTotals(entries, labels) {
 
 function statsFor(entries, timeOff, range) {
   const s = {
-    tests: 0, insurance: 0, screening: 0, mixed: 0, partial: 0,
+    tests: 0, insurance: 0, screening: 0, mixed: 0, partial: 0, other: 0,
     cancellations: 0, days: entries.length, km: 0, officeHours: 0,
     food: 0, parking: 0, toll: 0, vacationDays: 0, sickDays: 0,
   };
@@ -60,6 +60,7 @@ function statsFor(entries, timeOff, range) {
     s.screening    += e.screening_tests || 0;
     s.mixed        += e.mixed_screening_tests || 0;
     s.partial      += e.partial_tests || 0;
+    s.other        += e.other_tests || 0;
     s.cancellations += Number(e.cancellations) || 0;
     s.km           += e.kilometers || 0;
     s.officeHours  += e.office_hours || 0;
@@ -81,7 +82,7 @@ function statsFor(entries, timeOff, range) {
 }
 
 function sumStats(rows) {
-  const keys = ['tests', 'insurance', 'screening', 'mixed', 'partial', 'cancellations', 'days', 'km',
+  const keys = ['tests', 'insurance', 'screening', 'mixed', 'partial', 'other', 'cancellations', 'days', 'km',
                 'officeHours', 'food', 'parking', 'toll', 'vacationDays', 'sickDays'];
   const t = Object.fromEntries(keys.map(k => [k, 0]));
   for (const r of rows) for (const k of keys) t[k] += r[k];
@@ -212,6 +213,7 @@ async function buildDrilldown(month, userId) {
     screening: e.screening_tests || 0,
     mixed: e.mixed_screening_tests || 0,
     partial: e.partial_tests || 0,
+    other: e.other_tests || 0,
     cancellations: Number(e.cancellations) || 0,
     cancelReasons: formatCancelReasons(e, labels),
     km: e.kilometers || 0,

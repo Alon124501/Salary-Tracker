@@ -10,7 +10,7 @@ function currentMonth() {
 }
 
 function totalTests(e) {
-  return (e.insurance_tests || 0) + (e.screening_tests || 0) + (e.mixed_screening_tests || 0) + (e.partial_tests || 0);
+  return (e.insurance_tests || 0) + (e.screening_tests || 0) + (e.mixed_screening_tests || 0) + (e.partial_tests || 0) + (e.other_tests || 0);
 }
 
 function logout() {
@@ -340,6 +340,17 @@ export default function Dashboard() {
             <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">השלמה</p>
             <div className="text-2xl font-bold text-slate-900 font-headline">{s.partial_tests || 0}</div>
           </div>
+
+          {/* Other test types (Medix etc.) — only when used this month */}
+          {s.other_tests > 0 && (
+            <div className="bg-white p-4 rounded-2xl shadow-card border border-slate-100 hover:shadow-card-hover transition-shadow duration-200">
+              <div className="w-9 h-9 rounded-xl bg-teal-50 flex items-center justify-center mb-3">
+                <span className="material-symbols-outlined text-teal-500 text-lg" style={{ fontVariationSettings: "'FILL' 1" }}>biotech</span>
+              </div>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">אחר</p>
+              <div className="text-2xl font-bold text-slate-900 font-headline">{s.other_tests}</div>
+            </div>
+          )}
         </div>
       </section>
 
