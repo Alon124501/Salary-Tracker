@@ -10,7 +10,7 @@ const router = express.Router();
 
 const RECAP_EMAILS = ['alonm@mpcheck.co.il'];
 
-async function sendRecapEmail(name, deviceNames) {
+async function sendRecapEmail(name, deviceNames, source) {
   const gmailUser = process.env.GMAIL_USER;
   const gmailPass = process.env.GMAIL_APP_PASSWORD;
   if (!gmailUser || !gmailPass) {
@@ -23,7 +23,7 @@ async function sendRecapEmail(name, deviceNames) {
     await transporter.sendMail({
       from: `Medical Pay <${gmailUser}>`,
       to: RECAP_EMAILS,
-      subject: `סיכום ציוד — ${name}`,
+      subject: source === 'manual' ? `עדכון ציוד ידני — ${name}` : `סיכום ציוד — ${name}`,
       text: `${name} דיווח/ה על הציוד: ${list}`,
     });
   } catch (err) {
@@ -72,7 +72,7 @@ router.get('/mine', auth, asyncHandler(async (req, res) => {
   const [{ data: devices, error: devErr }, { data: report, error: repErr }, { data: anyReport, error: anyErr }] = await Promise.all([
     supabase.from('user_devices').select('device_id').eq('user_id', req.userId),
     supabase.from('equipment_reports').select('id').eq('user_id', req.userId).eq('week', week).maybeSingle(),
-    supabase.from('equipment_reports').select('id').eq('user_id', req.userId).limit(1).maybeSingle(),
+    supabase.from('equipment_reports').select('submitted_at').eq('user_id', req.userId).order('submitted_at', { ascending: false }).limit(1).maybeSingle(),
   ]);
   if (devErr) return res.status(500).json({ error: devErr.message });
   if (repErr) return res.status(500).json({ error: repErr.message });
@@ -82,12 +82,13 @@ router.get('/mine', auth, asyncHandler(async (req, res) => {
     deviceIds: (devices || []).map(d => d.device_id),
     submittedThisWeek: !!report,
     everSubmitted: !!anyReport,
+    lastSubmittedAt: anyReport?.submitted_at || null,
   });
 }));
 
 // POST /api/devices/report — authenticated employee
 router.post('/report', auth, asyncHandler(async (req, res) => {
-  const { deviceIds } = req.body;
+  const { deviceIds, source } = req.body;
   if (!Array.isArray(deviceIds)) return res.status(400).json({ error: 'נדרש מערך מזהי מכשירים' });
 
   const [{ data: profile, error: pErr }, { data: catalog, error: cErr }] = await Promise.all([
@@ -116,8 +117,9 @@ router.post('/report', auth, asyncHandler(async (req, res) => {
   }
 
   const week = currentWeek();
+  const submittedAt = new Date().toISOString();
   const { error: repErr } = await supabase.from('equipment_reports')
-    .upsert({ user_id: req.userId, week, submitted_at: new Date().toISOString() }, { onConflict: 'user_id,week' });
+    .upsert({ user_id: req.userId, week, submitted_at: submittedAt }, { onConflict: 'user_id,week' });
   if (repErr) {
     console.error('[devices/report] equipment_reports upsert failed:', repErr);
     return res.status(500).json({ error: repErr.message });
@@ -125,9 +127,9 @@ router.post('/report', auth, asyncHandler(async (req, res) => {
 
   const name = `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || profile.username;
   const deviceNames = validIds.map(id => catalogById.get(id));
-  await sendRecapEmail(name, deviceNames);
+  await sendRecapEmail(name, deviceNames, source);
 
-  res.json({ success: true, week });
+  res.json({ success: true, week, submittedAt });
 }));
 
 module.exports = router;

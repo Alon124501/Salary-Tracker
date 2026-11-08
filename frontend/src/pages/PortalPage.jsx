@@ -9,6 +9,7 @@ import DatePicker from '../components/DatePicker.jsx';
 import ScrollTabs from '../components/ScrollTabs.jsx';
 import SwipeableTabsGroup from '../components/SwipeableTabsGroup.jsx';
 import AnimatedModal from '../components/AnimatedModal.jsx';
+import DeviceChecklist from '../components/DeviceChecklist.jsx';
 
 const CATEGORIES = [
   { id: 'insurance', label: 'בדיקות ביטוח' },
@@ -20,6 +21,7 @@ const PORTAL_TABS = [
   { id: 'faq', label: 'שאלות נפוצות', icon: 'quiz' },
   { id: 'contacts', label: 'אנשי קשר', icon: 'call' },
   { id: 'equipment', label: 'ציוד', icon: 'inventory' },
+  { id: 'devices', label: 'מכשירים', icon: 'devices' },
   { id: 'videos', label: 'סרטונים', icon: 'smart_display' },
   { id: 'timeoff', label: 'ימי חופש / מחלה', icon: 'event_busy' },
 ];
@@ -304,6 +306,28 @@ export default function PortalPage() {
                     ))}
                   </div>
                 )}
+              </motion.div>
+            )}
+
+            {/* ── My Devices (manual update) ── */}
+            {tab === 'devices' && (
+              <motion.div key="devices" {...panelMotionProps} className="mb-8">
+                <h2 className="text-base font-extrabold text-slate-700 mb-3 px-1 flex items-center gap-2">
+                  <span className="material-symbols-outlined text-brand-purple text-lg" style={{ fontVariationSettings: "'FILL' 1" }}>devices</span>
+                  המכשירים שלי
+                </h2>
+                <div className="bg-white rounded-2xl border border-slate-100 p-5"
+                  style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
+                  <p className="text-sm text-slate-500 mb-4">
+                    סמן את המכשירים שברשותך כעת ולחץ "שמור". העדכון נחשב גם כסיכום הציוד של השבוע.
+                  </p>
+                  <DeviceChecklist
+                    source="manual"
+                    submitLabel="שמור"
+                    showLastUpdated
+                    onSubmitted={() => showToast('המכשירים עודכנו בהצלחה', 'success')}
+                  />
+                </div>
               </motion.div>
             )}
 
