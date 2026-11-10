@@ -5,10 +5,10 @@ function localDateStr(d) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-const EMPTY_COMPANY_FORM = { name: '', requires_vouchers: false, performed_test_ids: [] };
+const EMPTY_COMPANY_FORM = { name: '', requires_vouchers: false, performed_test_ids: [], landing_url: '' };
 const EMPTY_BRANCH_FORM = {
   name: '', contacts: [],
-  registration_url: '', address: '', has_parking: null,
+  address: '', has_parking: null,
 };
 
 function whatsappLink(phone) {
@@ -102,7 +102,7 @@ export default function ScreeningLocationsPage() {
   const [selectedBranch, setSelectedBranch] = useState(null);
   const [activeTab, setActiveTab] = useState('details');
   const [lightboxUrl, setLightboxUrl] = useState(null);
-  const [smsPhone, setSmsPhone] = useState('');
+  const [linkCopied, setLinkCopied] = useState(false);
 
   // Brochure upload (inline, from detail sheet)
   const [brochureUploading, setBrochureUploading] = useState(false);
@@ -214,6 +214,7 @@ export default function ScreeningLocationsPage() {
       name: company.name,
       requires_vouchers: !!company.requires_vouchers,
       performed_test_ids: company.performed_test_ids || [],
+      landing_url: company.landing_url || '',
     });
     setCompanyLogoFile(null);
     setCompanyLogoPreview(company.logo_url || null);
@@ -246,6 +247,7 @@ export default function ScreeningLocationsPage() {
       const formData = new FormData();
       formData.append('name', companyForm.name.trim());
       formData.append('requires_vouchers', companyForm.requires_vouchers ? 'true' : 'false');
+      formData.append('landing_url', companyForm.landing_url.trim());
       // The server validates the ids. If the catalog never loaded, the admin couldn't
       // see or change the list, so omit it and the server keeps the stored one.
       if (testCatalogLoaded) formData.append('performed_test_ids', JSON.stringify(companyForm.performed_test_ids));
@@ -298,7 +300,6 @@ export default function ScreeningLocationsPage() {
     setBranchForm({
       name: branch.name,
       contacts: branch.contacts || [],
-      registration_url: branch.registration_url || '',
       address: branch.address || '',
       has_parking: branch.has_parking ?? null,
     });
@@ -401,7 +402,6 @@ export default function ScreeningLocationsPage() {
       const fd = new FormData();
       fd.append('name', branchForm.name.trim());
       fd.append('contacts', JSON.stringify(branchForm.contacts.filter(c => c.name.trim() || c.phone.trim())));
-      fd.append('registration_url', branchForm.registration_url.trim());
       fd.append('address', branchForm.address.trim());
       fd.append('has_parking', branchForm.has_parking === null ? '' : String(branchForm.has_parking));
 
@@ -443,10 +443,34 @@ export default function ScreeningLocationsPage() {
     }
   }
 
-  function sendRegistrationSms() {
-    if (!smsPhone.trim() || !selectedBranch?.registration_url) return;
-    const digits = smsPhone.replace(/\D/g, '');
-    window.location.href = `sms:${digits}?body=${encodeURIComponent(selectedBranch.registration_url)}`;
+  async function copyLandingUrl() {
+    const url = selectedCompany?.landing_url;
+    if (!url) return;
+    let ok = false;
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(url);
+        ok = true;
+      }
+    } catch { /* fall back below */ }
+    if (!ok) {
+      // The clipboard API needs a secure context, so it's missing over the http LAN dev server.
+      const ta = document.createElement('textarea');
+      ta.value = url;
+      ta.setAttribute('readonly', '');
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      try { ok = document.execCommand('copy'); } catch { ok = false; }
+      document.body.removeChild(ta);
+    }
+    if (ok) {
+      setLinkCopied(true);
+      setTimeout(() => setLinkCopied(false), 2000);
+    } else {
+      alert('ההעתקה נכשלה');
+    }
   }
 
   async function deleteBranch(branch) {
@@ -681,7 +705,7 @@ export default function ScreeningLocationsPage() {
                   <div
                     key={branch.id}
                     className="flex items-center gap-3 px-5 py-4 border-b border-slate-50 hover:bg-slate-50 transition-colors cursor-pointer group"
-                    onClick={() => { setSelectedBranch(branch); setActiveTab('details'); setSmsPhone(''); setVouchers([]); setVoucherDate(new Date().toISOString().slice(0, 10)); }}
+                    onClick={() => { setSelectedBranch(branch); setActiveTab('details'); setLinkCopied(false); setVouchers([]); setVoucherDate(new Date().toISOString().slice(0, 10)); }}
                   >
                     <div className="w-9 h-9 rounded-xl bg-purple-50 flex items-center justify-center flex-shrink-0">
                       <span className="material-symbols-outlined text-brand-purple text-base">location_on</span>
@@ -866,32 +890,33 @@ export default function ScreeningLocationsPage() {
                   </div>
                 )}
 
-                {/* Registration link widget */}
-                {selectedBranch.registration_url && (
+                {/* Company landing page */}
+                {selectedCompany?.landing_url && (
                   <div className="bg-slate-50 rounded-2xl p-4 space-y-3">
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">שלח קישור הרשמה</p>
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">דף נחיתה</p>
                     <div className="flex gap-2">
-                      <input
-                        type="tel"
-                        dir="ltr"
-                        placeholder="050-0000000"
-                        value={smsPhone}
-                        onChange={e => setSmsPhone(e.target.value)}
-                        className="flex-1 px-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-purple/30"
-                      />
-                      <button
-                        onClick={sendRegistrationSms}
-                        disabled={!smsPhone.trim()}
-                        className="flex items-center gap-1.5 px-4 py-2.5 brand-gradient text-white text-sm font-bold rounded-xl disabled:opacity-40 active:scale-95 transition-transform"
+                      <a
+                        href={selectedCompany.landing_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex-1 flex items-center justify-center gap-1.5 px-4 py-2.5 brand-gradient text-white text-sm font-bold rounded-xl active:scale-95 transition-transform"
                       >
-                        <span className="material-symbols-outlined text-base">sms</span>
-                        שלח
+                        <span className="material-symbols-outlined text-base">open_in_new</span>
+                        דף נחיתה
+                      </a>
+                      <button
+                        type="button"
+                        onClick={copyLandingUrl}
+                        className="flex items-center gap-1.5 px-4 py-2.5 bg-white border border-slate-200 text-slate-700 text-sm font-bold rounded-xl active:scale-95 transition-transform"
+                      >
+                        <span className="material-symbols-outlined text-base">{linkCopied ? 'check' : 'content_copy'}</span>
+                        {linkCopied ? 'הועתק' : 'העתק קישור'}
                       </button>
                     </div>
                   </div>
                 )}
 
-                {!selectedBranch.contacts?.length && selectedBranch.has_parking == null && !selectedBranch.registration_url && !selectedBranch.address && !companyTests.length && (
+                {!selectedBranch.contacts?.length && selectedBranch.has_parking == null && !selectedCompany?.landing_url && !selectedBranch.address && !companyTests.length && (
                   <p className="text-sm text-slate-400 text-center py-4">אין פרטים נוספים לסניף זה</p>
                 )}
               </>)}
@@ -1131,6 +1156,17 @@ export default function ScreeningLocationsPage() {
               </div>
 
               <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1.5">קישור לדף נחיתה</label>
+                <input
+                  className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-purple/30"
+                  placeholder="https://..."
+                  dir="ltr"
+                  value={companyForm.landing_url}
+                  onChange={e => setCompanyForm(p => ({ ...p, landing_url: e.target.value }))}
+                />
+              </div>
+
+              <div>
                 <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1.5">לוגו החברה</label>
                 <label className={`flex items-center gap-3 p-4 rounded-2xl border-2 border-dashed cursor-pointer transition-all ${companyLogoPreview ? 'border-brand-purple/40 bg-purple-50' : 'border-slate-200 hover:border-brand-purple/30 hover:bg-purple-50/40'}`}>
                   {companyLogoPreview ? (
@@ -1340,17 +1376,6 @@ export default function ScreeningLocationsPage() {
                     ))}
                   </div>
                 )}
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1.5">קישור הרשמה</label>
-                <input
-                  className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-purple/30"
-                  placeholder="https://..."
-                  dir="ltr"
-                  value={branchForm.registration_url}
-                  onChange={e => setBranchForm(p => ({ ...p, registration_url: e.target.value }))}
-                />
               </div>
 
               <div>
