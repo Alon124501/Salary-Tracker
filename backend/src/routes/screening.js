@@ -34,17 +34,6 @@ async function uploadLogo(file) {
   return publicUrl;
 }
 
-async function uploadBrochure(file) {
-  const ext = safeExt(file.originalname, 'jpg');
-  const filePath = `brochures/${Date.now()}.${ext}`;
-  const { error } = await supabase.storage
-    .from('branch-brochures')
-    .upload(filePath, file.buffer, { contentType: file.mimetype, upsert: true });
-  if (error) return null;
-  const { data: { publicUrl } } = supabase.storage.from('branch-brochures').getPublicUrl(filePath);
-  return publicUrl;
-}
-
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 class CatalogIdsFormatError extends Error {}
@@ -93,7 +82,7 @@ router.get('/companies', async (req, res) => {
 });
 
 // POST /api/screening/companies  (admin)
-router.post('/companies', adminAuth, upload.fields([{ name: 'logo' }, { name: 'brochure' }]), async (req, res) => {
+router.post('/companies', adminAuth, upload.fields([{ name: 'logo' }]), async (req, res) => {
   const { name } = req.body;
   if (!name?.trim() || name.trim().length > 200) return res.status(400).json({ error: 'נדרש שם חברה תקין' });
 
@@ -109,16 +98,14 @@ router.post('/companies', adminAuth, upload.fields([{ name: 'logo' }, { name: 'b
   }
 
   const logoFile = req.files?.logo?.[0];
-  const brochureFile = req.files?.brochure?.[0];
 
   const logo_url = logoFile ? await uploadLogo(logoFile) : null;
-  const brochure_url = brochureFile ? await uploadBrochure(brochureFile) : null;
 
   const requires_vouchers = req.body.requires_vouchers === 'true' || req.body.requires_vouchers === true;
 
   const { data, error } = await supabase
     .from('screening_companies')
-    .insert({ name: name.trim(), logo_url, brochure_url, requires_vouchers, performed_test_ids, landing_url })
+    .insert({ name: name.trim(), logo_url, requires_vouchers, performed_test_ids, landing_url })
     .select()
     .single();
   if (error) return res.status(500).json({ error: error.message });
@@ -126,18 +113,18 @@ router.post('/companies', adminAuth, upload.fields([{ name: 'logo' }, { name: 'b
 });
 
 // PUT /api/screening/companies/:id  (admin)
-router.put('/companies/:id', adminAuth, upload.fields([{ name: 'logo' }, { name: 'brochure' }]), async (req, res) => {
+router.put('/companies/:id', adminAuth, upload.fields([{ name: 'logo' }]), async (req, res) => {
   const { name } = req.body;
   if (!name?.trim() || name.trim().length > 200) return res.status(400).json({ error: 'נדרש שם חברה תקין' });
 
   const updates = { name: name.trim() };
-  // Same as performed_test_ids: the brochure-only upload PUTs without it, so leave it alone then.
+  // Same as performed_test_ids: only touch it when the client sent it.
   if (req.body.landing_url !== undefined) {
     const landing = parseLandingUrl(req.body.landing_url);
     if (landing.error) return res.status(400).json({ error: landing.error });
     updates.landing_url = landing.value;
   }
-  // Only touch the list when the client sent it — e.g. the brochure-only upload PUTs without it.
+  // Only touch the list when the client sent it.
   if (req.body.performed_test_ids !== undefined) {
     try {
       updates.performed_test_ids = await parseValidCatalogIds(req.body.performed_test_ids, 'screening_test_catalog');
@@ -147,15 +134,10 @@ router.put('/companies/:id', adminAuth, upload.fields([{ name: 'logo' }, { name:
   }
 
   const logoFile = req.files?.logo?.[0];
-  const brochureFile = req.files?.brochure?.[0];
 
   if (logoFile) {
     const logo_url = await uploadLogo(logoFile);
     if (logo_url) updates.logo_url = logo_url;
-  }
-  if (brochureFile) {
-    const brochure_url = await uploadBrochure(brochureFile);
-    if (brochure_url) updates.brochure_url = brochure_url;
   }
   updates.requires_vouchers = req.body.requires_vouchers === 'true' || req.body.requires_vouchers === true;
 
