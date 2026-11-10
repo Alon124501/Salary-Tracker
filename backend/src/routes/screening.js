@@ -88,6 +88,9 @@ router.post('/companies', adminAuth, upload.fields([{ name: 'logo' }, { name: 'b
   const { name } = req.body;
   if (!name?.trim() || name.trim().length > 200) return res.status(400).json({ error: 'נדרש שם חברה תקין' });
 
+  const landing_url = String(req.body.landing_url ?? '').trim() || null;
+  if (landing_url && !isSafeUrl(landing_url)) return res.status(400).json({ error: 'קישור דף הנחיתה חייב להיות קישור http/https תקין' });
+
   let performed_test_ids;
   try {
     performed_test_ids = await parseValidCatalogIds(req.body.performed_test_ids, 'screening_test_catalog');
@@ -105,7 +108,7 @@ router.post('/companies', adminAuth, upload.fields([{ name: 'logo' }, { name: 'b
 
   const { data, error } = await supabase
     .from('screening_companies')
-    .insert({ name: name.trim(), logo_url, brochure_url, requires_vouchers, performed_test_ids })
+    .insert({ name: name.trim(), logo_url, brochure_url, requires_vouchers, performed_test_ids, landing_url })
     .select()
     .single();
   if (error) return res.status(500).json({ error: error.message });
@@ -118,6 +121,12 @@ router.put('/companies/:id', adminAuth, upload.fields([{ name: 'logo' }, { name:
   if (!name?.trim() || name.trim().length > 200) return res.status(400).json({ error: 'נדרש שם חברה תקין' });
 
   const updates = { name: name.trim() };
+  // Same as performed_test_ids: the brochure-only upload PUTs without it, so leave it alone then.
+  if (req.body.landing_url !== undefined) {
+    const landing_url = String(req.body.landing_url).trim() || null;
+    if (landing_url && !isSafeUrl(landing_url)) return res.status(400).json({ error: 'קישור דף הנחיתה חייב להיות קישור http/https תקין' });
+    updates.landing_url = landing_url;
+  }
   // Only touch the list when the client sent it — e.g. the brochure-only upload PUTs without it.
   if (req.body.performed_test_ids !== undefined) {
     try {
@@ -181,12 +190,9 @@ function parseHasParking(raw) {
 
 // POST /api/screening/companies/:id/branches  (admin)
 router.post('/companies/:id/branches', adminAuth, upload.none(), async (req, res) => {
-  const { name, contacts, registration_url, address, has_parking } = req.body;
+  const { name, contacts, address, has_parking } = req.body;
   if (!name?.trim() || name.trim().length > 200) return res.status(400).json({ error: 'נדרש שם סניף תקין' });
   if (address && address.trim().length > 300) return res.status(400).json({ error: 'כתובת ארוכה מדי' });
-
-  const regUrl = registration_url?.trim() || null;
-  if (regUrl && !isSafeUrl(regUrl)) return res.status(400).json({ error: 'כתובת ההרשמה חייבת להיות קישור http/https תקין' });
 
   let parsedContacts;
   try {
@@ -204,7 +210,6 @@ router.post('/companies/:id/branches', adminAuth, upload.none(), async (req, res
       company_id: req.params.id,
       name: name.trim(),
       contacts: parsedContacts,
-      registration_url: regUrl,
       address: address?.trim() || null,
       has_parking: parseHasParking(has_parking),
     })
@@ -216,12 +221,9 @@ router.post('/companies/:id/branches', adminAuth, upload.none(), async (req, res
 
 // PUT /api/screening/branches/:id  (admin)
 router.put('/branches/:id', adminAuth, upload.none(), async (req, res) => {
-  const { name, contacts, registration_url, address, has_parking } = req.body;
+  const { name, contacts, address, has_parking } = req.body;
   if (!name?.trim() || name.trim().length > 200) return res.status(400).json({ error: 'נדרש שם סניף תקין' });
   if (address && address.trim().length > 300) return res.status(400).json({ error: 'כתובת ארוכה מדי' });
-
-  const regUrl = registration_url?.trim() || null;
-  if (regUrl && !isSafeUrl(regUrl)) return res.status(400).json({ error: 'כתובת ההרשמה חייבת להיות קישור http/https תקין' });
 
   let parsedContacts;
   try {
@@ -236,7 +238,6 @@ router.put('/branches/:id', adminAuth, upload.none(), async (req, res) => {
   const updates = {
     name: name.trim(),
     contacts: parsedContacts,
-    registration_url: regUrl,
     address: address?.trim() || null,
     has_parking: parseHasParking(has_parking),
   };
