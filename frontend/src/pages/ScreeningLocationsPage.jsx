@@ -1,5 +1,6 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import api from '../api.js';
+import { copyText } from '../utils/copyText.js';
 
 function localDateStr(d) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -103,6 +104,8 @@ export default function ScreeningLocationsPage() {
   const [activeTab, setActiveTab] = useState('details');
   const [lightboxUrl, setLightboxUrl] = useState(null);
   const [linkCopied, setLinkCopied] = useState(false);
+  const linkCopiedTimer = useRef(null);
+  useEffect(() => () => clearTimeout(linkCopiedTimer.current), []);
 
   // Brochure upload (inline, from detail sheet)
   const [brochureUploading, setBrochureUploading] = useState(false);
@@ -446,28 +449,11 @@ export default function ScreeningLocationsPage() {
   async function copyLandingUrl() {
     const url = selectedCompany?.landing_url;
     if (!url) return;
-    let ok = false;
-    try {
-      if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(url);
-        ok = true;
-      }
-    } catch { /* fall back below */ }
-    if (!ok) {
-      // The clipboard API needs a secure context, so it's missing over the http LAN dev server.
-      const ta = document.createElement('textarea');
-      ta.value = url;
-      ta.setAttribute('readonly', '');
-      ta.style.position = 'fixed';
-      ta.style.opacity = '0';
-      document.body.appendChild(ta);
-      ta.select();
-      try { ok = document.execCommand('copy'); } catch { ok = false; }
-      document.body.removeChild(ta);
-    }
+    const ok = await copyText(url);
     if (ok) {
       setLinkCopied(true);
-      setTimeout(() => setLinkCopied(false), 2000);
+      clearTimeout(linkCopiedTimer.current);
+      linkCopiedTimer.current = setTimeout(() => setLinkCopied(false), 2000);
     } else {
       alert('ההעתקה נכשלה');
     }
@@ -705,7 +691,7 @@ export default function ScreeningLocationsPage() {
                   <div
                     key={branch.id}
                     className="flex items-center gap-3 px-5 py-4 border-b border-slate-50 hover:bg-slate-50 transition-colors cursor-pointer group"
-                    onClick={() => { setSelectedBranch(branch); setActiveTab('details'); setLinkCopied(false); setVouchers([]); setVoucherDate(new Date().toISOString().slice(0, 10)); }}
+                    onClick={() => { setSelectedBranch(branch); setActiveTab('details'); clearTimeout(linkCopiedTimer.current); setLinkCopied(false); setVouchers([]); setVoucherDate(new Date().toISOString().slice(0, 10)); }}
                   >
                     <div className="w-9 h-9 rounded-xl bg-purple-50 flex items-center justify-center flex-shrink-0">
                       <span className="material-symbols-outlined text-brand-purple text-base">location_on</span>

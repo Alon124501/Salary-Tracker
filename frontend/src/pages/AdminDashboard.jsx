@@ -9,6 +9,7 @@ import SwipeableTabsGroup from '../components/SwipeableTabsGroup.jsx';
 import AnimatedModal from '../components/AnimatedModal.jsx';
 import { useToast } from '../context/ToastContext.jsx';
 import { formatDate } from '../utils/date.js';
+import { copyText } from '../utils/copyText.js';
 import MonthlyRecap from '../components/MonthlyRecap.jsx';
 
 function activityColor(shiftsPerWeek) {
@@ -298,7 +299,7 @@ export default function AdminDashboard() {
     setRecapSharing(true);
     try {
       const { url } = await getRecapLink();
-      await navigator.clipboard.writeText(url);
+      if (!(await copyText(url))) throw new Error('copy failed');
       showToast('הקישור הועתק', 'success');
     } catch (err) {
       const msg = err?.response?.data?.error;

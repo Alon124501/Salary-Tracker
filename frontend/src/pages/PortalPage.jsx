@@ -5,6 +5,7 @@ import { useFetch } from '../hooks/useFetch.js';
 import { useSwipeableTabs } from '../hooks/useSwipeableTabs.js';
 import { useToast } from '../context/ToastContext.jsx';
 import { formatDate } from '../utils/date.js';
+import { copyText } from '../utils/copyText.js';
 import DatePicker from '../components/DatePicker.jsx';
 import ScrollTabs from '../components/ScrollTabs.jsx';
 import SwipeableTabsGroup from '../components/SwipeableTabsGroup.jsx';
@@ -79,7 +80,8 @@ function getVimeoEmbed(url) {
 function CopyButton({ value }) {
   const [copied, setCopied] = useState(false);
   function copy() {
-    navigator.clipboard.writeText(value).then(() => {
+    copyText(value).then(ok => {
+      if (!ok) return;
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     });

@@ -14,6 +14,15 @@ router.use(auth);
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
+// Returns { value } (null when blank) or { error } with a Hebrew message.
+function parseLandingUrl(raw) {
+  const value = String(raw ?? '').trim() || null;
+  if (!value) return { value: null };
+  if (value.length > 2000) return { error: 'קישור דף הנחיתה ארוך מדי' };
+  if (!isSafeUrl(value)) return { error: 'קישור דף הנחיתה חייב להיות קישור http/https תקין' };
+  return { value };
+}
+
 async function uploadLogo(file) {
   const ext = safeExt(file.originalname, 'jpg');
   const filePath = `logos/${Date.now()}.${ext}`;
@@ -88,8 +97,9 @@ router.post('/companies', adminAuth, upload.fields([{ name: 'logo' }, { name: 'b
   const { name } = req.body;
   if (!name?.trim() || name.trim().length > 200) return res.status(400).json({ error: 'נדרש שם חברה תקין' });
 
-  const landing_url = String(req.body.landing_url ?? '').trim() || null;
-  if (landing_url && !isSafeUrl(landing_url)) return res.status(400).json({ error: 'קישור דף הנחיתה חייב להיות קישור http/https תקין' });
+  const landing = parseLandingUrl(req.body.landing_url);
+  if (landing.error) return res.status(400).json({ error: landing.error });
+  const landing_url = landing.value;
 
   let performed_test_ids;
   try {
@@ -123,9 +133,9 @@ router.put('/companies/:id', adminAuth, upload.fields([{ name: 'logo' }, { name:
   const updates = { name: name.trim() };
   // Same as performed_test_ids: the brochure-only upload PUTs without it, so leave it alone then.
   if (req.body.landing_url !== undefined) {
-    const landing_url = String(req.body.landing_url).trim() || null;
-    if (landing_url && !isSafeUrl(landing_url)) return res.status(400).json({ error: 'קישור דף הנחיתה חייב להיות קישור http/https תקין' });
-    updates.landing_url = landing_url;
+    const landing = parseLandingUrl(req.body.landing_url);
+    if (landing.error) return res.status(400).json({ error: landing.error });
+    updates.landing_url = landing.value;
   }
   // Only touch the list when the client sent it — e.g. the brochure-only upload PUTs without it.
   if (req.body.performed_test_ids !== undefined) {
