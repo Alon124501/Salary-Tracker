@@ -1101,10 +1101,12 @@ export default function ScreeningLocationsPage() {
           onClick={() => setShowCompanyForm(false)}
         >
           <div
-            className="w-full max-w-sm bg-white rounded-3xl shadow-2xl p-6 flex flex-col gap-5"
+            className="w-full max-w-sm bg-white rounded-3xl shadow-2xl flex flex-col"
+            style={{ maxHeight: '90dvh' }}
             onClick={e => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between">
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b border-slate-100">
               <h3 className="font-bold text-lg text-slate-900">
                 {editingCompany ? 'עריכת חברה' : 'הוספת חברה'}
               </h3>
@@ -1113,6 +1115,8 @@ export default function ScreeningLocationsPage() {
               </button>
             </div>
 
+            {/* Scrollable body */}
+            <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-6 py-5 space-y-4">
             <div className="flex flex-col gap-4">
               <div>
                 <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1.5">שם החברה *</label>
@@ -1233,8 +1237,10 @@ export default function ScreeningLocationsPage() {
             {companyFormError && (
               <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-xl">{companyFormError}</p>
             )}
+            </div>
 
-            <div className="flex gap-3">
+            {/* Footer */}
+            <div className="flex gap-3 px-6 pb-6 pt-4 border-t border-slate-100">
               <button
                 onClick={() => setShowCompanyForm(false)}
                 className="flex-1 text-sm font-semibold text-slate-600 bg-slate-100 py-3 rounded-full hover:bg-slate-200 transition-colors"
@@ -1262,7 +1268,7 @@ export default function ScreeningLocationsPage() {
         >
           <div
             className="w-full max-w-sm bg-white rounded-3xl shadow-2xl flex flex-col"
-            style={{ maxHeight: '90vh' }}
+            style={{ maxHeight: '90dvh' }}
             onClick={e => e.stopPropagation()}
           >
             {/* Header */}
@@ -1276,7 +1282,7 @@ export default function ScreeningLocationsPage() {
             </div>
 
             {/* Scrollable body */}
-            <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
+            <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-6 py-5 space-y-4">
 
               <div>
                 <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1.5">שם הסניף *</label>
@@ -1416,7 +1422,7 @@ export default function ScreeningLocationsPage() {
         >
           <div
             className="w-full max-w-sm bg-white rounded-3xl shadow-2xl flex flex-col"
-            style={{ maxHeight: '90vh' }}
+            style={{ maxHeight: '90dvh' }}
             onClick={e => e.stopPropagation()}
           >
             <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b border-slate-100">
@@ -1426,7 +1432,7 @@ export default function ScreeningLocationsPage() {
               </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
+            <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-6 py-5 space-y-4">
               <div className="flex gap-2 items-center">
                 <input
                   className="flex-1 px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-purple/30 text-right"
