@@ -36,6 +36,19 @@ async function uploadBrochure(file) {
   return publicUrl;
 }
 
+async function parseValidCatalogIds(raw, table) {
+  const ids = Array.isArray(raw) ? raw : (raw ? JSON.parse(raw) : []);
+  if (!Array.isArray(ids)) throw new Error('not an array');
+  if (!ids.length) return [];
+  const { data: catalog, error } = await supabase.from(table).select('id');
+  if (error) {
+    console.error(`[screening] failed to load ${table} for validation:`, error.message);
+    return [];
+  }
+  const validIds = new Set((catalog || []).map(c => c.id));
+  return [...new Set(ids)].filter(id => validIds.has(id));
+}
+
 // ── Companies ──────────────────────────────────────────────────────────────
 
 // GET /api/screening/companies
@@ -53,6 +66,13 @@ router.post('/companies', adminAuth, upload.fields([{ name: 'logo' }, { name: 'b
   const { name } = req.body;
   if (!name?.trim() || name.trim().length > 200) return res.status(400).json({ error: 'נדרש שם חברה תקין' });
 
+  let performed_test_ids;
+  try {
+    performed_test_ids = await parseValidCatalogIds(req.body.performed_test_ids, 'screening_test_catalog');
+  } catch {
+    return res.status(400).json({ error: 'פורמט רשימת הבדיקות לא תקין' });
+  }
+
   const logoFile = req.files?.logo?.[0];
   const brochureFile = req.files?.brochure?.[0];
 
@@ -63,7 +83,7 @@ router.post('/companies', adminAuth, upload.fields([{ name: 'logo' }, { name: 'b
 
   const { data, error } = await supabase
     .from('screening_companies')
-    .insert({ name: name.trim(), logo_url, brochure_url, requires_vouchers })
+    .insert({ name: name.trim(), logo_url, brochure_url, requires_vouchers, performed_test_ids })
     .select()
     .single();
   if (error) return res.status(500).json({ error: error.message });
@@ -76,6 +96,15 @@ router.put('/companies/:id', adminAuth, upload.fields([{ name: 'logo' }, { name:
   if (!name?.trim() || name.trim().length > 200) return res.status(400).json({ error: 'נדרש שם חברה תקין' });
 
   const updates = { name: name.trim() };
+  // Only touch the list when the client sent it — e.g. the brochure-only upload PUTs without it.
+  if (req.body.performed_test_ids !== undefined) {
+    try {
+      updates.performed_test_ids = await parseValidCatalogIds(req.body.performed_test_ids, 'screening_test_catalog');
+    } catch {
+      return res.status(400).json({ error: 'פורמט רשימת הבדיקות לא תקין' });
+    }
+  }
+
   const logoFile = req.files?.logo?.[0];
   const brochureFile = req.files?.brochure?.[0];
 
@@ -122,19 +151,6 @@ router.get('/companies/:id/branches', async (req, res) => {
   res.json(data);
 });
 
-async function parseValidCatalogIds(raw, table) {
-  const ids = Array.isArray(raw) ? raw : (raw ? JSON.parse(raw) : []);
-  if (!Array.isArray(ids)) throw new Error('not an array');
-  if (!ids.length) return [];
-  const { data: catalog, error } = await supabase.from(table).select('id');
-  if (error) {
-    console.error(`[screening] failed to load ${table} for validation:`, error.message);
-    return [];
-  }
-  const validIds = new Set((catalog || []).map(c => c.id));
-  return [...new Set(ids)].filter(id => validIds.has(id));
-}
-
 function parseHasParking(raw) {
   if (raw === true || raw === 'true') return true;
   if (raw === false || raw === 'false') return false;
@@ -143,7 +159,7 @@ function parseHasParking(raw) {
 
 // POST /api/screening/companies/:id/branches  (admin)
 router.post('/companies/:id/branches', adminAuth, upload.none(), async (req, res) => {
-  const { name, contacts, registration_url, address, performed_test_ids, has_parking } = req.body;
+  const { name, contacts, registration_url, address, has_parking } = req.body;
   if (!name?.trim() || name.trim().length > 200) return res.status(400).json({ error: 'נדרש שם סניף תקין' });
   if (address && address.trim().length > 300) return res.status(400).json({ error: 'כתובת ארוכה מדי' });
 
@@ -151,15 +167,13 @@ router.post('/companies/:id/branches', adminAuth, upload.none(), async (req, res
   if (regUrl && !isSafeUrl(regUrl)) return res.status(400).json({ error: 'כתובת ההרשמה חייבת להיות קישור http/https תקין' });
 
   let parsedContacts;
-  let parsedPerformedTestIds;
   try {
     parsedContacts = contacts
       ? (typeof contacts === 'string' ? JSON.parse(contacts) : contacts)
       : [];
     if (!Array.isArray(parsedContacts)) throw new Error('not an array');
-    parsedPerformedTestIds = await parseValidCatalogIds(performed_test_ids, 'screening_test_catalog');
   } catch {
-    return res.status(400).json({ error: 'פורמט אנשי קשר או רשימת בדיקות לא תקין' });
+    return res.status(400).json({ error: 'פורמט אנשי קשר לא תקין' });
   }
 
   const { data, error } = await supabase
@@ -168,7 +182,6 @@ router.post('/companies/:id/branches', adminAuth, upload.none(), async (req, res
       company_id: req.params.id,
       name: name.trim(),
       contacts: parsedContacts,
-      performed_test_ids: parsedPerformedTestIds,
       registration_url: regUrl,
       address: address?.trim() || null,
       has_parking: parseHasParking(has_parking),
@@ -181,7 +194,7 @@ router.post('/companies/:id/branches', adminAuth, upload.none(), async (req, res
 
 // PUT /api/screening/branches/:id  (admin)
 router.put('/branches/:id', adminAuth, upload.none(), async (req, res) => {
-  const { name, contacts, registration_url, address, performed_test_ids, has_parking } = req.body;
+  const { name, contacts, registration_url, address, has_parking } = req.body;
   if (!name?.trim() || name.trim().length > 200) return res.status(400).json({ error: 'נדרש שם סניף תקין' });
   if (address && address.trim().length > 300) return res.status(400).json({ error: 'כתובת ארוכה מדי' });
 
@@ -189,21 +202,18 @@ router.put('/branches/:id', adminAuth, upload.none(), async (req, res) => {
   if (regUrl && !isSafeUrl(regUrl)) return res.status(400).json({ error: 'כתובת ההרשמה חייבת להיות קישור http/https תקין' });
 
   let parsedContacts;
-  let parsedPerformedTestIds;
   try {
     parsedContacts = contacts
       ? (typeof contacts === 'string' ? JSON.parse(contacts) : contacts)
       : [];
     if (!Array.isArray(parsedContacts)) throw new Error('not an array');
-    parsedPerformedTestIds = await parseValidCatalogIds(performed_test_ids, 'screening_test_catalog');
   } catch {
-    return res.status(400).json({ error: 'פורמט אנשי קשר או רשימת בדיקות לא תקין' });
+    return res.status(400).json({ error: 'פורמט אנשי קשר לא תקין' });
   }
 
   const updates = {
     name: name.trim(),
     contacts: parsedContacts,
-    performed_test_ids: parsedPerformedTestIds,
     registration_url: regUrl,
     address: address?.trim() || null,
     has_parking: parseHasParking(has_parking),
