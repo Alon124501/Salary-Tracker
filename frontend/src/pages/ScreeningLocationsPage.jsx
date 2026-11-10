@@ -87,6 +87,7 @@ export default function ScreeningLocationsPage() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
   const [testCatalog, setTestCatalog] = useState([]);
+  const [testCatalogLoaded, setTestCatalogLoaded] = useState(false);
   const [showTestCatalog, setShowTestCatalog] = useState(false);
   const [newTestName, setNewTestName] = useState('');
   const [catalogNewName, setCatalogNewName] = useState('');
@@ -156,7 +157,7 @@ export default function ScreeningLocationsPage() {
       .finally(() => setLoading(false));
 
     api.get('/screening/tests-catalog')
-      .then(res => setTestCatalog(res.data))
+      .then(res => { setTestCatalog(res.data); setTestCatalogLoaded(true); })
       .catch(() => {});
   }, []);
 
@@ -203,6 +204,7 @@ export default function ScreeningLocationsPage() {
     setCompanyBrochureFile(null);
     setCompanyBrochurePreview(null);
     setCompanyFormError('');
+    setNewTestName('');
     setShowCompanyForm(true);
   }
 
@@ -218,6 +220,7 @@ export default function ScreeningLocationsPage() {
     setCompanyBrochureFile(null);
     setCompanyBrochurePreview(company.brochure_url || null);
     setCompanyFormError('');
+    setNewTestName('');
     setShowCompanyForm(true);
   }
 
@@ -243,7 +246,9 @@ export default function ScreeningLocationsPage() {
       const formData = new FormData();
       formData.append('name', companyForm.name.trim());
       formData.append('requires_vouchers', companyForm.requires_vouchers ? 'true' : 'false');
-      formData.append('performed_test_ids', JSON.stringify(companyForm.performed_test_ids.filter(id => testCatalog.some(t => t.id === id))));
+      // The server validates the ids. If the catalog never loaded, the admin couldn't
+      // see or change the list, so omit it and the server keeps the stored one.
+      if (testCatalogLoaded) formData.append('performed_test_ids', JSON.stringify(companyForm.performed_test_ids));
       if (companyLogoFile) formData.append('logo', companyLogoFile);
       if (companyBrochureFile) formData.append('brochure', companyBrochureFile);
 
@@ -532,6 +537,9 @@ export default function ScreeningLocationsPage() {
       </main>
     );
   }
+
+  // Catalog order; ids no longer in the catalog drop out.
+  const companyTests = testCatalog.filter(t => selectedCompany?.performed_test_ids?.includes(t.id));
 
   return (
     <main className="max-w-4xl mx-auto px-4 sm:px-6 pt-20 pb-32 lg:pb-24 space-y-6" dir="rtl">
@@ -842,21 +850,18 @@ export default function ScreeningLocationsPage() {
                 ))}
 
                 {/* Performed tests */}
-                {selectedCompany?.performed_test_ids?.length > 0 && (
+                {companyTests.length > 0 && (
                   <div>
                     <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-3">בדיקות שמבצעים בסניף</p>
                     <div className="flex flex-wrap gap-2">
-                      {selectedCompany.performed_test_ids.map(id => {
-                        const test = testCatalog.find(t => t.id === id);
-                        return test ? (
-                          <span
-                            key={id}
-                            className="bg-purple-50 text-brand-purple font-semibold text-xs px-3 py-1.5 rounded-full"
-                          >
-                            {test.name}
-                          </span>
-                        ) : null;
-                      })}
+                      {companyTests.map(test => (
+                        <span
+                          key={test.id}
+                          className="bg-purple-50 text-brand-purple font-semibold text-xs px-3 py-1.5 rounded-full"
+                        >
+                          {test.name}
+                        </span>
+                      ))}
                     </div>
                   </div>
                 )}
@@ -886,7 +891,7 @@ export default function ScreeningLocationsPage() {
                   </div>
                 )}
 
-                {!selectedBranch.contacts?.length && selectedBranch.has_parking == null && !selectedBranch.registration_url && !selectedBranch.address && !selectedCompany?.performed_test_ids?.length && (
+                {!selectedBranch.contacts?.length && selectedBranch.has_parking == null && !selectedBranch.registration_url && !selectedBranch.address && !companyTests.length && (
                   <p className="text-sm text-slate-400 text-center py-4">אין פרטים נוספים לסניף זה</p>
                 )}
               </>)}

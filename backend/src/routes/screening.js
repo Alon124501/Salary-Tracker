@@ -36,17 +36,39 @@ async function uploadBrochure(file) {
   return publicUrl;
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+class CatalogIdsFormatError extends Error {}
+class CatalogLookupError extends Error {}
+
+// Returns the subset of `raw` ids that exist in `table`, deduped.
+// Throws CatalogIdsFormatError on a malformed list (→ 400) and
+// CatalogLookupError when the catalog can't be queried (→ 500), so a
+// failure never turns into writing an empty list.
 async function parseValidCatalogIds(raw, table) {
-  const ids = Array.isArray(raw) ? raw : (raw ? JSON.parse(raw) : []);
-  if (!Array.isArray(ids)) throw new Error('not an array');
-  if (!ids.length) return [];
-  const { data: catalog, error } = await supabase.from(table).select('id');
-  if (error) {
-    console.error(`[screening] failed to load ${table} for validation:`, error.message);
-    return [];
+  let ids;
+  try {
+    ids = Array.isArray(raw) ? raw : (raw ? JSON.parse(raw) : []);
+  } catch {
+    throw new CatalogIdsFormatError('invalid JSON');
   }
-  const validIds = new Set((catalog || []).map(c => c.id));
-  return [...new Set(ids)].filter(id => validIds.has(id));
+  if (!Array.isArray(ids)) throw new CatalogIdsFormatError('not an array');
+  const candidates = [...new Set(ids.filter(id => typeof id === 'string' && UUID_RE.test(id)))];
+  if (!candidates.length) return [];
+  const { data, error } = await supabase.from(table).select('id').in('id', candidates);
+  if (error) {
+    console.error(`[screening] failed to validate ids against ${table}:`, error.message);
+    throw new CatalogLookupError(error.message);
+  }
+  const validIds = new Set((data || []).map(c => c.id));
+  return candidates.filter(id => validIds.has(id));
+}
+
+function catalogIdsErrorResponse(res, err) {
+  if (err instanceof CatalogIdsFormatError) {
+    return res.status(400).json({ error: 'פורמט רשימת הבדיקות לא תקין' });
+  }
+  return res.status(500).json({ error: 'שגיאה באימות רשימת הבדיקות, נסה שוב' });
 }
 
 // ── Companies ──────────────────────────────────────────────────────────────
@@ -69,8 +91,8 @@ router.post('/companies', adminAuth, upload.fields([{ name: 'logo' }, { name: 'b
   let performed_test_ids;
   try {
     performed_test_ids = await parseValidCatalogIds(req.body.performed_test_ids, 'screening_test_catalog');
-  } catch {
-    return res.status(400).json({ error: 'פורמט רשימת הבדיקות לא תקין' });
+  } catch (err) {
+    return catalogIdsErrorResponse(res, err);
   }
 
   const logoFile = req.files?.logo?.[0];
@@ -100,8 +122,8 @@ router.put('/companies/:id', adminAuth, upload.fields([{ name: 'logo' }, { name:
   if (req.body.performed_test_ids !== undefined) {
     try {
       updates.performed_test_ids = await parseValidCatalogIds(req.body.performed_test_ids, 'screening_test_catalog');
-    } catch {
-      return res.status(400).json({ error: 'פורמט רשימת הבדיקות לא תקין' });
+    } catch (err) {
+      return catalogIdsErrorResponse(res, err);
     }
   }
 
@@ -288,11 +310,32 @@ router.put('/tests-catalog/:id', adminAuth, async (req, res) => {
 
 // DELETE /api/screening/tests-catalog/:id  (admin)
 router.delete('/tests-catalog/:id', adminAuth, async (req, res) => {
+  const testId = req.params.id;
   const { error } = await supabase
     .from('screening_test_catalog')
     .delete()
-    .eq('id', req.params.id);
+    .eq('id', testId);
   if (error) return res.status(500).json({ error: error.message });
+
+  // Drop the deleted test from every company's performed-tests list.
+  const { data: companies, error: fetchErr } = await supabase
+    .from('screening_companies')
+    .select('id, performed_test_ids')
+    .contains('performed_test_ids', [testId]);
+  if (fetchErr) {
+    console.error('[screening] failed to load companies for test cleanup:', fetchErr.message);
+    return res.status(500).json({ error: 'הבדיקה נמחקה, אך עדכון רשימות החברות נכשל' });
+  }
+  for (const c of companies || []) {
+    const { error: updErr } = await supabase
+      .from('screening_companies')
+      .update({ performed_test_ids: (c.performed_test_ids || []).filter(id => id !== testId) })
+      .eq('id', c.id);
+    if (updErr) {
+      console.error(`[screening] failed to strip test ${testId} from company ${c.id}:`, updErr.message);
+      return res.status(500).json({ error: 'הבדיקה נמחקה, אך עדכון רשימות החברות נכשל' });
+    }
+  }
   res.json({ success: true });
 });
 

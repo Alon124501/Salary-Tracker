@@ -7,12 +7,32 @@
 -- Existing RLS on screening_companies already covers the new column.
 ALTER TABLE screening_companies ADD COLUMN performed_test_ids UUID[] NOT NULL DEFAULT '{}';
 
--- union of all branches per company
+-- union of all branches per company, in catalog order; ids no longer in the
+-- catalog are dropped
 UPDATE screening_companies c SET performed_test_ids = ARRAY(
-  SELECT DISTINCT unnest(b.performed_test_ids) FROM screening_branches b WHERE b.company_id = c.id
+  SELECT t.id
+  FROM screening_test_catalog t
+  WHERE EXISTS (
+    SELECT 1 FROM screening_branches b
+    WHERE b.company_id = c.id AND t.id = ANY(b.performed_test_ids)
+  )
+  ORDER BY t.sort_order, t.name
 );
 
--- טבע: use the רמת החייל branch's list (only if that branch exists)
-UPDATE screening_companies c SET performed_test_ids = b.performed_test_ids
-FROM screening_branches b
-WHERE b.company_id = c.id AND trim(c.name) = 'טבע' AND trim(b.name) = 'רמת החייל';
+-- טבע: use the list of exactly one רמת החייל branch, in catalog order, only
+-- when that branch exists and its list is non-empty
+UPDATE screening_companies c SET performed_test_ids = ARRAY(
+  SELECT t.id
+  FROM screening_test_catalog t
+  WHERE t.id = ANY(rh.ids)
+  ORDER BY t.sort_order, t.name
+)
+FROM (
+  SELECT b.company_id, b.performed_test_ids AS ids
+  FROM screening_branches b
+  JOIN screening_companies bc ON bc.id = b.company_id
+  WHERE trim(bc.name) = 'טבע' AND trim(b.name) = 'רמת החייל'
+  ORDER BY b.id
+  LIMIT 1
+) rh
+WHERE rh.company_id = c.id AND cardinality(rh.ids) > 0;
