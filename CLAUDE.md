@@ -6,6 +6,21 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 A salary-tracking web app for a company's employees: daily work entries (tests, km, hours, expenses) → monthly pay calculation, an admin dashboard, and an employee "Portal" (apps/FAQ/contacts/equipment/tutorial videos). Despite the name, this is **not** the generic SQLite/JWT app described in `README.md` — that file is stale. The real stack is React + Express + Supabase (Postgres, Auth, Storage), deployed to Vercel.
 
+Project IDs, Supabase tables and buckets, Vercel crons and env vars, and a feature index are in `docs/PROJECT_GUIDE.md`. A new Claude account should start with `docs/NEW_ACCOUNT_SETUP.md`.
+
+## Gotchas (lessons from past sessions)
+
+- Axios `DELETE`: pass data as query params, not a body (the body isn't parsed).
+- The backend is CommonJS. Don't upgrade to ESM-only package majors (e.g. `archiver` v8+ broke everything).
+- `e2e-test.mjs` pushes real notifications to **all employees**. Never run it without an explicit OK.
+- Zod v4 uses `.issues`, not `.errors`. A generic 500 can hide a real bug, so check Vercel runtime logs and the DB column types before trusting a schema.
+- A 413 on a proxy upload is usually Vercel's ~4.5MB platform limit, not multer. Use the direct-to-storage pattern.
+- Windows: stopping a dev server task can leave node holding 3001/5173. Kill it by PID and verify the port is free.
+- Manual browser testing: give accounts `TEST-` names and delete them in the same session.
+- Money or pay features: confirm the rule with concrete numeric examples, and default to audit/flag-only, not automatic payment. New hard gates or validations: ask questions (grill the design) before planning.
+- Audits: explain each finding in plain words before asking the user which to fix.
+- Chat with the user in English. App copy and backend messages stay Hebrew.
+
 ## Commands
 
 ```bash
