@@ -4,7 +4,7 @@ const { z }   = require('zod');
 const supabase = require('../supabase');
 const auth     = require('../middleware/auth');
 const asyncHandler = require('../middleware/asyncHandler');
-const { foodAudit, foodQualifyingCountFor, dailyExpenses, FOOD_BONUS_TEST_THRESHOLD } = require('../lib/payCalc');
+const { foodAudit, foodUnlocked, dailyExpenses } = require('../lib/payCalc');
 const { safeExt } = require('../lib/safeExt');
 const { loadCancelReasons, applyCancellationBreakdown } = require('../lib/cancelReasons');
 const { loadOtherTestTypes, applyOtherTestBreakdown } = require('../lib/otherTests');
@@ -87,10 +87,11 @@ const PutBodySchema = z.object({
   notes:                 z.string().max(500).optional(),
 });
 
-// Only blocks INCREASES to food_expense on days with <4 tests+cancellations;
-// decreases and unrelated field edits always pass through untouched.
+// Only blocks INCREASES to food_expense on days that aren't food-unlocked
+// (<4 tests+cancellations and <7 office hours); decreases and unrelated
+// field edits always pass through untouched.
 function enforceFoodGate(finalFields, previousFoodExpense) {
-  const qualifies = foodQualifyingCountFor(finalFields) >= FOOD_BONUS_TEST_THRESHOLD;
+  const qualifies = foodUnlocked(finalFields);
   const isIncrease = (finalFields.food_expense || 0) > (previousFoodExpense || 0);
   if (!qualifies && isIncrease) {
     finalFields.food_expense = previousFoodExpense || 0;
@@ -215,11 +216,11 @@ router.post('/:id/food-receipt', upload.single('food_receipt'), asyncHandler(asy
   if (!req.file) return res.status(400).json({ error: 'לא הועלה קובץ' });
 
   const { data: entry, error: fetchErr } = await supabase.from('entries')
-    .select('id, date, food_receipt_urls, insurance_tests, screening_tests, mixed_screening_tests, partial_tests, other_tests, cancellations')
+    .select('id, date, food_receipt_urls, insurance_tests, screening_tests, mixed_screening_tests, partial_tests, other_tests, cancellations, office_hours')
     .eq('id', req.params.id).eq('user_id', req.userId).single();
   if (fetchErr || !entry) return res.status(404).json({ error: 'הרשומה לא נמצאה' });
-  if (foodQualifyingCountFor(entry) < FOOD_BONUS_TEST_THRESHOLD) {
-    return res.status(400).json({ error: 'יש להוסיף לפחות 4 בדיקות או ביטולים ליום זה לפני העלאת קבלת אוכל' });
+  if (!foodUnlocked(entry)) {
+    return res.status(400).json({ error: 'יש להוסיף לפחות 4 בדיקות/ביטולים או 7 שעות משרד ליום זה לפני העלאת קבלת אוכל' });
   }
 
   const ext = safeExt(req.file.originalname);
