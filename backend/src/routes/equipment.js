@@ -232,20 +232,27 @@ router.get('/orders', auth, adminAuth, asyncHandler(async (req, res) => {
   res.json(data || []);
 }));
 
+// 'YYYY-MM' -> { from, to } UTC date bounds for a month filter, or null if invalid.
+function monthRange(month) {
+  const s = String(month || '');
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(s)) return null;
+  const [y, m] = s.split('-').map(Number);
+  const next = m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`;
+  return { from: `${s}-01`, to: `${next}-01` };
+}
+
 // GET /api/equipment/orders/history?month=YYYY-MM — admin: completed orders in that month
 // (by completed_at, UTC month boundaries), newest first. Read-only history view.
 router.get('/orders/history', auth, adminAuth, asyncHandler(async (req, res) => {
-  const month = String(req.query.month || '');
-  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) return res.status(400).json({ error: 'חודש לא תקין' });
-  const [y, m] = month.split('-').map(Number);
-  const next = m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`;
+  const range = monthRange(req.query.month);
+  if (!range) return res.status(400).json({ error: 'חודש לא תקין' });
 
   const { data, error } = await supabase
     .from('equipment_orders')
     .select('id, user_id, items, needed_date, note, status, created_at, completed_at, profiles(first_name, last_name, username)')
     .eq('status', 'completed')
-    .gte('completed_at', `${month}-01`)
-    .lt('completed_at', `${next}-01`)
+    .gte('completed_at', range.from)
+    .lt('completed_at', range.to)
     .order('completed_at', { ascending: false });
   if (error) return res.status(500).json({ error: error.message });
   res.json(data || []);
@@ -319,24 +326,31 @@ async function loadSupplierOrder(id) {
   return data;
 }
 
-// GET /api/equipment/supplier-orders — open (draft/sent) first, then the 30 most recent closed
+// GET /api/equipment/supplier-orders — open orders only (draft/sent); closed ones live in /history
 router.get('/supplier-orders', auth, adminAuth, asyncHandler(async (req, res) => {
-  const { data: open, error: openErr } = await supabase
+  const { data, error } = await supabase
     .from('supplier_orders')
     .select(SUPPLIER_ORDER_SELECT)
     .in('status', ['draft', 'sent'])
     .order('created_at', { ascending: false });
-  if (openErr) return res.status(500).json({ error: openErr.message });
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data || []);
+}));
 
-  const { data: closed, error: closedErr } = await supabase
+// GET /api/equipment/supplier-orders/history?month=YYYY-MM — admin: closed (received/cancelled)
+// supplier orders created in that month, newest first. Status/supplier filtering is client-side.
+router.get('/supplier-orders/history', auth, adminAuth, asyncHandler(async (req, res) => {
+  const range = monthRange(req.query.month);
+  if (!range) return res.status(400).json({ error: 'חודש לא תקין' });
+  const { data, error } = await supabase
     .from('supplier_orders')
     .select(SUPPLIER_ORDER_SELECT)
     .in('status', ['received', 'cancelled'])
-    .order('created_at', { ascending: false })
-    .limit(30);
-  if (closedErr) return res.status(500).json({ error: closedErr.message });
-
-  res.json([...(open || []), ...(closed || [])]);
+    .gte('created_at', range.from)
+    .lt('created_at', range.to)
+    .order('created_at', { ascending: false });
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data || []);
 }));
 
 // POST /api/equipment/supplier-orders/check-now — run the daily stock check immediately

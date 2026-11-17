@@ -187,9 +187,17 @@ export default function AdminDashboard() {
   const [eqHistoryMonth, setEqHistoryMonth] = useState(() => nowMonth());
   const [eqHistoryUser, setEqHistoryUser] = useState('');
   const [eqHistoryModal, setEqHistoryModal] = useState(null);
+  const [eqHistoryKind, setEqHistoryKind] = useState('employees'); // 'employees' | 'suppliers'
   const { data: eqHistory = [], loading: eqHistoryLoading } =
     useFetch(eqHistoryMonth ? `/equipment/orders/history?month=${eqHistoryMonth}` : null,
-      { enabled: activeTab === 'eq_orders' && eqSubTab === 'history' });
+      { enabled: activeTab === 'eq_orders' && eqSubTab === 'history' && eqHistoryKind === 'employees' });
+  // Supplier order history: month on created_at; status + supplier filters are client-side
+  const [supHistoryMonth, setSupHistoryMonth] = useState(() => nowMonth());
+  const [supHistoryStatus, setSupHistoryStatus] = useState('received'); // received | cancelled_sent | all
+  const [supHistorySupplier, setSupHistorySupplier] = useState('');
+  const { data: supHistory = [], loading: supHistoryLoading } =
+    useFetch(supHistoryMonth ? `/equipment/supplier-orders/history?month=${supHistoryMonth}` : null,
+      { enabled: activeTab === 'eq_orders' && eqSubTab === 'history' && eqHistoryKind === 'suppliers' });
   const EMPTY_PRODUCT_FORM = {
     name: '', sku: '', supplier_contact_name: '', supplier_email: '', supplier_phone: '',
     supplier_whatsapp: '', supplier_company_id: '', price_excl_vat: '', price_incl_vat: '',
@@ -1064,6 +1072,186 @@ export default function AdminDashboard() {
         <p className="text-red-500 text-sm">{error}</p>
       </div>
     );
+  }
+
+  // Supplier order card, shared by the live "הזמנות ספק" list and the read-only history.
+  function renderSupplierOrderCard(order, { history = false } = {}) {
+      const busy = supplierBusyId === order.id;
+      const isDraft = order.status === 'draft';
+      const items = order.supplier_order_items || [];
+      // Catalog price is per box (purchase unit), e.g. capillaries ₪7,986 per box of 2,000
+      const total = items.reduce((sum, i) => sum + (Number(i.unit_price_incl_vat) || 0) * i.qty_boxes, 0);
+      const statusMeta = {
+        draft: { label: 'ממתין לאישור', cls: 'bg-amber-50 text-amber-700' },
+        sent: { label: order.channel === 'whatsapp' ? 'נשלח בוואטסאפ' : 'נשלח במייל', cls: 'bg-blue-50 text-blue-700' },
+        received: { label: 'התקבל', cls: 'bg-emerald-50 text-emerald-700' },
+        cancelled: { label: 'בוטל', cls: 'bg-slate-100 text-slate-500' },
+      }[order.status];
+      return (
+        <div key={order.id} className={`bg-white rounded-2xl border border-slate-100 px-4 py-3.5 ${!history && ['received', 'cancelled'].includes(order.status) ? 'opacity-60' : ''}`}
+          style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <p className="text-sm font-bold text-slate-800 truncate">{order.supplier_contact_name || order.supplier_key}</p>
+              <p className="text-xs text-slate-400 mt-0.5">
+                #{order.order_number} · {formatDate(order.created_at)}{total > 0 && ` · כ-₪${total.toLocaleString('he-IL', { maximumFractionDigits: 0 })}`}
+              </p>
+              {history && (order.sent_at || order.received_at) && (
+                <p className="text-xs mt-0.5">
+                  {order.sent_at && <span className="text-blue-700 font-semibold">נשלח: {formatDate(order.sent_at)}</span>}
+                  {order.sent_at && order.received_at && <span className="text-slate-300"> · </span>}
+                  {order.received_at && <span className="text-emerald-700 font-semibold">התקבל: {formatDate(order.received_at)}</span>}
+                </p>
+              )}
+            </div>
+            <span className={`shrink-0 text-xs font-bold px-2.5 py-1 rounded-xl ${statusMeta.cls}`}>{statusMeta.label}</span>
+          </div>
+
+          <div className="mt-3 flex flex-col gap-2">
+            {items.map(item => {
+              const cat = item.equipment_catalog;
+              const editValue = supplierQtyEdits[item.id] ?? String(item.qty_boxes);
+              const aiDiffers = item.ai_qty_boxes != null && item.ai_qty_boxes !== item.qty_boxes;
+              return (
+                <div key={item.id} className="rounded-xl bg-slate-50 px-3 py-2.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-slate-800 truncate">{item.name}</p>
+                      {cat && isDraft && (
+                        <p className="text-[11px] text-slate-400">מלאי: {cat.stock_qty} · סף: {cat.reorder_threshold ?? '—'}</p>
+                      )}
+                    </div>
+                    {isDraft ? (
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <input
+                          type="number" min="1" step="1"
+                          value={editValue}
+                          disabled={busy}
+                          onChange={e => setSupplierQtyEdits(ed => ({ ...ed, [item.id]: e.target.value }))}
+                          onBlur={() => saveSupplierQty(order, item, editValue)}
+                          className="w-16 px-2 py-1.5 text-sm text-center rounded-lg border border-slate-200 bg-white focus:outline-none focus:border-brand-purple/50"
+                        />
+                        <button
+                          onClick={() => removeSupplierItem(order, item)}
+                          disabled={busy}
+                          className="w-7 h-7 flex items-center justify-center rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all"
+                        >
+                          <span className="material-symbols-outlined text-base">close</span>
+                        </button>
+                      </div>
+                    ) : (
+                      <span className="text-sm font-bold text-slate-700 shrink-0">כמות: {item.qty_boxes}</span>
+                    )}
+                  </div>
+                  {isDraft && item.ai_reason && (
+                    <div className="mt-2 flex items-start gap-1.5 text-[11px] text-brand-purple">
+                      <span className="material-symbols-outlined text-sm shrink-0">auto_awesome</span>
+                      <p className="flex-1">
+                        הצעת AI: <b>{item.ai_qty_boxes}</b> — {item.ai_reason}
+                      </p>
+                      {aiDiffers && (
+                        <button
+                          onClick={() => saveSupplierQty(order, item, item.ai_qty_boxes)}
+                          disabled={busy}
+                          className="shrink-0 font-bold underline"
+                        >
+                          השתמש בהצעה
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {order.reply_status && (() => {
+            const replyMeta = {
+              confirmed: { label: 'אושר', icon: 'check_circle', cls: 'bg-emerald-50 text-emerald-700' },
+              partial: { label: 'אישור חלקי', icon: 'rule', cls: 'bg-amber-50 text-amber-700' },
+              out_of_stock: { label: 'חסר במלאי', icon: 'error', cls: 'bg-red-50 text-red-600' },
+              price_change: { label: 'שינוי מחיר', icon: 'payments', cls: 'bg-amber-50 text-amber-700' },
+              question: { label: 'שאלה מהספק', icon: 'help', cls: 'bg-blue-50 text-blue-700' },
+              other: { label: 'תשובה מהספק', icon: 'mail', cls: 'bg-slate-100 text-slate-600' },
+            }[order.reply_status];
+            return (
+              <div className="mt-3 rounded-xl border border-slate-100 px-3 py-2.5 space-y-1.5">
+                <div className="flex items-center justify-between gap-2">
+                  <span className={`inline-flex items-center gap-1 text-xs font-bold px-2 py-1 rounded-lg ${replyMeta.cls}`}>
+                    <span className="material-symbols-outlined text-sm">{replyMeta.icon}</span>
+                    {replyMeta.label}
+                  </span>
+                  <span className="text-[11px] text-slate-400">{formatDate(order.reply_received_at)}</span>
+                </div>
+                <p className="text-xs text-slate-700 leading-relaxed">{order.reply_summary}</p>
+                {order.reply_delivery_date && (
+                  <p className="text-xs text-slate-500">מועד אספקה: <span className="font-semibold text-slate-700">{order.reply_delivery_date}</span></p>
+                )}
+                {order.reply_web_link && (
+                  <a href={order.reply_web_link} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs font-semibold text-brand-purple underline">
+                    פתח את המייל ב-Outlook
+                    <span className="material-symbols-outlined text-sm">open_in_new</span>
+                  </a>
+                )}
+              </div>
+            );
+          })()}
+
+          {isDraft && (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {order.supplier_email && (
+                <button
+                  onClick={() => openComposer(order, 'email')}
+                  disabled={busy}
+                  className="flex-1 min-w-[140px] py-2.5 rounded-xl text-sm font-bold text-white brand-gradient active:scale-95 transition-all flex items-center justify-center gap-1.5 disabled:opacity-50"
+                >
+                  <span className="material-symbols-outlined text-base">mail</span>
+                  אשר ושלח במייל
+                </button>
+              )}
+              {(order.supplier_whatsapp || order.supplier_phone) && (
+                <button
+                  onClick={() => openComposer(order, 'whatsapp')}
+                  disabled={busy}
+                  className="flex-1 min-w-[140px] py-2.5 rounded-xl text-sm font-bold text-white bg-emerald-500 active:scale-95 transition-all flex items-center justify-center gap-1.5 disabled:opacity-50"
+                >
+                  <span className="material-symbols-outlined text-base">chat</span>
+                  שלח בוואטסאפ
+                </button>
+              )}
+              {!order.supplier_email && !order.supplier_whatsapp && !order.supplier_phone && (
+                <p className="flex-1 text-xs text-red-500 self-center">לספק אין אימייל או וואטסאפ בקטלוג</p>
+              )}
+              <button
+                onClick={() => cancelSupplierOrder(order)}
+                disabled={busy}
+                className="px-4 py-2.5 rounded-xl text-sm font-semibold text-slate-500 bg-slate-100 active:scale-95 transition-all disabled:opacity-50"
+              >
+                בטל
+              </button>
+            </div>
+          )}
+          {order.status === 'sent' && (
+            <div className="mt-3 flex gap-2">
+              <button
+                onClick={() => receiveSupplierOrder(order)}
+                disabled={busy}
+                className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white brand-gradient active:scale-95 transition-all flex items-center justify-center gap-1.5 disabled:opacity-50"
+              >
+                <span className="material-symbols-outlined text-base">inventory</span>
+                סמן כהתקבל (מעדכן מלאי)
+              </button>
+              <button
+                onClick={() => cancelSupplierOrder(order)}
+                disabled={busy}
+                className="px-4 py-2.5 rounded-xl text-sm font-semibold text-slate-500 bg-slate-100 active:scale-95 transition-all disabled:opacity-50"
+              >
+                בטל
+              </button>
+            </div>
+          )}
+        </div>
+      );
   }
 
   return (
@@ -2400,7 +2588,7 @@ export default function AdminDashboard() {
         <motion.div key="eq_orders" {...panelMotionProps} className="px-4 space-y-4">
           {/* Sub-tab toggle */}
           <div className="flex gap-2 flex-wrap">
-            {[{ id: 'catalog', label: 'קטלוג', icon: 'list' }, { id: 'orders', label: 'הזמנות', icon: 'inventory' }, { id: 'history', label: 'היסטוריה הזמנות', icon: 'history' }, { id: 'suppliers', label: 'הזמנות ספק', icon: 'local_shipping' }, { id: 'supplier_list', label: 'ספקים', icon: 'store' }].map(st => (
+            {[{ id: 'catalog', label: 'קטלוג', icon: 'list' }, { id: 'orders', label: 'הזמנות', icon: 'inventory' }, { id: 'history', label: 'היסטוריה', icon: 'history' }, { id: 'suppliers', label: 'הזמנות ספק', icon: 'local_shipping' }, { id: 'supplier_list', label: 'ספקים', icon: 'store' }].map(st => (
               <button
                 key={st.id}
                 onClick={() => setEqSubTab(st.id)}
@@ -2594,8 +2782,100 @@ export default function AdminDashboard() {
             </div>
           )}
 
-          {/* Order history sub-tab: completed employee orders, read-only */}
-          {eqSubTab === 'history' && (() => {
+          {/* History sub-tab: employees (completed orders) / suppliers (received/cancelled), read-only */}
+          {eqSubTab === 'history' && (
+            <div className="flex bg-slate-100 rounded-xl p-1 gap-1">
+              {[{ id: 'employees', label: 'עובדים', icon: 'group' }, { id: 'suppliers', label: 'ספקים', icon: 'local_shipping' }].map(k => (
+                <button
+                  key={k.id}
+                  onClick={() => setEqHistoryKind(k.id)}
+                  className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-sm font-semibold transition-all ${
+                    eqHistoryKind === k.id ? 'bg-white text-brand-purple shadow-sm' : 'text-slate-500'
+                  }`}
+                >
+                  <span className="material-symbols-outlined text-base">{k.icon}</span>
+                  {k.label}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {eqSubTab === 'history' && eqHistoryKind === 'suppliers' && (() => {
+            const supplierLabel = o => o.supplier_contact_name || o.supplier_key || '—';
+            const orderTotal = o => (o.supplier_order_items || [])
+              .reduce((sum, i) => sum + (Number(i.unit_price_incl_vat) || 0) * i.qty_boxes, 0);
+            const byStatus = supHistory.filter(o =>
+              supHistoryStatus === 'all' ? true
+              : supHistoryStatus === 'cancelled_sent' ? o.status === 'cancelled' && !!o.sent_at
+              : o.status === 'received');
+            const suppliers = [...new Map(byStatus.map(o => [o.supplier_key, supplierLabel(o)])).entries()]
+              .sort((a, b) => a[1].localeCompare(b[1], 'he'));
+            const shown = supHistorySupplier ? byStatus.filter(o => o.supplier_key === supHistorySupplier) : byStatus;
+            const receivedTotal = shown.filter(o => o.status === 'received').reduce((s, o) => s + orderTotal(o), 0);
+            return (
+              <div className="space-y-3">
+                <div className="bg-white rounded-2xl border border-slate-100 p-4 space-y-3"
+                  style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
+                  <div className="flex items-center gap-3">
+                    <span className="material-symbols-outlined text-slate-400">calendar_month</span>
+                    <input
+                      type="month"
+                      value={supHistoryMonth}
+                      max={nowMonth()}
+                      onChange={e => { setSupHistoryMonth(e.target.value); setSupHistorySupplier(''); }}
+                      className="flex-1 text-sm font-bold text-slate-800 border-0 focus:outline-none bg-transparent"
+                    />
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="material-symbols-outlined text-slate-400">filter_list</span>
+                    <select
+                      value={supHistoryStatus}
+                      onChange={e => { setSupHistoryStatus(e.target.value); setSupHistorySupplier(''); }}
+                      className="flex-1 text-sm font-semibold text-slate-800 border-0 focus:outline-none bg-transparent"
+                    >
+                      <option value="received">התקבל</option>
+                      <option value="cancelled_sent">בוטל אחרי שליחה</option>
+                      <option value="all">הכל (כולל טיוטות שבוטלו)</option>
+                    </select>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="material-symbols-outlined text-slate-400">store</span>
+                    <select
+                      value={supHistorySupplier}
+                      onChange={e => setSupHistorySupplier(e.target.value)}
+                      className="flex-1 text-sm font-semibold text-slate-800 border-0 focus:outline-none bg-transparent"
+                    >
+                      <option value="">כל הספקים</option>
+                      {suppliers.map(([key, label]) => <option key={key} value={key}>{label}</option>)}
+                    </select>
+                  </div>
+                </div>
+                {!supHistoryLoading && shown.length > 0 && (
+                  <p className="text-xs font-semibold text-slate-500 px-1">
+                    {shown.length} {shown.length !== 1 ? 'הזמנות' : 'הזמנה'}
+                    {receivedTotal > 0 && ` · כ-₪${receivedTotal.toLocaleString('he-IL', { maximumFractionDigits: 0 })} התקבל`}
+                  </p>
+                )}
+                {supHistoryLoading ? (
+                  <div className="flex justify-center py-10">
+                    <span className="material-symbols-outlined text-3xl text-slate-300 animate-spin">progress_activity</span>
+                  </div>
+                ) : shown.length === 0 ? (
+                  <div className="bg-white rounded-2xl border border-slate-100 py-10 flex flex-col items-center gap-2 text-slate-400"
+                    style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
+                    <span className="material-symbols-outlined text-3xl opacity-30">history</span>
+                    <p className="text-sm">אין הזמנות ספק בחודש זה</p>
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-3">
+                    {shown.map(o => renderSupplierOrderCard(o, { history: true }))}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
+          {eqSubTab === 'history' && eqHistoryKind === 'employees' && (() => {
             const nameOf = p => p ? `${p.first_name || ''} ${p.last_name || ''}`.trim() || p.username : '—';
             const employees = [...new Map(eqHistory.map(o => [o.user_id, nameOf(o.profiles)])).entries()]
               .sort((a, b) => a[1].localeCompare(b[1], 'he'));
@@ -2717,177 +2997,7 @@ export default function AdminDashboard() {
                 </div>
               ) : (
                 <div className="flex flex-col gap-3">
-                  {supplierOrders.map(order => {
-                    const busy = supplierBusyId === order.id;
-                    const isDraft = order.status === 'draft';
-                    const items = order.supplier_order_items || [];
-                    // Catalog price is per box (purchase unit), e.g. capillaries ₪7,986 per box of 2,000
-                    const total = items.reduce((sum, i) => sum + (Number(i.unit_price_incl_vat) || 0) * i.qty_boxes, 0);
-                    const statusMeta = {
-                      draft: { label: 'ממתין לאישור', cls: 'bg-amber-50 text-amber-700' },
-                      sent: { label: order.channel === 'whatsapp' ? 'נשלח בוואטסאפ' : 'נשלח במייל', cls: 'bg-blue-50 text-blue-700' },
-                      received: { label: 'התקבל', cls: 'bg-emerald-50 text-emerald-700' },
-                      cancelled: { label: 'בוטל', cls: 'bg-slate-100 text-slate-500' },
-                    }[order.status];
-                    return (
-                      <div key={order.id} className={`bg-white rounded-2xl border border-slate-100 px-4 py-3.5 ${['received', 'cancelled'].includes(order.status) ? 'opacity-60' : ''}`}
-                        style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="min-w-0">
-                            <p className="text-sm font-bold text-slate-800 truncate">{order.supplier_contact_name || order.supplier_key}</p>
-                            <p className="text-xs text-slate-400 mt-0.5">
-                              #{order.order_number} · {formatDate(order.created_at)}{total > 0 && ` · כ-₪${total.toLocaleString('he-IL', { maximumFractionDigits: 0 })}`}
-                            </p>
-                          </div>
-                          <span className={`shrink-0 text-xs font-bold px-2.5 py-1 rounded-xl ${statusMeta.cls}`}>{statusMeta.label}</span>
-                        </div>
-
-                        <div className="mt-3 flex flex-col gap-2">
-                          {items.map(item => {
-                            const cat = item.equipment_catalog;
-                            const editValue = supplierQtyEdits[item.id] ?? String(item.qty_boxes);
-                            const aiDiffers = item.ai_qty_boxes != null && item.ai_qty_boxes !== item.qty_boxes;
-                            return (
-                              <div key={item.id} className="rounded-xl bg-slate-50 px-3 py-2.5">
-                                <div className="flex items-center justify-between gap-2">
-                                  <div className="min-w-0">
-                                    <p className="text-sm font-semibold text-slate-800 truncate">{item.name}</p>
-                                    {cat && isDraft && (
-                                      <p className="text-[11px] text-slate-400">מלאי: {cat.stock_qty} · סף: {cat.reorder_threshold ?? '—'}</p>
-                                    )}
-                                  </div>
-                                  {isDraft ? (
-                                    <div className="flex items-center gap-1.5 shrink-0">
-                                      <input
-                                        type="number" min="1" step="1"
-                                        value={editValue}
-                                        disabled={busy}
-                                        onChange={e => setSupplierQtyEdits(ed => ({ ...ed, [item.id]: e.target.value }))}
-                                        onBlur={() => saveSupplierQty(order, item, editValue)}
-                                        className="w-16 px-2 py-1.5 text-sm text-center rounded-lg border border-slate-200 bg-white focus:outline-none focus:border-brand-purple/50"
-                                      />
-                                      <button
-                                        onClick={() => removeSupplierItem(order, item)}
-                                        disabled={busy}
-                                        className="w-7 h-7 flex items-center justify-center rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all"
-                                      >
-                                        <span className="material-symbols-outlined text-base">close</span>
-                                      </button>
-                                    </div>
-                                  ) : (
-                                    <span className="text-sm font-bold text-slate-700 shrink-0">כמות: {item.qty_boxes}</span>
-                                  )}
-                                </div>
-                                {isDraft && item.ai_reason && (
-                                  <div className="mt-2 flex items-start gap-1.5 text-[11px] text-brand-purple">
-                                    <span className="material-symbols-outlined text-sm shrink-0">auto_awesome</span>
-                                    <p className="flex-1">
-                                      הצעת AI: <b>{item.ai_qty_boxes}</b> — {item.ai_reason}
-                                    </p>
-                                    {aiDiffers && (
-                                      <button
-                                        onClick={() => saveSupplierQty(order, item, item.ai_qty_boxes)}
-                                        disabled={busy}
-                                        className="shrink-0 font-bold underline"
-                                      >
-                                        השתמש בהצעה
-                                      </button>
-                                    )}
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-
-                        {order.reply_status && (() => {
-                          const replyMeta = {
-                            confirmed: { label: 'אושר', icon: 'check_circle', cls: 'bg-emerald-50 text-emerald-700' },
-                            partial: { label: 'אישור חלקי', icon: 'rule', cls: 'bg-amber-50 text-amber-700' },
-                            out_of_stock: { label: 'חסר במלאי', icon: 'error', cls: 'bg-red-50 text-red-600' },
-                            price_change: { label: 'שינוי מחיר', icon: 'payments', cls: 'bg-amber-50 text-amber-700' },
-                            question: { label: 'שאלה מהספק', icon: 'help', cls: 'bg-blue-50 text-blue-700' },
-                            other: { label: 'תשובה מהספק', icon: 'mail', cls: 'bg-slate-100 text-slate-600' },
-                          }[order.reply_status];
-                          return (
-                            <div className="mt-3 rounded-xl border border-slate-100 px-3 py-2.5 space-y-1.5">
-                              <div className="flex items-center justify-between gap-2">
-                                <span className={`inline-flex items-center gap-1 text-xs font-bold px-2 py-1 rounded-lg ${replyMeta.cls}`}>
-                                  <span className="material-symbols-outlined text-sm">{replyMeta.icon}</span>
-                                  {replyMeta.label}
-                                </span>
-                                <span className="text-[11px] text-slate-400">{formatDate(order.reply_received_at)}</span>
-                              </div>
-                              <p className="text-xs text-slate-700 leading-relaxed">{order.reply_summary}</p>
-                              {order.reply_delivery_date && (
-                                <p className="text-xs text-slate-500">מועד אספקה: <span className="font-semibold text-slate-700">{order.reply_delivery_date}</span></p>
-                              )}
-                              {order.reply_web_link && (
-                                <a href={order.reply_web_link} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs font-semibold text-brand-purple underline">
-                                  פתח את המייל ב-Outlook
-                                  <span className="material-symbols-outlined text-sm">open_in_new</span>
-                                </a>
-                              )}
-                            </div>
-                          );
-                        })()}
-
-                        {isDraft && (
-                          <div className="mt-3 flex flex-wrap gap-2">
-                            {order.supplier_email && (
-                              <button
-                                onClick={() => openComposer(order, 'email')}
-                                disabled={busy}
-                                className="flex-1 min-w-[140px] py-2.5 rounded-xl text-sm font-bold text-white brand-gradient active:scale-95 transition-all flex items-center justify-center gap-1.5 disabled:opacity-50"
-                              >
-                                <span className="material-symbols-outlined text-base">mail</span>
-                                אשר ושלח במייל
-                              </button>
-                            )}
-                            {(order.supplier_whatsapp || order.supplier_phone) && (
-                              <button
-                                onClick={() => openComposer(order, 'whatsapp')}
-                                disabled={busy}
-                                className="flex-1 min-w-[140px] py-2.5 rounded-xl text-sm font-bold text-white bg-emerald-500 active:scale-95 transition-all flex items-center justify-center gap-1.5 disabled:opacity-50"
-                              >
-                                <span className="material-symbols-outlined text-base">chat</span>
-                                שלח בוואטסאפ
-                              </button>
-                            )}
-                            {!order.supplier_email && !order.supplier_whatsapp && !order.supplier_phone && (
-                              <p className="flex-1 text-xs text-red-500 self-center">לספק אין אימייל או וואטסאפ בקטלוג</p>
-                            )}
-                            <button
-                              onClick={() => cancelSupplierOrder(order)}
-                              disabled={busy}
-                              className="px-4 py-2.5 rounded-xl text-sm font-semibold text-slate-500 bg-slate-100 active:scale-95 transition-all disabled:opacity-50"
-                            >
-                              בטל
-                            </button>
-                          </div>
-                        )}
-                        {order.status === 'sent' && (
-                          <div className="mt-3 flex gap-2">
-                            <button
-                              onClick={() => receiveSupplierOrder(order)}
-                              disabled={busy}
-                              className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white brand-gradient active:scale-95 transition-all flex items-center justify-center gap-1.5 disabled:opacity-50"
-                            >
-                              <span className="material-symbols-outlined text-base">inventory</span>
-                              סמן כהתקבל (מעדכן מלאי)
-                            </button>
-                            <button
-                              onClick={() => cancelSupplierOrder(order)}
-                              disabled={busy}
-                              className="px-4 py-2.5 rounded-xl text-sm font-semibold text-slate-500 bg-slate-100 active:scale-95 transition-all disabled:opacity-50"
-                            >
-                              בטל
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
+                  {supplierOrders.map(order => renderSupplierOrderCard(order))}
                 </div>
               )}
             </div>
