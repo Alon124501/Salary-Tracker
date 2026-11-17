@@ -232,6 +232,25 @@ router.get('/orders', auth, adminAuth, asyncHandler(async (req, res) => {
   res.json(data || []);
 }));
 
+// GET /api/equipment/orders/history?month=YYYY-MM — admin: completed orders in that month
+// (by completed_at, UTC month boundaries), newest first. Read-only history view.
+router.get('/orders/history', auth, adminAuth, asyncHandler(async (req, res) => {
+  const month = String(req.query.month || '');
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) return res.status(400).json({ error: 'חודש לא תקין' });
+  const [y, m] = month.split('-').map(Number);
+  const next = m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`;
+
+  const { data, error } = await supabase
+    .from('equipment_orders')
+    .select('id, user_id, items, needed_date, note, status, created_at, completed_at, profiles(first_name, last_name, username)')
+    .eq('status', 'completed')
+    .gte('completed_at', `${month}-01`)
+    .lt('completed_at', `${next}-01`)
+    .order('completed_at', { ascending: false });
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data || []);
+}));
+
 // DELETE /api/equipment/orders/:id — admin marks fulfilled: decrements stock, then marks the order
 // completed (kept, not deleted, as consumption history for supplier reorder suggestions).
 // Optional ?quantities={catalog_id: qty} lets admin supply less than requested (0 = not supplied).

@@ -183,6 +183,13 @@ export default function AdminDashboard() {
     useFetch('/equipment/orders');
   const pendingOrdersCount = eqOrders.filter(o => o.status === 'pending').length;
   const [eqSubTab, setEqSubTab] = useState('catalog');
+  // Completed-order history (read-only): month filter on completed_at + client-side employee filter
+  const [eqHistoryMonth, setEqHistoryMonth] = useState(() => nowMonth());
+  const [eqHistoryUser, setEqHistoryUser] = useState('');
+  const [eqHistoryModal, setEqHistoryModal] = useState(null);
+  const { data: eqHistory = [], loading: eqHistoryLoading } =
+    useFetch(eqHistoryMonth ? `/equipment/orders/history?month=${eqHistoryMonth}` : null,
+      { enabled: activeTab === 'eq_orders' && eqSubTab === 'history' });
   const EMPTY_PRODUCT_FORM = {
     name: '', sku: '', supplier_contact_name: '', supplier_email: '', supplier_phone: '',
     supplier_whatsapp: '', supplier_company_id: '', price_excl_vat: '', price_incl_vat: '',
@@ -2392,8 +2399,8 @@ export default function AdminDashboard() {
       {activeTab === 'eq_orders' && (
         <motion.div key="eq_orders" {...panelMotionProps} className="px-4 space-y-4">
           {/* Sub-tab toggle */}
-          <div className="flex gap-2">
-            {[{ id: 'catalog', label: 'קטלוג', icon: 'list' }, { id: 'orders', label: 'הזמנות', icon: 'inventory' }, { id: 'suppliers', label: 'הזמנות ספק', icon: 'local_shipping' }, { id: 'supplier_list', label: 'ספקים', icon: 'store' }].map(st => (
+          <div className="flex gap-2 flex-wrap">
+            {[{ id: 'catalog', label: 'קטלוג', icon: 'list' }, { id: 'orders', label: 'הזמנות', icon: 'inventory' }, { id: 'history', label: 'היסטוריה הזמנות', icon: 'history' }, { id: 'suppliers', label: 'הזמנות ספק', icon: 'local_shipping' }, { id: 'supplier_list', label: 'ספקים', icon: 'store' }].map(st => (
               <button
                 key={st.id}
                 onClick={() => setEqSubTab(st.id)}
@@ -2586,6 +2593,91 @@ export default function AdminDashboard() {
               )}
             </div>
           )}
+
+          {/* Order history sub-tab: completed employee orders, read-only */}
+          {eqSubTab === 'history' && (() => {
+            const nameOf = p => p ? `${p.first_name || ''} ${p.last_name || ''}`.trim() || p.username : '—';
+            const employees = [...new Map(eqHistory.map(o => [o.user_id, nameOf(o.profiles)])).entries()]
+              .sort((a, b) => a[1].localeCompare(b[1], 'he'));
+            const shown = eqHistoryUser ? eqHistory.filter(o => o.user_id === eqHistoryUser) : eqHistory;
+            const unitsSupplied = shown.reduce((sum, o) =>
+              sum + (o.items || []).reduce((s, i) => s + (Number(i.quantity) || 0), 0), 0);
+            return (
+              <div className="space-y-3">
+                <div className="bg-white rounded-2xl border border-slate-100 p-4 space-y-3"
+                  style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
+                  <div className="flex items-center gap-3">
+                    <span className="material-symbols-outlined text-slate-400">calendar_month</span>
+                    <input
+                      type="month"
+                      value={eqHistoryMonth}
+                      max={nowMonth()}
+                      onChange={e => { setEqHistoryMonth(e.target.value); setEqHistoryUser(''); }}
+                      className="flex-1 text-sm font-bold text-slate-800 border-0 focus:outline-none bg-transparent"
+                    />
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="material-symbols-outlined text-slate-400">person</span>
+                    <select
+                      value={eqHistoryUser}
+                      onChange={e => setEqHistoryUser(e.target.value)}
+                      className="flex-1 text-sm font-semibold text-slate-800 border-0 focus:outline-none bg-transparent"
+                    >
+                      <option value="">כל העובדים</option>
+                      {employees.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
+                    </select>
+                  </div>
+                </div>
+                {!eqHistoryLoading && shown.length > 0 && (
+                  <p className="text-xs font-semibold text-slate-500 px-1">
+                    {shown.length} {shown.length !== 1 ? 'הזמנות' : 'הזמנה'} · {unitsSupplied} יח' סופקו
+                  </p>
+                )}
+                {eqHistoryLoading ? (
+                  <div className="flex justify-center py-10">
+                    <span className="material-symbols-outlined text-3xl text-slate-300 animate-spin">progress_activity</span>
+                  </div>
+                ) : shown.length === 0 ? (
+                  <div className="bg-white rounded-2xl border border-slate-100 py-10 flex flex-col items-center gap-2 text-slate-400"
+                    style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
+                    <span className="material-symbols-outlined text-3xl opacity-30">history</span>
+                    <p className="text-sm">אין הזמנות שהושלמו בחודש זה</p>
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-2">
+                    {shown.map(order => {
+                      const itemCount = Array.isArray(order.items) ? order.items.length : 0;
+                      return (
+                        <button
+                          key={order.id}
+                          onClick={() => setEqHistoryModal(order)}
+                          className="bg-white rounded-2xl border border-slate-100 px-4 py-3.5 flex items-center justify-between text-right w-full active:scale-[0.99] transition-all"
+                          style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}
+                        >
+                          <div>
+                            <p className="text-sm font-bold text-slate-800">{nameOf(order.profiles)}</p>
+                            <p className="text-xs text-slate-400 mt-0.5">
+                              {itemCount} {itemCount !== 1 ? 'פריטים' : 'פריט'} · הוזמן {formatDate(order.created_at)}
+                            </p>
+                            <p className="text-xs font-semibold text-emerald-700 mt-0.5">
+                              הושלם: {order.completed_at ? formatDate(order.completed_at) : '—'}
+                            </p>
+                            {order.note && (
+                              <p className="text-xs font-semibold text-amber-700 mt-0.5 flex items-center gap-1">
+                                <span className="material-symbols-outlined text-sm">sticky_note_2</span>
+                                יש הערה
+                              </p>
+                            )}
+                          </div>
+                          <span className="text-xs font-bold px-2.5 py-1 rounded-xl bg-emerald-50 text-emerald-700">הושלם</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           {/* Suppliers sub-tab: reorder drafts created when stock drops to the threshold */}
           {eqSubTab === 'suppliers' && (
@@ -3002,6 +3094,65 @@ export default function AdminDashboard() {
       </AnimatedModal>
 
       {/* ── Equipment Order Modal ──────────────────────────────────────── */}
+      {/* Completed order detail (history, read-only) */}
+      <AnimatedModal open={!!eqHistoryModal} onBackdropClick={() => setEqHistoryModal(null)} zIndex={40}>
+        {eqHistoryModal && (
+          <div className="relative z-50 bg-white rounded-3xl w-full max-w-md shadow-2xl" style={{ maxHeight: '80vh', display: 'flex', flexDirection: 'column' }}>
+            <div className="px-5 py-4 flex items-center justify-between border-b border-slate-100 flex-shrink-0">
+              <div>
+                {(() => {
+                  const p = eqHistoryModal.profiles;
+                  const name = p ? `${p.first_name || ''} ${p.last_name || ''}`.trim() || p.username : '—';
+                  return <h2 className="text-base font-extrabold text-slate-900">{name}</h2>;
+                })()}
+                <p className="text-xs text-slate-400 mt-0.5">
+                  נשלח: {formatDate(eqHistoryModal.created_at)}
+                </p>
+                <p className="text-xs font-semibold text-brand-purple mt-0.5">
+                  תאריך נדרש: {eqHistoryModal.needed_date ? formatDate(eqHistoryModal.needed_date) : '—'}
+                </p>
+                <p className="text-xs font-semibold text-emerald-700 mt-0.5">
+                  הושלם: {eqHistoryModal.completed_at ? formatDate(eqHistoryModal.completed_at) : '—'}
+                </p>
+              </div>
+              <button onClick={() => setEqHistoryModal(null)} className="w-8 h-8 flex items-center justify-center rounded-xl bg-slate-100 text-slate-500">
+                <span className="material-symbols-outlined text-base">close</span>
+              </button>
+            </div>
+            <div className="overflow-y-auto flex-1 px-5 py-4 space-y-2">
+              {eqHistoryModal.note && (
+                <div className="bg-amber-50 border border-amber-100 rounded-2xl px-4 py-3 mb-2">
+                  <p className="text-xs font-bold text-amber-700 flex items-center gap-1 mb-1">
+                    <span className="material-symbols-outlined text-sm">chat</span>
+                    הערת העובד
+                  </p>
+                  <p className="text-sm text-slate-800 whitespace-pre-wrap break-words">{eqHistoryModal.note}</p>
+                </div>
+              )}
+              {(eqHistoryModal.items || []).map((item, i) => (
+                <div key={i} className="flex items-center justify-between py-2.5 border-b border-slate-50 last:border-0">
+                  <div>
+                    <p className={`text-sm ${item.quantity === 0 ? 'text-slate-400 line-through' : 'text-slate-700'}`}>{item.name}</p>
+                    {item.requested_quantity != null && item.requested_quantity !== item.quantity && (
+                      <p className="text-[11px] text-amber-700 mt-0.5">הוזמן: {item.requested_quantity}</p>
+                    )}
+                  </div>
+                  <span className="text-sm font-bold text-slate-800">{item.quantity}</span>
+                </div>
+              ))}
+            </div>
+            <div className="px-5 py-4 border-t border-slate-100 flex-shrink-0">
+              <button
+                onClick={() => setEqHistoryModal(null)}
+                className="w-full py-3 rounded-2xl text-sm font-bold text-slate-600 bg-slate-100 active:scale-[0.98] transition-all"
+              >
+                סגור
+              </button>
+            </div>
+          </div>
+        )}
+      </AnimatedModal>
+
       <AnimatedModal open={!!eqOrderModal} onBackdropClick={() => setEqOrderModal(null)} zIndex={40}>
         {eqOrderModal && (
           <div className="relative z-50 bg-white rounded-3xl w-full max-w-md shadow-2xl" style={{ maxHeight: '80vh', display: 'flex', flexDirection: 'column' }}>
