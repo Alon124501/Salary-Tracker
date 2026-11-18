@@ -7,6 +7,13 @@ function localDateStr(d) {
 }
 
 const EMPTY_COMPANY_FORM = { name: '', requires_vouchers: false, performed_test_ids: [], landing_url: '' };
+// חברת חשמל's company link is a Multipass link, not a landing page
+const MULTIPASS_COMPANY_ID = 'e7390a9c-11d9-4fd5-9fda-43063b8609d3';
+
+function landingLabelFor(company) {
+  return company?.id === MULTIPASS_COMPANY_ID ? 'קישור למולטיפס' : 'דף נחיתה';
+}
+
 const EMPTY_BRANCH_FORM = {
   name: '', contacts: [],
   address: '', has_parking: null,
@@ -816,7 +823,7 @@ export default function ScreeningLocationsPage() {
                 {/* Company landing page */}
                 {selectedCompany?.landing_url && (
                   <div className="bg-slate-50 rounded-2xl p-4 space-y-3">
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">דף נחיתה</p>
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">{landingLabelFor(selectedCompany)}</p>
                     <div className="flex gap-2">
                       <a
                         href={selectedCompany.landing_url}
@@ -825,7 +832,7 @@ export default function ScreeningLocationsPage() {
                         className="flex-1 flex items-center justify-center gap-1.5 px-4 py-2.5 brand-gradient text-white text-sm font-bold rounded-xl active:scale-95 transition-transform"
                       >
                         <span className="material-symbols-outlined text-base">open_in_new</span>
-                        דף נחיתה
+                        {landingLabelFor(selectedCompany)}
                       </a>
                       <button
                         type="button"
