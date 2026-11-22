@@ -1,7 +1,7 @@
 const { z } = require('zod');
 const Anthropic = require('@anthropic-ai/sdk');
 const supabase = require('../supabase');
-const { graphConfigured, listMessagesFrom } = require('./msGraph');
+const { graphConfigured, listInboxMessagesSince } = require('./msGraph');
 const { anthropic, AI_MODEL } = require('./reorder');
 
 // Supplier reply check. For every order sent by email and not yet received, looks in the company
@@ -83,14 +83,40 @@ async function classifyReply(order, replyText) {
   }
 }
 
-// Picks this order's newest reply: a message whose subject carries "#<order_number>" (a reply to
-// our email keeps the subject), or — when it's the supplier's only open order — any newer message
-// from them, since some suppliers answer in a fresh email.
-function pickReply(order, messages, supplierOpenCount) {
+// Free-mail domains are shared by unrelated people, so for these only the exact address counts.
+const FREE_MAIL_DOMAINS = new Set([
+  'gmail.com', 'googlemail.com', 'walla.co.il', 'walla.com', 'outlook.com', 'outlook.co.il',
+  'hotmail.com', 'hotmail.co.il', 'live.com', 'yahoo.com', 'icloud.com', 'me.com',
+  'bezeqint.net', 'netvision.net.il', '012.net.il', 'zahav.net.il',
+]);
+
+// Who counts as "this supplier": anyone at the supplier's company domain (a colleague often answers
+// instead of the person we wrote to), or the exact address for free-mail suppliers.
+function senderKey(address) {
+  const email = (address || '').trim().toLowerCase();
+  const domain = email.split('@')[1] || '';
+  return domain && !FREE_MAIL_DOMAINS.has(domain) ? `@${domain}` : email;
+}
+
+function hasOrderTag(subject, orderNumber) {
+  return new RegExp(`#${orderNumber}(?!\\d)`).test(subject || '');
+}
+
+// Picks this order's newest reply (messages are newest first):
+// 1. a message whose subject carries "#<order_number>", from any sender (a reply keeps our subject);
+// 2. else, when it's the only open order for this supplier, the newest message from the supplier's
+//    domain that isn't tagged for another open order, since some suppliers answer in a fresh email.
+function pickReply(order, messages, supplierOpenCount, openOrderNumbers = []) {
   const after = messages.filter(m => new Date(m.receivedDateTime) >= new Date(order.sent_at));
-  const tagged = after.filter(m => (m.subject || '').includes(`#${order.order_number}`));
-  if (tagged.length) return tagged[0];
-  return supplierOpenCount === 1 ? after[0] || null : null;
+  const tagged = after.find(m => hasOrderTag(m.subject, order.order_number));
+  if (tagged) return tagged;
+  if (supplierOpenCount !== 1) return null;
+
+  const key = senderKey(order.supplier_email);
+  return after.find(m =>
+    senderKey(m.from?.emailAddress?.address) === key
+    && !openOrderNumbers.some(n => n !== order.order_number && hasOrderTag(m.subject, n))
+  ) || null;
 }
 
 async function runReplyCheck() {
@@ -107,24 +133,20 @@ async function runReplyCheck() {
 
   const bySupplier = new Map();
   for (const o of orders) {
-    const key = o.supplier_email.toLowerCase();
+    const key = senderKey(o.supplier_email);
     if (!bySupplier.has(key)) bySupplier.set(key, []);
     bySupplier.get(key).push(o);
   }
 
-  const updated = [];
-  for (const [email, supplierOrders] of bySupplier) {
-    const since = supplierOrders.map(o => o.sent_at).sort()[0];
-    let messages;
-    try {
-      messages = await listMessagesFrom(email, since);
-    } catch (err) {
-      console.error(`[replies] mailbox read failed for ${email}:`, err.message);
-      continue;
-    }
+  // One inbox read covers every open order (sent_at is a timestamptz; Graph wants ISO 8601).
+  const since = new Date(orders.map(o => new Date(o.sent_at).getTime()).reduce((a, b) => Math.min(a, b))).toISOString();
+  const messages = await listInboxMessagesSince(since);
+  const openOrderNumbers = orders.map(o => o.order_number);
 
+  const updated = [];
+  for (const supplierOrders of bySupplier.values()) {
     for (const order of supplierOrders) {
-      const reply = pickReply(order, messages, supplierOrders.length);
+      const reply = pickReply(order, messages, supplierOrders.length, openOrderNumbers);
       if (!reply || reply.id === order.reply_message_id) continue;
 
       const replyText = (reply.uniqueBody?.content || reply.bodyPreview || '').trim().slice(0, 4000);
@@ -150,4 +172,4 @@ async function runReplyCheck() {
   return { checked: orders.length, updated };
 }
 
-module.exports = { runReplyCheck, pickReply, classifyReply };
+module.exports = { runReplyCheck, pickReply, classifyReply, senderKey };

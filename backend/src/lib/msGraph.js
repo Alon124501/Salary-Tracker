@@ -30,11 +30,15 @@ async function getGraphToken() {
   return graphToken.value;
 }
 
-// Path is relative to the mailbox, e.g. '/sendMail' or '/messages?$filter=...'
+// Path is relative to the mailbox, e.g. '/sendMail' or '/messages?$filter=...', or a full
+// Graph URL (an @odata.nextLink when paging).
 async function graphRequest(path, { method = 'GET', body, headers = {} } = {}) {
   const token = await getGraphToken();
   const mailbox = encodeURIComponent(process.env.SUPPLIER_SENDER_EMAIL);
-  const res = await fetch(`https://graph.microsoft.com/v1.0/users/${mailbox}${path}`, {
+  const url = path.startsWith('https://graph.microsoft.com/')
+    ? path
+    : `https://graph.microsoft.com/v1.0/users/${mailbox}${path}`;
+  const res = await fetch(url, {
     method,
     headers: {
       Authorization: `Bearer ${token}`,
@@ -65,20 +69,29 @@ async function sendMail({ to, replyTo, subject, text }) {
   });
 }
 
-// Messages from one sender received at or after `since` (ISO string), newest first.
-// uniqueBody = only the new part of a reply, without the quoted original order.
-async function listMessagesFrom(fromAddress, since) {
-  const filter = `receivedDateTime ge ${since} and from/emailAddress/address eq '${fromAddress.replace(/'/g, "''")}'`;
+// Inbox messages from any sender received at or after `since` (ISO string), newest first, up to
+// `max`. Inbox only, so our own sent orders (Sent Items) never show up; anything from our own
+// mailbox is dropped too. uniqueBody = only the new part of a reply, without the quoted order.
+async function listInboxMessagesSince(since, max = 200) {
   const params = new URLSearchParams({
-    $filter: filter,
+    $filter: `receivedDateTime ge ${since}`,
     $orderby: 'receivedDateTime desc',
-    $select: 'id,subject,receivedDateTime,uniqueBody,bodyPreview,webLink',
-    $top: '25',
+    $select: 'id,subject,from,receivedDateTime,uniqueBody,bodyPreview,webLink',
+    $top: '50',
   });
-  const data = await graphRequest(`/messages?${params}`, {
-    headers: { Prefer: 'outlook.body-content-type="text"' },
-  });
-  return data?.value || [];
+  const own = (process.env.SUPPLIER_SENDER_EMAIL || '').toLowerCase();
+  const messages = [];
+  let next = `/mailFolders/inbox/messages?${params}`;
+  while (next && messages.length < max) {
+    const data = await graphRequest(next, {
+      headers: { Prefer: 'outlook.body-content-type="text"' },
+    });
+    messages.push(...(data?.value || []));
+    next = data?.['@odata.nextLink'] || null;
+  }
+  return messages
+    .slice(0, max)
+    .filter(m => (m.from?.emailAddress?.address || '').toLowerCase() !== own);
 }
 
-module.exports = { graphConfigured, sendMail, listMessagesFrom };
+module.exports = { graphConfigured, sendMail, listInboxMessagesSince };
