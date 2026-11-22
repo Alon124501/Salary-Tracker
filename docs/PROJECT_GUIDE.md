@@ -58,7 +58,7 @@ Drop `screening_branches.performed_test_ids`, `screening_branches.registration_u
 - Crons (UTC), all require `Authorization: Bearer $CRON_SECRET` (`routes/cron.js`):
   - `/api/cron/monthly-receipts` — `0 2 1 * *` (1st of month)
   - `/api/cron/process-notifications` — `0 8 * * *` (daily; activates scheduled notifications + push)
-  - `/api/cron/equipment-agent` — `0 6 * * 0-4` (Sun–Thu; low-stock check → supplier drafts, supplier reply check)
+  - (equipment agent cron removed in v1.12.0 — stock check and supplier reply check are manual admin buttons: `POST /api/equipment/supplier-orders/check-now` / `check-replies`)
 - Deploy = push to `master`. Local commit does nothing. Release tags `vX.Y.Z` per `docs/RELEASE.md`. Rollback = Vercel "promote" an earlier deployment.
 - Request/response body limit ~4.5MB (platform). A 413 on proxy upload is usually this, not multer → use direct-to-storage signed upload.
 - Env vars UI (changed ~2026-09): Project → Settings → **Environments** → **Production** row → Environment Variables. New/changed vars only apply to **new** deployments — redeploy (`git commit --allow-empty` + push).

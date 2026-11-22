@@ -8,7 +8,7 @@ const { currentWeek } = require('../lib/equipmentWeek');
 
 const router = express.Router();
 
-const RECAP_EMAILS = ['alonm@mpcheck.co.il'];
+const { ADMIN_EMAIL } = require('../lib/adminContact');
 
 async function sendRecapEmail(name, deviceNames, source) {
   const gmailUser = process.env.GMAIL_USER;
@@ -22,7 +22,7 @@ async function sendRecapEmail(name, deviceNames, source) {
   try {
     await transporter.sendMail({
       from: `Medical Pay <${gmailUser}>`,
-      to: RECAP_EMAILS,
+      to: ADMIN_EMAIL,
       subject: source === 'manual' ? `עדכון ציוד ידני — ${name}` : `סיכום ציוד — ${name}`,
       text: `${name} דיווח/ה על הציוד: ${list}`,
     });

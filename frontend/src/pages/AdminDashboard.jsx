@@ -216,6 +216,7 @@ export default function AdminDashboard() {
   const draftSupplierOrdersCount = supplierOrders.filter(o => o.status === 'draft').length;
   const [supplierBusyId, setSupplierBusyId] = useState(null);
   const [checkingStock, setCheckingStock] = useState(false);
+  const [stockCheckResult, setStockCheckResult] = useState(null); // { low: [...] } from the last manual check
   const [checkingReplies, setCheckingReplies] = useState(false);
   const [supplierQtyEdits, setSupplierQtyEdits] = useState({}); // itemId -> draft qty string
   const [composer, setComposer] = useState(null); // { order, items, channel: 'email' | 'whatsapp', text }
@@ -428,8 +429,14 @@ export default function AdminDashboard() {
     setCheckingStock(true);
     try {
       const { data } = await api.post('/equipment/supplier-orders/check-now');
+      const low = data?.low || [];
+      setStockCheckResult({ low });
       const count = data?.drafted?.reduce((n, d) => n + d.items.length, 0) || 0;
-      showToast(count ? `נוצרו טיוטות הזמנה עבור ${count} פריטים` : 'אין פריטים חדשים במלאי נמוך', 'success');
+      showToast(
+        !low.length ? 'כל הפריטים מעל הסף'
+          : count ? `${low.length} פריטים מתחת לסף, נוצרו טיוטות עבור ${count}`
+          : `${low.length} פריטים מתחת לסף, כולם כבר בהזמנה פתוחה`,
+        'success');
       loadSupplierOrders();
     } catch (err) { showToast(apiErrorMsg(err, 'בדיקת המלאי נכשלה')); }
     finally { setCheckingStock(false); }
@@ -2963,7 +2970,7 @@ export default function AdminDashboard() {
           {eqSubTab === 'suppliers' && (
             <div>
               <div className="flex items-center justify-between mb-4 gap-3">
-                <p className="text-xs text-slate-400">כל בוקר: טיוטות למוצרים שירדו לסף, ובדיקת תשובות מספקים במייל. שום הזמנה לא נשלחת בלי אישור.</p>
+                <p className="text-xs text-slate-400">בדיקה ידנית: 'בדוק מלאי עכשיו' מציג מוצרים מתחת לסף ויוצר טיוטות, 'בדוק תשובות' קורא תשובות ספקים מהמייל. שום הזמנה לא נשלחת בלי אישור.</p>
                 <div className="flex gap-2 shrink-0 flex-wrap justify-end">
                   <button
                     onClick={checkRepliesNow}
@@ -2984,6 +2991,34 @@ export default function AdminDashboard() {
                   </button>
                 </div>
               </div>
+              {stockCheckResult && (
+                <div className={`rounded-2xl border p-4 mb-4 ${stockCheckResult.low.length ? 'bg-amber-50 border-amber-200' : 'bg-emerald-50 border-emerald-200'}`}>
+                  <div className="flex items-center justify-between gap-2 mb-1">
+                    <p className={`text-sm font-bold flex items-center gap-1.5 ${stockCheckResult.low.length ? 'text-amber-800' : 'text-emerald-700'}`}>
+                      <span className="material-symbols-outlined text-base">{stockCheckResult.low.length ? 'warning' : 'check_circle'}</span>
+                      {stockCheckResult.low.length ? `${stockCheckResult.low.length} פריטים מתחת לסף` : 'כל הפריטים מעל הסף'}
+                    </p>
+                    <button onClick={() => setStockCheckResult(null)} className="text-slate-400 hover:text-slate-600" aria-label="סגור">
+                      <span className="material-symbols-outlined text-base">close</span>
+                    </button>
+                  </div>
+                  {stockCheckResult.low.length > 0 && (
+                    <ul className="mt-2 space-y-1.5">
+                      {stockCheckResult.low.map(i => (
+                        <li key={i.id} className="flex items-center justify-between gap-2 text-sm">
+                          <span className="text-slate-700">{i.name}</span>
+                          <span className="flex items-center gap-2 shrink-0">
+                            <span className="text-xs text-slate-500">במלאי {i.stock_qty} / סף {i.reorder_threshold}</span>
+                            <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${i.status === 'new' ? 'bg-purple-100 text-brand-purple' : 'bg-slate-100 text-slate-500'}`}>
+                              {i.status === 'new' ? 'טיוטה חדשה' : 'כבר בהזמנה פתוחה'}
+                            </span>
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
               {supplierOrdersLoading ? (
                 <div className="flex justify-center py-10">
                   <span className="material-symbols-outlined text-3xl text-slate-300 animate-spin">progress_activity</span>

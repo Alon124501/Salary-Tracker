@@ -2,14 +2,14 @@ const nodemailer = require('nodemailer');
 const { z } = require('zod');
 const Anthropic = require('@anthropic-ai/sdk');
 const supabase = require('../supabase');
-const { sendPushToAdmins } = require('./webPush');
+const { sendPushToUsers } = require('./webPush');
 const { graphConfigured, sendMail } = require('./msGraph');
+const { ADMIN_EMAIL, ADMIN_PROFILE_ID } = require('./adminContact');
 
 // Supplier reorder agent. A rule decides WHEN to reorder (stock_qty <= reorder_threshold);
 // Claude only SUGGESTS a quantity from recent consumption. Drafts are never sent to a
 // supplier automatically — an admin approves each one from the dashboard.
 
-const ADMIN_EMAIL = 'alonm@mpcheck.co.il';
 const HISTORY_DAYS = 90;
 const AI_MODEL = 'claude-opus-5-5';
 // Supplier-facing name: suppliers know the company (MPCHECK), not the app (Medical Pay)
@@ -130,8 +130,11 @@ async function suggestQuantity(item, weeklyUsage) {
   }
 }
 
-// Finds low-stock items not already in an open supplier order and drafts orders,
-// grouped one per supplier. Returns { drafted: [{ order_id, supplier_key, items }] }.
+// Run manually from the admin dashboard ("בדוק מלאי עכשיו"). Finds every item at or under its
+// threshold, drafts orders (one per supplier) for those not already in an open supplier order,
+// and — when anything is low — emails ADMIN_EMAIL and pushes to ADMIN_PROFILE_ID.
+// Returns { low: [{ id, name, stock_qty, reorder_threshold, status: 'new'|'open' }],
+//           drafted: [{ order_id, supplier_key, items }] }.
 async function runStockCheck() {
   const { data: catalog, error: catErr } = await supabase
     .from('equipment_catalog')
@@ -139,10 +142,24 @@ async function runStockCheck() {
     .not('reorder_threshold', 'is', null);
   if (catErr) throw new Error(catErr.message);
 
-  const low = (catalog || []).filter(i =>
+  const lowItems = (catalog || []).filter(i =>
     i.stock_qty <= i.reorder_threshold);
-  if (!low.length) return { drafted: [] };
+  if (!lowItems.length) return { low: [], drafted: [] };
 
+  const { alreadyOrdered, drafted } = await draftOrders(lowItems);
+  const low = lowItems.map(i => ({
+    id: i.id,
+    name: i.name,
+    stock_qty: i.stock_qty,
+    reorder_threshold: i.reorder_threshold,
+    status: alreadyOrdered.has(i.id) ? 'open' : 'new',
+  }));
+
+  await notifyAdmin(low);
+  return { low, drafted };
+}
+
+async function draftOrders(low) {
   // Skip items already in a draft or sent (not yet received) order
   const { data: openOrders, error: openErr } = await supabase
     .from('supplier_orders')
@@ -153,7 +170,7 @@ async function runStockCheck() {
   const alreadyOrdered = new Set(
     (openOrders || []).flatMap(o => o.supplier_order_items.map(i => i.catalog_id)));
   const toOrder = low.filter(i => !alreadyOrdered.has(i.id));
-  if (!toOrder.length) return { drafted: [] };
+  if (!toOrder.length) return { alreadyOrdered, drafted: [] };
 
   const consumption = await loadConsumption(toOrder.map(i => i.id));
 
@@ -205,27 +222,32 @@ async function runStockCheck() {
     drafted.push({ order_id: orderId, supplier_key: key, items: lines.map(l => l.name) });
   }
 
-  await notifyAdmins(drafted);
-  return { drafted };
+  return { alreadyOrdered, drafted };
 }
 
-async function notifyAdmins(drafted) {
-  if (!drafted.length) return;
-  const itemNames = drafted.flatMap(d => d.items);
-  const body = `מלאי נמוך: ${itemNames.join(', ')}. טיוטות הזמנה מחכות לאישור.`;
+const LOW_STATUS_LABEL = { new: 'טיוטה חדשה', open: 'כבר בהזמנה פתוחה' };
 
-  await sendPushToAdmins({ title: 'הזמנות ציוד לאישור', body: body.slice(0, 120) })
+// Push (short) + email (full list) to the one admin. Failures are logged, never thrown:
+// the drafts already exist and the dashboard shows the same list.
+async function notifyAdmin(low) {
+  if (!low.length) return;
+  const names = low.map(i => i.name);
+  const shown = names.slice(0, 3).join(', ');
+  const pushBody = `${low.length} פריטים מתחת לסף: ${shown}${names.length > 3 ? ' ועוד' : ''}`;
+
+  await sendPushToUsers([ADMIN_PROFILE_ID], { title: 'מלאי נמוך', body: pushBody.slice(0, 120) })
     .catch(err => console.error('[reorder] push failed:', err.message));
 
   const mail = mailTransport();
   if (!mail) return;
-  const lines = drafted.map(d => `• ${d.supplier_key}: ${d.items.join(', ')}`).join('\n');
+  const lines = low.map(i =>
+    `• ${i.name} — במלאי ${i.stock_qty}, סף ${i.reorder_threshold} (${LOW_STATUS_LABEL[i.status]})`).join('\n');
   try {
     await mail.transporter.sendMail({
       from: mail.from,
       to: ADMIN_EMAIL,
-      subject: `הזמנות ציוד לאישור (${itemNames.length} פריטים)`,
-      text: `המלאי ירד מתחת לסף עבור הפריטים הבאים, ונוצרו טיוטות הזמנה מספקים:\n\n${lines}\n\nיש לאשר ולשלוח מלשונית "הזמנות" בלוח הניהול.`,
+      subject: `מלאי נמוך — ${low.length} פריטים מתחת לסף`,
+      text: `הפריטים הבאים נמצאים במלאי מתחת לסף או בדיוק בסף:\n\n${lines}\n\nטיוטות הזמנה מחכות לאישור בלשונית "ספקים" בלוח הניהול.`,
     });
   } catch (err) {
     console.error('[reorder] admin email failed:', err.message);

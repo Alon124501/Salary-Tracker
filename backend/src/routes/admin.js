@@ -16,7 +16,7 @@ const router = express.Router();
 router.use(auth);
 router.use(adminAuth);
 
-const ACCOUNTING_EMAIL = 'alonm@mpcheck.co.il';
+const { ADMIN_EMAIL } = require('../lib/adminContact');
 const PROFILE_SELECT = 'first_name, last_name, username';
 
 // ── Users ──────────────────────────────────────────────────────────────────
@@ -268,7 +268,7 @@ router.post('/reports/approve', asyncHandler(async (req, res) => {
   const transporter = nodemailer.createTransport({ service: 'gmail', auth: { user: gmailUser, pass: gmailPass } });
   await transporter.sendMail({
     from: `Medical Pay <${gmailUser}>`,
-    to: ACCOUNTING_EMAIL,
+    to: ADMIN_EMAIL,
     subject: `חבילת דוחות חודשית — ${monthName} ${year}`,
     text: `מצורפים כל דוחות השכר עבור ${monthName} ${year}.`,
     attachments: [{ filename: `reports-${month}.zip`, content: zipBuffer, contentType: 'application/zip' }],
@@ -366,7 +366,7 @@ router.post('/users/:userId/report/approve', asyncHandler(async (req, res) => {
     const transporter = nodemailer.createTransport({ service: 'gmail', auth: { user: gmailUser, pass: gmailPass } });
     await transporter.sendMail({
       from: `Medical Pay <${gmailUser}>`,
-      to: ACCOUNTING_EMAIL,
+      to: ADMIN_EMAIL,
       subject: `דוח שכר — ${name} ${monthName} ${year}`,
       text: `מצורף דוח השכר עבור ${name} (${monthName} ${year}).${receiptSection}`,
       attachments: [{

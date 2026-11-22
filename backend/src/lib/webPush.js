@@ -16,11 +16,10 @@ async function sendPushToAll({ title, body }) {
   return sendPush({ title, body });
 }
 
-// Same as sendPushToAll, limited to admins (for admin-only alerts like supplier reorder drafts).
-async function sendPushToAdmins({ title, body }) {
-  const { data: admins, error } = await supabase.from('profiles').select('id').eq('is_admin', true);
-  if (error || !admins?.length) return;
-  return sendPush({ title, body }, admins.map(a => a.id));
+// Same as sendPushToAll, limited to the given profile ids (e.g. ADMIN_PROFILE_ID for admin alerts).
+async function sendPushToUsers(userIds, { title, body }) {
+  if (!userIds?.length) return;
+  return sendPush({ title, body }, userIds);
 }
 
 async function sendPush({ title, body }, userIds) {
@@ -50,4 +49,4 @@ async function sendPush({ title, body }, userIds) {
   }));
 }
 
-module.exports = { sendPushToAll, sendPushToAdmins };
+module.exports = { sendPushToAll, sendPushToUsers };

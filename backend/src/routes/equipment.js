@@ -353,7 +353,7 @@ router.get('/supplier-orders/history', auth, adminAuth, asyncHandler(async (req,
   res.json(data || []);
 }));
 
-// POST /api/equipment/supplier-orders/check-now — run the daily stock check immediately
+// POST /api/equipment/supplier-orders/check-now — run the stock check (manual only, no cron)
 router.post('/supplier-orders/check-now', auth, adminAuth, asyncHandler(async (req, res) => {
   res.json(await runStockCheck());
 }));
